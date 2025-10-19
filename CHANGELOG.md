@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.10] - 2025-10-19
+### Added
+- Domain foundation in shared: money value object [`packages/shared/src/money.ts`](packages/shared/src/money.ts) and transaction model [`packages/shared/src/domain.ts`](packages/shared/src/domain.ts).
+- Tests: [`packages/shared/src/money.test.ts`](packages/shared/src/money.test.ts), [`packages/shared/src/domain.test.ts`](packages/shared/src/domain.test.ts).
+### Why
+- Typ-sichere Beträge in Cent und validierte Transaktionen als Basis für weitere Features.
+### How
+- Branded Types, Parser/Formatter, Konstruktor mit Validierung auf Basis von [`packages/shared/src/strings.ensureNonEmpty`](packages/shared/src/strings.ts).
+
 ## [0.0.9] - 2025-10-19
 ### Fixed
 - CI triggers on all branches and can be started manually.

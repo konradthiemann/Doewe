@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx",
+    "lint:fix": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo 'web: no tests yet'"
   },

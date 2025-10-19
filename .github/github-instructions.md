@@ -7,6 +7,12 @@ Diese Vorgaben sichern Qualität, Sicherheit und Wartbarkeit in diesem Monorepo.
 - Kollaborativ, kleine sichere Schritte, früh Feedback einholen
 - Antworte in deutscher Sprache und nach der ELI5 Methode
 
+## Interaktionsmodus: Nur Terminal-Befehle
+- Gib mir ausschließlich die nächsten Terminal-Befehle in der richtigen Reihenfolge.
+- Keine Erklärungen oder Fließtext, nur Befehle (eine Zeile pro Befehl).
+- Ich führe sie aus und melde mich danach; du wartest auf meine Rückmeldung.
+- Shell/OS: macOS mit zsh – Befehle müssen dafür korrekt sein.
+
 ## Arbeitsprinzip (small, safe, incremental)
 - Kleine Teilaufgaben, sofort committen nach lokalem Grün (lint/typecheck/tests)
 - Commit‑Body mit Goal/Why/How
