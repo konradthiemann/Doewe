@@ -1,3 +1,17 @@
+## [0.0.11] - 2025-10-19
+### Added
+- Minimal in-memory Transactions Slice in web: API (GET/POST at /api/transactions) und UI (/transactions) basierend auf shared Domain.
+- Workspace-Integration von @doewe/shared und Next transpilePackages.
+### Changed
+- Shared: package.exports/types gesetzt zur Modulauflösung in Next.
+- Lint-Fixes in shared (Imports, unused param) und neue lint:fix-Skripte.
+- Repo: .nvmrc=20 hinzugefügt und @typescript-eslint auf v7 aktualisiert (keine TS 5.6 Warnung).
+### Why
+- Frühe End-to-End Validierung der Domain im UI.
+### How
+- API-Route apps/web/app/api/transactions/route.ts, UI-Seite apps/web/app/transactions/page.tsx.
+- Abhängigkeiten/Config aktualisiert (apps/web/package.json, apps/web/next.config.mjs, packages/shared/package.json).
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

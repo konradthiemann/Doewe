@@ -1,3 +1,5 @@
+- 2025-10-19: Minimaler Transactions-Flow (API+UI) in web. Goal: End-to-End Demo. How: /api/transactions (GET/POST) + /transactions Seite; shared als Workspace genutzt und in Next transpiliert.
+- 2025-10-19: Repo-Tooling stabilisiert. Goal: Einheitliche Umgebung & weniger Warnungen. How: .nvmrc=20, @typescript-eslint auf v7, Lint-Fixes.
 # Monorepo Timeline
 
 - 2025-10-19: Domain-Fundament (Money, Transaction) in shared inkl. Tests. Goal: Typ-sichere Beträge und validierte Transaktionen. How: [`packages/shared/src/money.ts`](packages/shared/src/money.ts), [`packages/shared/src/domain.ts`](packages/shared/src/domain.ts) + Tests.

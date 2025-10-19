@@ -57,3 +57,5 @@ Nicht‑Ziele im MVP
 - ESLint/TS‑Baselines zentralisieren
 - Minimalen CI‑Workflow hinzufügen
 - Domain‑Modelle und erste Use‑Cases skizzieren
+## UI-Demo
+- Transaktionen: http://localhost:3000/transactions (Formular zum Anlegen, Liste der Einträge)
