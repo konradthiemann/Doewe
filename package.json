@@ -1,0 +1,19 @@
+{
+  "name": "doewe-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "echo \"lint: nothing to lint yet\"",
+    "typecheck": "echo \"typecheck: no TS projects yet\"",
+    "test": "echo \"test: no tests yet\"",
+    "build": "echo \"build: nothing to build yet\"",
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "dev:web": "npm --workspace @doewe/web run dev"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

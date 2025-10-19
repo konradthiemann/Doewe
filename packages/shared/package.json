@@ -1,0 +1,11 @@
+{
+  "name": "@doewe/shared",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "echo 'shared: nothing to lint yet'",
+    "typecheck": "echo 'shared: no TS config yet'",
+    "test": "echo 'shared: no tests yet'",
+    "build": "echo 'shared: nothing to build yet'"
+  }
+}
