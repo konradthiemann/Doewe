@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.3] - 2025-10-19
+### Changed
+- README strukturiert überarbeitet (Ziele, Setup, Qualität, Sicherheit, nächste Schritte).
+- Copilot‑Richtlinien in `.github/github-instructions.md` bereinigt, konsolidiert und auf Deutsch.
+### Why
+- Klarere Onboarding‑Dokumentation, weniger Redundanz, eindeutige Qualitätsbarrieren.
+### How
+- Inhalte umgeordnet, Duplikate entfernt, Formulierungen vereinheitlicht, Beispiele konkreter gefasst.
+
 ## [0.0.2] - 2025-10-19
 ### Fixed
 - Replaced Next.js config with `next.config.mjs` (was `next.config.ts`) in `apps/web`.
