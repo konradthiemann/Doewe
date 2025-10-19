@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "lint": "echo 'shared: nothing to lint yet'",
+    "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo 'shared: no tests yet'",
     "build": "echo 'shared: nothing to build yet'"

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.5] - 2025-10-19
+### Added
+- Zentrale ESLint-Basis unter `shared/eslint/eslint.base.cjs`.
+- Paket-spezifische ESLint-Konfigurationen in `apps/web` und `packages/shared`, die die Basis erben.
+### Changed
+- Lint-Skripte auf ESLint-CLI vereinheitlicht (`eslint .`).
+- Root-DevDependencies für ESLint/Plugins hinzugefügt.
+### Why
+- Einheitliche Lint-Regeln ohne Prettier, einfache Wiederverwendung im Monorepo.
+### How
+- Base-Config erstellt, Package-Configs angepasst, Skripte und DevDeps aktualisiert.
+
 ## [0.0.4] - 2025-10-19
 ### Added
 - Zentrale TypeScript-Basis `shared/tsconfig/tsconfig.base.json`.
