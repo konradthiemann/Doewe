@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.6] - 2025-10-19
+### Added
+- Minimal CI Workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) running lint, typecheck, test, build on push/PR with Node from [.nvmrc](.nvmrc).
+### Why
+- Automatisches Qualitäts-Gate für alle PRs/Commits.
+### How
+- GitHub Actions mit actions/setup-node (npm cache), Workspaces‑Skripte ausgeführt.
+
 ## [0.0.5] - 2025-10-19
 ### Added
 - Zentrale ESLint-Basis unter `shared/eslint/eslint.base.cjs`.
