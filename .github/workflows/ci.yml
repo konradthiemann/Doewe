@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - "**"        # run on all branches
   pull_request:
+    branches:
+      - "**"        # run on PRs from any branch
+  workflow_dispatch:  # allow manual runs from GitHub UI
 
 concurrency:
   group: ci-${{ github.ref }}

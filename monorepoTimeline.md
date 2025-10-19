@@ -1,5 +1,6 @@
 # Monorepo Timeline
 
+- 2025-10-19: Fix CI triggers. Goal: CI läuft auf allen Branches/PRs. Why: Push auf Nicht‑main Branch (4347575) triggerte nicht. How: Trigger in [.github/workflows/ci.yml](.github/workflows/ci.yml) auf `"**"` erweitert; `workflow_dispatch` hinzugefügt.
 - 2025-10-19: Fix Vitest Test-Erkennung. Goal: Tests werden vom Root und Workspace gefunden. Why: `No test files found`. How: `vitest.config.ts` Root gesetzt, Include-Pattern erweitert.
 - 2025-10-19: CI eingeführt. Goal: Automatische Lint/Typecheck/Test/Build‑Prüfung. Why: Frühe Qualitäts-Gates. How: [.github/workflows/ci.yml](.github/workflows/ci.yml) mit Node aus [.nvmrc](.nvmrc), npm cache, Workspaces‑Skripte.
 - 2025-10-19: TS-Basis zentralisiert. Goal: Einheitliche Typprüfung. Why: weniger Duplikate, klare Defaults. How: `shared/tsconfig/tsconfig.base.json` eingeführt; `apps/web`/`packages/shared` vererbt; Root-Skripte auf `-ws`.

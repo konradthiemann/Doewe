@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.9] - 2025-10-19
+### Fixed
+- CI triggers on all branches and can be started manually.
+### Why
+- Push to non-main branch (commit 4347575) didn’t match `branches: [main, master]`, so no workflow ran.
+### How
+- Broadened triggers in [.github/workflows/ci.yml](.github/workflows/ci.yml) to `"**"`; added `workflow_dispatch`.
+
 ## [0.0.8] - 2025-10-19
 ### Fixed
 - Vitest Test-Erkennung im Monorepo: Konfiguration angepasst, damit Tests sowohl vom Repo-Root als auch aus Workspaces gefunden werden.
