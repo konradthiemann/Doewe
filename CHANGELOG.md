@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.4] - 2025-10-19
+### Added
+- Minimaler CI-Workflow via GitHub Actions, der auf Push/PR `lint`, `typecheck` und `test` ausführt.
+### Why
+- Automatisches Qualitätsnetz für jeden Commit/PR.
+### How
+- Datei `.github/workflows/ci.yml` hinzugefügt; Node 20; nutzt `npm ci` und Workspace-Skripte.
+
 ## [0.0.3] - 2025-10-19
 ### Changed
 - README strukturiert überarbeitet (Ziele, Setup, Qualität, Sicherheit, nächste Schritte).
