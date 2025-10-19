@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.8] - 2025-10-19
+### Fixed
+- Vitest Test-Erkennung im Monorepo: Konfiguration angepasst, damit Tests sowohl vom Repo-Root als auch aus Workspaces gefunden werden.
+### Why
+- `vitest run` beendete mit Code 1: "No test files found".
+### How
+- `vitest.config.ts` aktualisiert: explizites `root` gesetzt und `include`-Pattern erweitert.
+
+## [0.0.7] - 2025-10-19
+### Added
+- Vitest root config [vitest.config.ts](vitest.config.ts).
+- Sample test in shared: [packages/shared/src/strings.test.ts](packages/shared/src/strings.test.ts) for [`packages/shared/src/strings.ensureNonEmpty`](packages/shared/src/strings.ts).
+### Changed
+- [`packages/shared/package.json`](packages/shared/package.json) test scripts now run Vitest.
+- CI now executes real tests via `npm run test -ws`.
+### Why
+- Aktive Tests im Monorepo, ausgeführt in CI.
+### How
+- Vitest als Dev‑Dependency im Root, Root‑Config erstellt, Beispieltest implementiert und Scripts angepasst.
+
 ## [0.0.6] - 2025-10-19
 ### Added
 - Minimal CI Workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) running lint, typecheck, test, build on push/PR with Node from [.nvmrc](.nvmrc).

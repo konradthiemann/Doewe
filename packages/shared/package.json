@@ -5,7 +5,8 @@
   "scripts": {
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo 'shared: no tests yet'",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "echo 'shared: nothing to build yet'"
   }
 }

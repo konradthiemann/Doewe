@@ -1,1 +1,1 @@
-export type NonEmptyString = string & { readonly __brand: 'NonEmptyString' };
+export { type NonEmptyString, ensureNonEmpty } from "./strings";
