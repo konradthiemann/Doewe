@@ -20,7 +20,7 @@ Nicht‑Ziele im MVP
 ## Tech‑Stack
 - App: Next.js 14 (App Router), React 18, TypeScript
 - Monorepo: npm Workspaces (apps/*, packages/*)
-- Node: >= 18.18
+- Node: 20.x empfohlen (CI nutzt 20; lokale Abweichungen können Dev‑Probleme verursachen)
 - Lint/Typecheck/Tests: werden iterativ ergänzt
 
 ## Schnellstart

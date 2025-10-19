@@ -4,11 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [0.0.4] - 2025-10-19
 ### Added
-- Minimaler CI-Workflow via GitHub Actions, der auf Push/PR `lint`, `typecheck` und `test` ausführt.
+- Zentrale TypeScript-Basis `shared/tsconfig/tsconfig.base.json`.
+- `apps/web` und `packages/shared` vererben auf die Basiskonfiguration.
+### Changed
+- Root-Skripte auf Workspaces (`-ws`) umgestellt.
 ### Why
-- Automatisches Qualitätsnetz für jeden Commit/PR.
+- Einheitliche, strikte TS-Regeln; ein Kommando für Typprüfung aller Pakete.
 ### How
-- Datei `.github/workflows/ci.yml` hinzugefügt; Node 20; nutzt `npm ci` und Workspace-Skripte.
+- Basistsconfig angelegt, Projekt-tsconfigs angepasst, Scripts aktualisiert.
 
 ## [0.0.3] - 2025-10-19
 ### Changed

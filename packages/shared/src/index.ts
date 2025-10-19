@@ -1,0 +1,1 @@
+export type NonEmptyString = string & { readonly __brand: 'NonEmptyString' };

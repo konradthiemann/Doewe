@@ -6,10 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "lint": "echo \"lint: nothing to lint yet\"",
-    "typecheck": "echo \"typecheck: no TS projects yet\"",
-    "test": "echo \"test: no tests yet\"",
-    "build": "echo \"build: nothing to build yet\"",
+    "lint": "npm run lint -ws",
+    "typecheck": "npm run typecheck -ws",
+    "test": "npm run test -ws",
+    "build": "npm run build -ws",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build",
     "dev:web": "npm --workspace @doewe/web run dev"
   },
