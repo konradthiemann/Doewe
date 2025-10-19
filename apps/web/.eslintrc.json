@@ -1,5 +1,15 @@
 {
   "root": true,
   "extends": ["../../shared/eslint/eslint.base.cjs", "next/core-web-vitals"],
-  "env": { "browser": true, "es2021": true }
+  "env": { "browser": true, "es2021": true },
+  "overrides": [
+    {
+      "files": ["prisma/seed.js"],
+      "env": { "node": true },
+      "rules": {
+        "@typescript-eslint/no-var-requires": "off",
+        "no-console": "off"
+      }
+    }
+  ]
 }

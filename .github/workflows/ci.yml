@@ -48,6 +48,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm --workspace @doewe/web run db:push
       - run: npm run test -ws
 
   build:

@@ -12,7 +12,8 @@
     "test": "npm run test -ws",
     "build": "npm run build -ws",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build",
-    "dev:web": "npm --workspace @doewe/web run dev"
+    "dev:web": "npm --workspace @doewe/web run dev",
+    "postinstall": "npm --workspace @doewe/web run prisma:generate"
   },
   "engines": {
     "node": ">=18.18.0"

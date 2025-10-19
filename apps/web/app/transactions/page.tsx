@@ -1,25 +1,33 @@
 "use client";
 
+import { parseCents, fromCents, toDecimalString } from "@doewe/shared";
 import { useEffect, useState } from "react";
 
 type Tx = {
   id: string;
   accountId: string;
-  amount: number;
+  amountCents: number;
   description: string;
   occurredAt: string;
-  categoryId?: string;
+  categoryId?: string | null;
 };
 
 export default function TransactionsPage() {
   const [items, setItems] = useState<Tx[]>([]);
   const [form, setForm] = useState({ description: "", amount: "" });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
+    setError(null);
     const res = await fetch("/api/transactions", { cache: "no-store" });
-    const json = await res.json();
-    setItems(json.data ?? []);
+    if (!res.ok) {
+      setError(`Failed to load: ${res.status}`);
+      setItems([]);
+      return;
+    }
+    const json: Tx[] = await res.json();
+    setItems(json);
   }
 
   useEffect(() => {
@@ -29,12 +37,27 @@ export default function TransactionsPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     try {
-      await fetch("/api/transactions", {
+      const payload = {
+        accountId: "acc_demo",
+        amountCents: parseCents(form.amount), // e.g. "12.34" -> 1234
+        description: form.description,
+        occurredAt: new Date().toISOString()
+      };
+
+      const res = await fetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: form.description, amount: form.amount })
+        body: JSON.stringify(payload)
       });
+
+      if (!res.ok) {
+        const msg = `Save failed: ${res.status}`;
+        setError(msg);
+        return;
+      }
+
       setForm({ description: "", amount: "" });
       await refresh();
     } finally {
@@ -67,6 +90,7 @@ export default function TransactionsPage() {
         <button type="submit" disabled={loading}>
           {loading ? "Saving..." : "Add"}
         </button>
+        {error && <p style={{ color: "crimson" }}>{error}</p>}
       </form>
 
       <section>
@@ -74,7 +98,8 @@ export default function TransactionsPage() {
         <ul>
           {items.map((t) => (
             <li key={t.id}>
-              <code>{t.id}</code> — {t.description} — cents: {t.amount} — {new Date(t.occurredAt).toLocaleString()}
+              <code>{t.id}</code> — {t.description} — cents: {t.amountCents} — EUR:{" "}
+              {toDecimalString(fromCents(t.amountCents))} — {new Date(t.occurredAt).toLocaleString()}
             </li>
           ))}
         </ul>

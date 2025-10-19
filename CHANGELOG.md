@@ -1,3 +1,19 @@
+## [0.0.12] - 2025-10-19
+### Added
+- Prisma + SQLite persistence in web: schema, client, seed.
+- Transactions API now uses Prisma with Zod validation.
+### Changed
+- Next config transpiles `@doewe/shared`.
+- CI runs `db:push` before tests.
+### Why
+- Persist data beyond reloads and keep shared domain usable in the app.
+### How
+- Added schema/seed under [apps/web/prisma](apps/web/prisma), API at [apps/web/app/api/transactions/route.ts](apps/web/app/api/transactions/route.ts), singleton client [apps/web/lib/prisma.ts](apps/web/lib/prisma.ts), CI hook in [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
 ## [0.0.11] - 2025-10-19
 ### Added
 - Minimal in-memory Transactions Slice in web: API (GET/POST at /api/transactions) und UI (/transactions) basierend auf shared Domain.
@@ -11,10 +27,6 @@
 ### How
 - API-Route apps/web/app/api/transactions/route.ts, UI-Seite apps/web/app/transactions/page.tsx.
 - Abhängigkeiten/Config aktualisiert (apps/web/package.json, apps/web/next.config.mjs, packages/shared/package.json).
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
 
 ## [0.0.10] - 2025-10-19
 ### Added

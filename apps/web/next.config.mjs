@@ -4,7 +4,8 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  transpilePackages: ["@doewe/shared"],
+  // Ensure TS from workspaces is transpiled
+  transpilePackages: ["@doewe/shared"]
 };
 
 export default nextConfig;

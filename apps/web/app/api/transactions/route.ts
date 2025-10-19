@@ -1,30 +1,43 @@
-import { createTransaction, parseCents } from "@doewe/shared";
+import { ensureNonEmpty } from "@doewe/shared";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-type StoredTx = ReturnType<typeof createTransaction>;
+import { prisma } from "../../../lib/prisma";
 
-// In-memory store for demo purposes (per server process)
-const store: StoredTx[] = [];
+const TransactionInput = z.object({
+  accountId: z.string().min(1),
+  categoryId: z.string().min(1).optional(),
+  amountCents: z.number().int(),
+  description: z.string().transform((s) => ensureNonEmpty(s)),
+  occurredAt: z.union([z.string(), z.date()])
+});
 
 export async function GET() {
-  return NextResponse.json({ data: store });
+  const items = await prisma.transaction.findMany({
+    orderBy: { occurredAt: "desc" }
+  });
+  return NextResponse.json(items);
 }
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  try {
-    const tx = createTransaction({
-      id: String(body.id ?? `tx_${Date.now()}`),
-      accountId: String(body.accountId ?? "acc_demo"),
-      amountCents: body.amount != null ? parseCents(String(body.amount)) : parseCents("0"),
-      description: String(body.description ?? ""),
-      occurredAt: body.occurredAt ?? new Date().toISOString(),
-      categoryId: body.categoryId ? String(body.categoryId) : undefined
-    });
-    store.push(tx);
-    return NextResponse.json({ data: tx }, { status: 201 });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Invalid payload";
-    return NextResponse.json({ error: message }, { status: 400 });
+  const json = await req.json();
+  const parsed = TransactionInput.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
+  const data = parsed.data;
+  const occurredAt =
+    typeof data.occurredAt === "string" ? new Date(data.occurredAt) : data.occurredAt;
+
+  const created = await prisma.transaction.create({
+    data: {
+      accountId: data.accountId,
+      categoryId: data.categoryId,
+      amountCents: data.amountCents,
+      description: data.description,
+      occurredAt
+    }
+  });
+
+  return NextResponse.json(created, { status: 201 });
 }
