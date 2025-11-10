@@ -9,7 +9,7 @@ Diese Vorgaben sichern Qualität, Sicherheit und Wartbarkeit in diesem Monorepo.
 
 ## Arbeitsprinzip (small, safe, incremental)
 - Kleine Teilaufgaben, sofort committen nach lokalem Grün (lint/typecheck/tests)
-- Commit‑Body mit Goal/Why/How
+- Commit‑Body mit Ziel/Warum/Wie in deutsch
 - Timeline immer neueste Einträge oben (siehe `monorepoTimeline.md`)
 
 ## Sicherheit
