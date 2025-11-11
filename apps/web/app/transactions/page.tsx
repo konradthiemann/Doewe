@@ -1,7 +1,7 @@
 "use client";
 
 import { parseCents, fromCents, toDecimalString } from "@doewe/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Tx = {
   id: string;
@@ -16,9 +16,11 @@ export default function TransactionsPage() {
   const [items, setItems] = useState<Tx[]>([]);
   const [form, setForm] = useState({ description: "", amount: "", accountId: "", categoryId: "" });
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean }>>([]);
+  const [txType, setTxType] = useState<"income" | "outcome">("outcome");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   async function refresh() {
     setError(null);
@@ -40,7 +42,7 @@ export default function TransactionsPage() {
         fetch("/api/accounts", { cache: "no-store" }),
         fetch("/api/categories", { cache: "no-store" })
       ]);
-      const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string }>] = await Promise.all([
+      const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string; isIncome: boolean }>] = await Promise.all([
         accRes.json(),
         catRes.json()
       ]);
@@ -48,7 +50,8 @@ export default function TransactionsPage() {
       setCategories(cat);
       // Default values if empty
       const defaultAccount = acc.find((a) => a.id === "acc_demo") ?? acc[0];
-      const defaultCategory = cat[0];
+      // Default category depends on selected type (initialized to outcome)
+      const defaultCategory = (cat.find((c) => !c.isIncome) ?? cat[0]);
       setForm((f) => ({
         ...f,
         accountId: defaultAccount?.id ?? "",
@@ -57,14 +60,22 @@ export default function TransactionsPage() {
     })();
   }, []);
 
+  const filteredCategories = useMemo(() => {
+    return categories.filter((c) => (txType === "income" ? c.isIncome : !c.isIncome));
+  }, [categories, txType]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
     try {
+      // Enforce sign based on toggle: income positive, outcome negative
+      const rawCents = parseCents(form.amount);
+      const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
       const payload: Record<string, unknown> = {
         accountId: form.accountId,
-        amountCents: parseCents(form.amount),
+        amountCents: signedCents,
         description: form.description,
         occurredAt: new Date().toISOString()
       };
@@ -80,8 +91,8 @@ export default function TransactionsPage() {
         setError(`Save failed: ${res.status}`);
         return;
       }
-
-  setForm({ description: "", amount: "", accountId: form.accountId, categoryId: form.categoryId });
+      setSuccess("Transaction saved.");
+      setForm({ description: "", amount: "", accountId: form.accountId, categoryId: form.categoryId });
       await refresh();
     } finally {
       setLoading(false);
@@ -94,9 +105,52 @@ export default function TransactionsPage() {
 
       <form
         onSubmit={onSubmit}
-        className="space-y-4 max-w-sm rounded-md border border-gray-200 dark:border-neutral-700 p-4 bg-white dark:bg-neutral-800"
+        className="space-y-4 max-w-sm mx-auto rounded-md border border-gray-200 dark:border-neutral-700 p-4 bg-white dark:bg-neutral-800"
         aria-describedby={error ? "form-error" : undefined}
       >
+        {/* Income/Outcome Toggle */}
+        <div className="flex items-center justify-center gap-2" role="group" aria-label="Transaction type">
+          <button
+            type="button"
+            className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
+              txType === "income"
+                ? "text-white focus-visible:ring-green-500"
+                : "text-green-700 dark:text-green-300 focus-visible:ring-green-500"
+            }`}
+            aria-pressed={txType === "income"}
+            onClick={() => {
+              setTxType("income");
+              // If current category is outcome-only, swap to first income one
+              const first = categories.find((c) => c.isIncome);
+              setForm((f) => ({ ...f, categoryId: first?.id ?? f.categoryId }));
+            }}
+          >
+            <span className="relative z-10">Income</span>
+            {txType === "income" && (
+              <span aria-hidden className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500 via-emerald-500 to-green-400 animate-pulse opacity-90" />
+            )}
+          </button>
+          <button
+            type="button"
+            className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
+              txType === "outcome"
+                ? "text-white focus-visible:ring-red-500"
+                : "text-red-700 dark:text-red-300 focus-visible:ring-red-500"
+            }`}
+            aria-pressed={txType === "outcome"}
+            onClick={() => {
+              setTxType("outcome");
+              // If current category is income-only, swap to first outcome one
+              const first = categories.find((c) => !c.isIncome);
+              setForm((f) => ({ ...f, categoryId: first?.id ?? f.categoryId }));
+            }}
+          >
+            <span className="relative z-10">Outcome</span>
+            {txType === "outcome" && (
+              <span aria-hidden className="absolute inset-0 rounded-md bg-gradient-to-r from-red-500 via-rose-500 to-red-400 animate-pulse opacity-90" />
+            )}
+          </button>
+        </div>
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
             Account <span className="text-red-600">*</span>
@@ -133,7 +187,7 @@ export default function TransactionsPage() {
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
           >
             <option value="">(none)</option>
-            {categories.map((c) => (
+            {filteredCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -183,9 +237,14 @@ export default function TransactionsPage() {
             {error}
           </p>
         )}
+        {success && !error && (
+          <p role="status" className="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
+            {success}
+          </p>
+        )}
       </form>
 
-      <section aria-labelledby="tx-list-heading" className="space-y-4">
+      <section aria-labelledby="tx-list-heading" className="space-y-4 max-w-2xl mx-auto">
         <h2 id="tx-list-heading" className="text-lg font-medium">
           List
         </h2>

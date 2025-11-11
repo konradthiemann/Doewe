@@ -31,10 +31,11 @@ async function main() {
 
   const categoryMap = {};
   for (const name of [...expenseCategories, ...incomeCategories, savingsCategory]) {
+    const isIncome = incomeCategories.includes(name);
     const cat = await prisma.category.upsert({
       where: { name },
-      update: {},
-      create: { name }
+      update: { isIncome },
+      create: { name, isIncome }
     });
     categoryMap[name] = cat.id;
   }

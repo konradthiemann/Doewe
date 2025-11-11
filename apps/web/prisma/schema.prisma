@@ -19,6 +19,7 @@ model Account {
 model Category {
   id          String        @id @default(cuid())
   name        String        @unique
+  isIncome    Boolean       @default(false)
   createdAt   DateTime      @default(now())
   transactions Transaction[]
   recurring    RecurringTransaction[]
