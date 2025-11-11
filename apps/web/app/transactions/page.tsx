@@ -103,11 +103,21 @@ export default function TransactionsPage() {
     <main id="maincontent" className="p-6 space-y-8">
       <h1 className="text-xl font-semibold">Transactions</h1>
 
-      <form
-        onSubmit={onSubmit}
-        className="space-y-4 max-w-sm mx-auto rounded-md border border-gray-200 dark:border-neutral-700 p-4 bg-white dark:bg-neutral-800"
-        aria-describedby={error ? "form-error" : undefined}
-      >
+      <div className="relative max-w-sm mx-auto">
+        {/* Shimmery glow border depending on type */}
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute -inset-1 rounded-xl blur-md transition-opacity duration-500 ${
+            txType === "income"
+              ? "bg-gradient-to-r from-green-500/30 via-emerald-400/30 to-green-400/30 opacity-100 animate-pulse"
+              : "bg-gradient-to-r from-rose-500/30 via-red-400/30 to-rose-400/30 opacity-100 animate-pulse"
+          }`}
+        />
+        <form
+          onSubmit={onSubmit}
+          className="relative space-y-4 rounded-xl border border-white/30 dark:border-white/10 bg-white/60 dark:bg-neutral-800/60 backdrop-blur-md shadow-lg p-4"
+          aria-describedby={error ? "form-error" : undefined}
+        >
         {/* Income/Outcome Toggle */}
         <div className="flex items-center justify-center gap-2" role="group" aria-label="Transaction type">
           <button
@@ -120,7 +130,6 @@ export default function TransactionsPage() {
             aria-pressed={txType === "income"}
             onClick={() => {
               setTxType("income");
-              // If current category is outcome-only, swap to first income one
               const first = categories.find((c) => c.isIncome);
               setForm((f) => ({ ...f, categoryId: first?.id ?? f.categoryId }));
             }}
@@ -140,7 +149,6 @@ export default function TransactionsPage() {
             aria-pressed={txType === "outcome"}
             onClick={() => {
               setTxType("outcome");
-              // If current category is income-only, swap to first outcome one
               const first = categories.find((c) => !c.isIncome);
               setForm((f) => ({ ...f, categoryId: first?.id ?? f.categoryId }));
             }}
@@ -151,6 +159,7 @@ export default function TransactionsPage() {
             )}
           </button>
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
             Account <span className="text-red-600">*</span>
@@ -194,6 +203,7 @@ export default function TransactionsPage() {
             ))}
           </select>
         </div>
+
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-description">
             Description <span className="text-red-600">*</span>
@@ -211,17 +221,17 @@ export default function TransactionsPage() {
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-amount">
-            Amount (e.g. 12.34 or -5.05) <span className="text-red-600">*</span>
+            Amount (e.g. 12.34) <span className="text-red-600">*</span>
           </label>
-            <input
-              id="tx-amount"
-              name="amount"
-              required
-              value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-              aria-invalid={!!error && form.amount.trim() === ""}
-            />
+          <input
+            id="tx-amount"
+            name="amount"
+            required
+            value={form.amount}
+            onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            aria-invalid={!!error && form.amount.trim() === ""}
+          />
         </div>
 
         <button
@@ -242,7 +252,8 @@ export default function TransactionsPage() {
             {success}
           </p>
         )}
-      </form>
+        </form>
+      </div>
 
       <section aria-labelledby="tx-list-heading" className="space-y-4 max-w-2xl mx-auto">
         <h2 id="tx-list-heading" className="text-lg font-medium">

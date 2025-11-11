@@ -1,8 +1,1 @@
-{
-  "/page": "app/page.js",
-  "/transactions/page": "app/transactions/page.js",
-  "/budgets/page": "app/budgets/page.js",
-  "/api/transactions/route": "app/api/transactions/route.js",
-  "/api/accounts/route": "app/api/accounts/route.js",
-  "/api/categories/route": "app/api/categories/route.js"
-}
+{}
