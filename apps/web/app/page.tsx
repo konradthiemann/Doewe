@@ -14,6 +14,8 @@ import ChartDataLabels from "chartjs-plugin-datalabels";
 import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Line } from "react-chartjs-2";
 
+import TransactionForm from "../components/TransactionForm";
+
 import type { Context as DataLabelsContext } from "chartjs-plugin-datalabels";
 
 ChartJS.register(
@@ -29,6 +31,7 @@ ChartJS.register(
 );
 
 export default function HomePage() {
+  const [showTxModal, setShowTxModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<{
     incomeTotal: number;
@@ -40,11 +43,15 @@ export default function HomePage() {
     daily?: { labels: string[]; income: number[]; outcome: number[]; savings: number[] };
   }>({ incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, monthlySavingsActual: 0, outgoingByCategory: [] });
 
+  async function fetchSummary() {
+    const res = await fetch("/api/analytics/summary", { cache: "no-store" });
+    const data = res.ok ? await res.json() : undefined;
+    if (data) setSummary(data);
+  }
+
   useEffect(() => {
     (async () => {
-      const res = await fetch("/api/analytics/summary", { cache: "no-store" });
-      const data = res.ok ? await res.json() : undefined;
-      if (data) setSummary(data);
+      await fetchSummary();
       setLoading(false);
     })();
   }, []);
@@ -238,7 +245,30 @@ export default function HomePage() {
         </div>
       </section>
 
-      
+      {/* Floating Action Button */}
+      <button
+        type="button"
+        aria-label="Add transaction"
+        onClick={() => setShowTxModal(true)}
+        className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-2xl shadow-lg focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+      >
+        +
+      </button>
+
+      {/* Modal Dialog */}
+      {showTxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="tx-dialog-title">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowTxModal(false)} />
+          <div className="relative z-10 w-full max-w-md mx-4">
+              <TransactionForm
+                onSuccess={async () => {
+                  await fetchSummary();
+                }}
+                onClose={() => setShowTxModal(false)}
+              />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
