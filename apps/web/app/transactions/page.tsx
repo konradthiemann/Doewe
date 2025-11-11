@@ -21,6 +21,7 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   async function refresh() {
     setError(null);
@@ -91,7 +92,11 @@ export default function TransactionsPage() {
         setError(`Save failed: ${res.status}`);
         return;
       }
-      setSuccess("Transaction saved.");
+  setSuccess("Transaction saved.");
+  setShowSuccess(true);
+  // Fade out and clear message
+  window.setTimeout(() => setShowSuccess(false), 2200);
+  window.setTimeout(() => setSuccess(null), 2800);
       setForm({ description: "", amount: "", accountId: form.accountId, categoryId: form.categoryId });
       await refresh();
     } finally {
@@ -256,11 +261,6 @@ export default function TransactionsPage() {
             {error}
           </p>
         )}
-        {success && !error && (
-          <p role="status" className="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
-            {success}
-          </p>
-        )}
         </form>
       </div>
 
@@ -299,6 +299,21 @@ export default function TransactionsPage() {
           )}
         </ul>
       </section>
+      {/* Floating success dialog */}
+      {success && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+          <div
+            role="status"
+            aria-live="polite"
+            className={`pointer-events-auto rounded-md px-4 py-2 shadow-lg text-sm font-medium border 
+              bg-white/95 dark:bg-neutral-800/95 border-green-200 dark:border-green-800 
+              text-green-800 dark:text-green-200 transform-gpu transition-all duration-500 ease-out 
+              ${showSuccess ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"}`}
+          >
+            {success}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
