@@ -58,36 +58,70 @@ export default function HomePage() {
     [summary.outgoingByCategory]
   );
 
-  // Colors for outgoings (no greens to avoid conflict with "remaining")
-  const outgoingColors = [
-    "#6366F1", // indigo
-    "#F59E0B", // amber
-    "#EF4444", // red
-    "#8B5CF6", // violet
-    "#06B6D4", // cyan
-    "#F97316", // orange
-    "#A855F7", // purple
-    "#0EA5E9", // sky
-    "#E11D48", // rose
-    "#D946EF", // fuchsia
-    "#9333EA", // purple deeper
-    "#FB7185"  // rose lighter
+  // Totals and remaining for current month
+  const { incomeTotal, outcomeTotal } = summary;
+  const remaining = Math.round(summary.remaining * 100) / 100;
+
+  // Warm palette (reds/oranges/yellows) for outgoings only – avoids greens/blues/purples
+  const warmPalette = [
+    "#EF4444", // red-500
+    "#F97316", // orange-500
+    "#F59E0B", // amber-500
+    "#F43F5E", // rose-500
+    "#FB923C", // orange-400
+    "#FACC15", // yellow-400
+    "#EAB308", // yellow-500
+    "#DC2626", // red-600
+    "#F87171", // red-400
+    "#FDBA74", // orange-300
+    "#FDE68A", // yellow-300
+    "#FCA5A5"  // rose-300
+  ];
+  // Distribute colors to reduce adjacent similarity by stepping through palette
+  const step = 5; // co-prime with warmPalette.length for better spread
+  const outColors = outgoingLabels.map((_, i) => warmPalette[(i * step) % warmPalette.length]);
+
+  // Additional slices: Remaining (left), Actual savings (blue), Remaining to save (greyish blue)
+  const remainingSlice = Math.max(0, remaining);
+  const remainingColorPie = "#6BAA75"; // greyish green for money left
+  const actualSavingsSlice = Math.max(0, Math.min(summary.actualSavings, Number.POSITIVE_INFINITY));
+  const remainingToSaveSlice = Math.max(0, summary.plannedSavings - summary.actualSavings);
+  const actualSavingsColor = "#3B82F6"; // blue-500
+  const remainingToSaveColor = "#64748B"; // slate-500 (greyish blue)
+
+  const doughnutLabels = [
+    ...outgoingLabels,
+    ...(remainingSlice > 0 ? ["Remaining (left)"] : []),
+    ...(actualSavingsSlice > 0 ? ["Actual savings"] : []),
+    ...(remainingToSaveSlice > 0 ? ["Remaining to save"] : [])
+  ];
+
+  const doughnutValues = [
+    ...outgoingValues,
+    ...(remainingSlice > 0 ? [remainingSlice] : []),
+    ...(actualSavingsSlice > 0 ? [actualSavingsSlice] : []),
+    ...(remainingToSaveSlice > 0 ? [remainingToSaveSlice] : [])
+  ];
+
+  const doughnutColors = [
+    ...outColors,
+    ...(remainingSlice > 0 ? [remainingColorPie] : []),
+    ...(actualSavingsSlice > 0 ? [actualSavingsColor] : []),
+    ...(remainingToSaveSlice > 0 ? [remainingToSaveColor] : [])
   ];
 
   const doughnutData = {
-    labels: outgoingLabels,
+    labels: doughnutLabels,
     datasets: [
       {
-        label: "Outgoings (€)",
-        data: outgoingValues,
-        backgroundColor: outgoingLabels.map((_, i) => outgoingColors[i % outgoingColors.length]),
+        label: "€",
+        data: doughnutValues,
+        backgroundColor: doughnutColors,
         borderWidth: 0
       }
     ]
   };
 
-  const { incomeTotal, outcomeTotal } = summary;
-  const remaining = Math.round((summary.remaining) * 100) / 100;
   const remainingColor = remaining >= 0 ? "#16A34A" : "#DC2626";
 
   const barData = {
