@@ -1,66 +1,36 @@
 # Doewe – Family Management
 
-The goal is to develop a family management system that helps quickly capture finances, set goals, and earmark potential expenses. Based on the collected data, the app should detect patterns and analyze behavior to reveal obstacles to achieving goals.
-
-## Status
-- Learning project by a single developer
-- Incremental development with a focus on code quality
-
-## Persona
-- Primary users are parents aged 20–40.
-
-## MVP Scope (first iteration)
-- Manage accounts and categories
-- Record transactions (one‑time, recurring)
-- Define budgets and goals
-- Simple insights/analytics
-
-Non‑Goals for the MVP
-- No native mobile app
-- No multi‑tenancy
-- No production deployment
+Family management app to capture finances, set goals, and detect behavioral patterns hindering goal achievement (mobile‑first).
 
 ## Tech Stack
-- App: Next.js 14 (App Router), React 18, TypeScript
-- Monorepo: npm Workspaces (apps/*, packages/*)
-- Node: 20.x recommended (CI uses 20; local deviations may cause dev issues)
-- Lint/Typecheck/Tests: added iteratively
-- Tailwind for styling
+- Next.js 14 (App Router), React 18, TypeScript
+- Workspace packages: `apps/web`, `packages/shared`
+- Persistence: Prisma + SQLite (dev)
+- Styling: Tailwind CSS (utility-first, mobile-first)
+- Tests: Vitest
+- CI: GitHub Actions (lint, typecheck, test, build)
 
 ## Quick Start
-1) Install
-   - `npm install`
-2) Start development
-   - `npm run dev:web` (starts [apps/web](apps/web))
-3) Open
-   - http://localhost:3000
+1. `npm install`
+2. Copy `apps/web/.env.example` to `apps/web/.env`
+3. `npm run dev:web`
+4. Open http://localhost:3000
 
-## Useful Scripts
-- Root
-  - `dev:web` – Dev server for the web app
-- App (see [apps/web/package.json](apps/web/package.json))
-  - `dev`, `build`, `start`, `lint`, `typecheck`
+## Structure
+- [`apps/web`](apps/web/package.json) – Web app
+- [`packages/shared`](packages/shared/package.json) – Domain & utilities
+- [`project-requirements-document.md`](project-requirements-document.md) – Detailed scope & requirements
+- [`monorepoTimeline.md`](monorepoTimeline.md) & [`CHANGELOG.md`](CHANGELOG.md) – History & changes
+- Guidelines: [.github/promps/github.instructions.md](.github/promps/github.instructions.md)
 
-## Repository Structure
-- apps/web – Next.js App (App Router)
-- packages/shared – Shared types/domain/utilities
-- .github – Project guidelines ([.github/github-instructions.md](.github/github-instructions.md))
-- CHANGELOG.md – Change log (root)
-- monorepoTimeline.md – Chronological developer timeline (newest first)
+## Key Feature (current)
+- Transactions CRUD (seeded account/category) via `/transactions` and `/api/transactions`
 
-## Quality Rules (short)
-- Strict typing
-- Lint/Typecheck/Tests required before merges (will be expanded)
-- No secrets in the repo, maintain `.env.example`
+## Documentation
+Refer to:
+- Requirements: [`project-requirements-document.md`](project-requirements-document.md)
+- Guidelines: [.github/promps/github.instructions.md](.github/promps/github.instructions.md)
+- Accessibility: [.github/promps/a11y.instructions.md](.github/promps/a11y.instructions.md)
 
-## Security
-- Use environment variables, do not commit sensitive data
-- Validate inputs, avoid unsafe patterns
-
-## Next Steps
-- Centralize ESLint/TS baselines
-- Add minimal CI workflow
-- Sketch domain models and initial use cases
-
-## UI Demo
-- Transactions: http://localhost:3000/transactions (Create form and list)
+## License
+(Define when choosing an OSS strategy.)

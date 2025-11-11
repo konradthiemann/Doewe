@@ -1,3 +1,15 @@
+## [0.0.15] - 2025-10-19
+### Added
+- Tailwind CSS setup (config, PostCSS, plugin forms) in `apps/web`.
+- Accessibility enhancements (skip link, semantic landmarks).
+### Changed
+- Transactions page refactored to Tailwind (removed inline styles).
+- README trimmed to expert-standard overview (moved detailed scope to requirements doc).
+### Why
+- Align implementation with documented mobile-first & Tailwind guidelines; reduce duplication in docs.
+### How
+- Added `tailwind.config.ts`, `postcss.config.cjs`, updated `globals.css`, refactored pages/layout, pruned README.
+
 ## [0.0.14] - 2025-10-19
 ### Changed
 - Translated README to English (content preserved for review).

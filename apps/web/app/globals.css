@@ -1,16 +1,23 @@
-:root {
-  color-scheme: light dark;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+/* Accessibility helper for skip link */
+.sr-only:not(:focus):not(:active) {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 html, body {
-  padding: 0;
-  margin: 0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  @apply min-h-screen bg-white text-gray-900 dark:bg-neutral-900 dark:text-neutral-100;
+  font-family: theme('fontFamily.sans');
+}
+
+main {
+  @apply w-full;
 }

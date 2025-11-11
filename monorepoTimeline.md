@@ -8,3 +8,4 @@
 # Monorepo Timeline
 
 - 2025-10-19: Domain-Fundament (Money, Transaction) in shared inkl. Tests. Goal: Typ-sichere Beträge und validierte Transaktionen. How: [`packages/shared/src/money.ts`](packages/shared/src/money.ts), [`packages/shared/src/domain.ts`](packages/shared/src/domain.ts) + Tests.
+- 2025-10-19: Tailwind & a11y integration. Goal: Enforce mobile-first utility styling + baseline accessibility. How: Added Tailwind configs, refactored layout & transactions page, added skip link, trimmed README.
