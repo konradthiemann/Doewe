@@ -11,7 +11,8 @@ export default defineConfig({
     // Support running from repo root and from within a workspace
     include: [
       "packages/*/src/**/*.{test,spec}.{ts,tsx}",
-      "src/**/*.{test,spec}.{ts,tsx}"
+      "src/**/*.{test,spec}.{ts,tsx}",
+      "apps/*/tests/**/*.{test,spec}.{ts,tsx}"
     ],
     exclude: [
       "**/node_modules/**",

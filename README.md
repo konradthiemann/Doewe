@@ -23,8 +23,9 @@ Family management app to capture finances, set goals, and detect behavioral patt
 - [`monorepoTimeline.md`](monorepoTimeline.md) & [`CHANGELOG.md`](CHANGELOG.md) – History & changes
 - Guidelines: [.github/promps/github.instructions.md](.github/promps/github.instructions.md)
 
-## Key Feature (current)
-- Transactions CRUD (seeded account/category) via `/transactions` and `/api/transactions`
+## Key Features (current)
+- Transactions CRUD via `/transactions` and `/api/transactions`
+- Budgets list + create via `/budgets` and `/api/budgets`
 
 ## Documentation
 Refer to:

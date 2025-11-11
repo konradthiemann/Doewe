@@ -12,6 +12,8 @@ model Account {
   name        String
   createdAt   DateTime      @default(now())
   transactions Transaction[]
+  recurring    RecurringTransaction[]
+  budgets      Budget[]
 }
 
 model Category {
@@ -19,6 +21,8 @@ model Category {
   name        String        @unique
   createdAt   DateTime      @default(now())
   transactions Transaction[]
+  recurring    RecurringTransaction[]
+  budgets      Budget[]
 }
 
 model Transaction {
@@ -32,4 +36,36 @@ model Transaction {
 
   account  Account  @relation(fields: [accountId], references: [id])
   category Category? @relation(fields: [categoryId], references: [id])
+}
+
+// Note: SQLite does not support Prisma enums; use a string field with app-level validation.
+
+model RecurringTransaction {
+  id             String    @id @default(cuid())
+  accountId      String
+  categoryId     String?
+  amountCents    Int
+  description    String
+  // Allowed values: DAILY | WEEKLY | MONTHLY | YEARLY (validated in API)
+  frequency      String
+  nextOccurrence DateTime
+  createdAt      DateTime  @default(now())
+
+  account  Account   @relation(fields: [accountId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+}
+
+model Budget {
+  id          String   @id @default(cuid())
+  accountId   String
+  categoryId  String?
+  month       Int      // 1-12
+  year        Int
+  amountCents Int      // goal amount for the month
+  createdAt   DateTime @default(now())
+
+  account  Account   @relation(fields: [accountId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+
+  @@unique([accountId, categoryId, month, year])
 }

@@ -1,3 +1,17 @@
+## [0.0.16] - 2025-11-11
+### Added
+- Budgets page `/budgets` with Tailwind-styled form and list.
+- API routes for Budgets and Recurring Transactions using Prisma + Zod.
+- Transactions form now includes Account and Category selects.
+### Changed
+- Prisma schema extended for `Budget` and `RecurringTransaction` (frequency as string for SQLite).
+### Why
+- Cover core planning features (budgets) and recurring expenses; improve UX with selects.
+### How
+- Added page at `apps/web/app/budgets/page.tsx`.
+- API handlers at `apps/web/app/api/budgets/route.ts` and `apps/web/app/api/recurring-transactions/route.ts`.
+- Schema updates under `apps/web/prisma/schema.prisma`.
+
 ## [0.0.15] - 2025-10-19
 ### Added
 - Tailwind CSS setup (config, PostCSS, plugin forms) in `apps/web`.

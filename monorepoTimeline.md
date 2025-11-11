@@ -9,3 +9,4 @@
 
 - 2025-10-19: Domain-Fundament (Money, Transaction) in shared inkl. Tests. Goal: Typ-sichere Beträge und validierte Transaktionen. How: [`packages/shared/src/money.ts`](packages/shared/src/money.ts), [`packages/shared/src/domain.ts`](packages/shared/src/domain.ts) + Tests.
 - 2025-10-19: Tailwind & a11y integration. Goal: Enforce mobile-first utility styling + baseline accessibility. How: Added Tailwind configs, refactored layout & transactions page, added skip link, trimmed README.
+ - 2025-11-11: Budgets & Recurring Transactions. Goal: Introduce planning (monthly budgets) and scheduling (recurring expenses) + richer transaction UX. How: Extended Prisma schema (Budget, RecurringTransaction), added API routes (/api/budgets, /api/recurring-transactions), updated Transactions form with account/category selects, new /budgets page.

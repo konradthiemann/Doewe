@@ -42,7 +42,7 @@ Non‑goals (MVP)
 
 ## 6. Architecture
 - Monorepo (npm workspaces): `apps/web` (Next.js App Router), `packages/shared` (domain/types/utils).
-- UI: Next.js 14 (App Router), React 18, Tailwind CSS (to be added), mobile‑first.
+- UI: Next.js 14 (App Router), React 18, Tailwind CSS, mobile‑first.
 - API: Next.js Route Handlers at `app/api/*` with Zod validation.
 - Domain (shared): Money value object and transaction model in [`packages/shared`](packages/shared).
   - Money: [`packages/shared/src/money.ts`](packages/shared/src/money.ts)
@@ -56,9 +56,14 @@ Non‑goals (MVP)
 ## 7. Current Routes & Screens
 - `/` – Home.
 - `/transactions` – List + form to create; aligned with API.
+- `/budgets` – List + form to create monthly budgets.
 - API:
   - `GET /api/transactions` – list.
   - `POST /api/transactions` – create with body: `{ accountId, amountCents, description, occurredAt, categoryId? }` implemented in [`apps/web/app/api/transactions/route.ts`](apps/web/app/api/transactions/route.ts).
+   - `GET /api/accounts` / `POST /api/accounts` – list/create accounts.
+   - `GET /api/categories` / `POST /api/categories` – list/create categories.
+   - `GET /api/budgets` / `POST /api/budgets` – list/create budgets.
+   - `GET /api/recurring-transactions` / `POST /api/recurring-transactions` – list/create recurring transactions.
 
 ## 8. Data Model
 - Account: id (cuid or fixed for seed), name, createdAt.
@@ -80,6 +85,15 @@ Non‑goals (MVP)
 - Tailwind CSS to be used for styling with a utility‑first approach.
 - Adopt mobile‑first responsive patterns using Tailwind breakpoints.
 - Maintain consistent spacing, typography, and color scales via Tailwind config (to be added).
+
+## 14. Dashboard & Visualization
+- Dashboard (landing page) provides a visual overview using Chart.js via `react-chartjs-2`.
+- Initial charts:
+   - Pie (doughnut): Outgoings distribution by category for current month.
+   - Bar: Income vs. Outcome totals for current month.
+- Demo categories used for outgoings: clothing, hobbies, eating out, food order, cosmetics, drugstore, presents, mobility, special, health, interior, misc.
+- Demo income sources: salary1, salary2, child benefit, misc.
+- Accessibility: Chart sections include headings and descriptive text; consider data table equivalents for screen readers in future iterations.
 
 ## 12. Risks & Assumptions
 - Single‑developer velocity; scope must remain focused.

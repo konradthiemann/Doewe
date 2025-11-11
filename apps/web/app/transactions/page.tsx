@@ -14,7 +14,9 @@ type Tx = {
 
 export default function TransactionsPage() {
   const [items, setItems] = useState<Tx[]>([]);
-  const [form, setForm] = useState({ description: "", amount: "" });
+  const [form, setForm] = useState({ description: "", amount: "", accountId: "", categoryId: "" });
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +34,27 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     refresh();
+    // Load accounts and categories for selects
+    (async () => {
+      const [accRes, catRes] = await Promise.all([
+        fetch("/api/accounts", { cache: "no-store" }),
+        fetch("/api/categories", { cache: "no-store" })
+      ]);
+      const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string }>] = await Promise.all([
+        accRes.json(),
+        catRes.json()
+      ]);
+      setAccounts(acc);
+      setCategories(cat);
+      // Default values if empty
+      const defaultAccount = acc.find((a) => a.id === "acc_demo") ?? acc[0];
+      const defaultCategory = cat[0];
+      setForm((f) => ({
+        ...f,
+        accountId: defaultAccount?.id ?? "",
+        categoryId: defaultCategory?.id ?? ""
+      }));
+    })();
   }, []);
 
   async function onSubmit(e: React.FormEvent) {
@@ -39,12 +62,13 @@ export default function TransactionsPage() {
     setLoading(true);
     setError(null);
     try {
-      const payload = {
-        accountId: "acc_demo",
+      const payload: Record<string, unknown> = {
+        accountId: form.accountId,
         amountCents: parseCents(form.amount),
         description: form.description,
         occurredAt: new Date().toISOString()
       };
+      if (form.categoryId) payload["categoryId"] = form.categoryId;
 
       const res = await fetch("/api/transactions", {
         method: "POST",
@@ -57,7 +81,7 @@ export default function TransactionsPage() {
         return;
       }
 
-      setForm({ description: "", amount: "" });
+  setForm({ description: "", amount: "", accountId: form.accountId, categoryId: form.categoryId });
       await refresh();
     } finally {
       setLoading(false);
@@ -73,6 +97,49 @@ export default function TransactionsPage() {
         className="space-y-4 max-w-sm rounded-md border border-gray-200 dark:border-neutral-700 p-4 bg-white dark:bg-neutral-800"
         aria-describedby={error ? "form-error" : undefined}
       >
+        <div>
+          <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
+            Account <span className="text-red-600">*</span>
+          </label>
+          <select
+            id="tx-account"
+            name="accountId"
+            required
+            value={form.accountId}
+            onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            aria-invalid={!!error && !form.accountId}
+          >
+            <option value="" disabled>
+              Select account
+            </option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1" htmlFor="tx-category">
+            Category
+          </label>
+          <select
+            id="tx-category"
+            name="categoryId"
+            value={form.categoryId}
+            onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+          >
+            <option value="">(none)</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-description">
             Description <span className="text-red-600">*</span>
