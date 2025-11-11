@@ -89,11 +89,41 @@ Non‑goals (MVP)
 ## 14. Dashboard & Visualization
 - Dashboard (landing page) provides a visual overview using Chart.js via `react-chartjs-2`.
 - Initial charts:
-   - Pie (doughnut): Outgoings distribution by category for current month.
-   - Bar: Income vs. Outcome totals for current month.
-- Demo categories used for outgoings: clothing, hobbies, eating out, food order, cosmetics, drugstore, presents, mobility, special, health, interior, misc.
+   - Pie (doughnut): Outgoings distribution by category for current month plus slices for (a) remaining liquid funds, (b) actual savings moved this month, (c) remaining planned savings for the month.
+   - Line (daily): Income (green), Outcome (red), Adjusted global savings (blue) across days of the current month. If cumulative outcome exceeds income, the deficit reduces displayed savings.
+- Demo categories used for outgoings: clothing, hobbies, eating out, food order, cosmetics, drugstore, presents, mobility, special, health, interior, misc, and a dedicated "Savings" category for monthly savings transfers.
 - Demo income sources: salary1, salary2, child benefit, misc.
-- Accessibility: Chart sections include headings and descriptive text; consider data table equivalents for screen readers in future iterations.
+- Accessibility: Chart sections include headings and descriptive text, with accessible progress bar semantics; consider data table equivalents for screen readers in future iterations.
+
+### Dynamic Planned Savings & Predictive Outcomes
+
+Users can define upcoming large expenses (predictive outcomes), e.g., "Christmas presents (1000€ by Dec)", "New wheels (600€ by Nov)".
+
+Mechanism:
+1. Each predictive outcome has a target amount and a target month (deadline).
+2. The system calculates a monthly saving allocation for each remaining month until its deadline: target remaining / months remaining.
+3. When multiple predictive outcomes overlap, monthly allocations compete for the same available saving capacity; allocation is proportional or sequentially adjusted so total planned savings for the month does not exceed user-defined feasible saving ceiling (initially the Budget planned savings record for the month).
+4. If actual savings in a month fall short of the allocated amount, the shortfall is redistributed evenly (or proportionally) across remaining months before each outcome's deadline.
+5. If actual savings exceed the allocated amount, future monthly allocations are reduced accordingly, potentially bringing forward completion of goals.
+6. The pie chart shows only the current month's planned and actual savings portions: actual savings slice (money moved to Savings category transactions this month), and remaining-to-save slice (planned minus actual for month). Historical overruns/shortfalls are reflected in recalculated future allocations, not retroactively altering past slices.
+
+Data Model Additions (future iteration):
+- PredictiveOutcome: id, accountId, name, targetAmountCents, targetMonth, targetYear, createdAt, optional categoryId.
+- Allocation: outcomeId, month, year, plannedAmountCents, adjustedAt.
+
+Algorithm Outline (allocation recompute):
+1. Gather all active outcomes (current date <= target deadline).
+2. Compute monthsRemaining for each.
+3. Initial monthlyNeed = (remainingTargetAmount) / monthsRemaining (ceil to cents). RemainingTargetAmount subtracts outcome-related actual savings already attributed (needs attribution logic).
+4. Sum monthlyNeed across outcomes; if sum <= budgeted plannedSavings for month, accept. Else scale down proportionally by (plannedSavings / sum).
+5. After month end, compare actual vs allocated per outcome; update remainingTargetAmount and recompute allocations for future months.
+
+Edge Cases:
+- Outcomes expiring this month: allocate entire remaining amount if feasible else flag underfunded.
+- Added outcome mid-month: first allocation applies immediately; if insufficient headroom, proportional scaling occurs.
+- Early completion: outcome removed from future allocation cycle.
+
+This dynamic plan feeds future UI components (e.g., progress bars per outcome) and can later power forecasting tables.
 
 ## 12. Risks & Assumptions
 - Single‑developer velocity; scope must remain focused.

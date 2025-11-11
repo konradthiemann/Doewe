@@ -6,14 +6,13 @@ import {
   Legend,
   CategoryScale,
   LinearScale,
-  BarElement,
   Title,
   PointElement,
   LineElement
 } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { useEffect, useMemo, useState } from "react";
-import { Doughnut, Bar, Line } from "react-chartjs-2";
+import { Doughnut, Line } from "react-chartjs-2";
 
 import type { Context as DataLabelsContext } from "chartjs-plugin-datalabels";
 
@@ -23,7 +22,6 @@ ChartJS.register(
   Legend,
   CategoryScale,
   LinearScale,
-  BarElement,
   Title,
   PointElement,
   LineElement,
@@ -37,9 +35,10 @@ export default function HomePage() {
     outcomeTotal: number;
     remaining: number;
     plannedSavings: number;
-    actualSavings: number;
+    monthlySavingsActual: number;
     outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
-  }>({ incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, actualSavings: 0, outgoingByCategory: [] });
+    daily?: { labels: string[]; income: number[]; outcome: number[]; savings: number[] };
+  }>({ incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, monthlySavingsActual: 0, outgoingByCategory: [] });
 
   useEffect(() => {
     (async () => {
@@ -59,7 +58,6 @@ export default function HomePage() {
   );
 
   // Totals and remaining for current month
-  const { incomeTotal, outcomeTotal } = summary;
   const remaining = Math.round(summary.remaining * 100) / 100;
 
   // Warm palette (reds/oranges/yellows) for outgoings only – avoids greens/blues/purples
@@ -84,8 +82,8 @@ export default function HomePage() {
   // Additional slices: Remaining (left), Actual savings (blue), Remaining to save (greyish blue)
   const remainingSlice = Math.max(0, remaining);
   const remainingColorPie = "#6BAA75"; // greyish green for money left
-  const actualSavingsSlice = Math.max(0, Math.min(summary.actualSavings, Number.POSITIVE_INFINITY));
-  const remainingToSaveSlice = Math.max(0, summary.plannedSavings - summary.actualSavings);
+  const actualSavingsSlice = Math.max(0, Math.min(summary.monthlySavingsActual || 0, Number.POSITIVE_INFINITY));
+  const remainingToSaveSlice = Math.max(0, summary.plannedSavings - (summary.monthlySavingsActual || 0));
   const actualSavingsColor = "#3B82F6"; // blue-500
   const remainingToSaveColor = "#64748B"; // slate-500 (greyish blue)
 
@@ -122,70 +120,51 @@ export default function HomePage() {
     ]
   };
 
-  const remainingColor = remaining >= 0 ? "#16A34A" : "#DC2626";
-
-  const barData = {
-    labels: ["Income (total)", "Outcome (total)", "Remaining"] as string[],
+  // Daily line chart for current month (income vs outcome vs global savings)
+  const lineDailyData = summary.daily || { labels: [], income: [], outcome: [], savings: [] };
+  const lineDailyChart = {
+    labels: lineDailyData.labels,
     datasets: [
       {
         label: "Income",
-        data: [incomeTotal, 0, 0],
-        backgroundColor: "#22C55E"
+        data: lineDailyData.income,
+        borderColor: "#16A34A",
+        backgroundColor: "#16A34A",
+        tension: 0.25
       },
       {
         label: "Outcome",
-        data: [0, outcomeTotal, 0],
-        backgroundColor: "#EF4444"
+        data: lineDailyData.outcome,
+        borderColor: "#DC2626",
+        backgroundColor: "#DC2626",
+        tension: 0.25
       },
       {
-        label: "Remaining",
-        data: [0, 0, Math.abs(remaining)],
-        backgroundColor: remainingColor
+        label: "Savings",
+        data: lineDailyData.savings,
+        borderColor: "#3B82F6",
+        backgroundColor: "#3B82F6",
+        tension: 0.25
       }
     ]
   };
-
-  const barOptions = {
+  const lineDailyOptions = {
     responsive: true,
     plugins: {
       legend: { position: "top" as const },
-      title: { display: true, text: "Current month: income vs. outcome" }
+      title: { display: true, text: "Current month: income vs. outcome vs. savings" }
     },
     scales: {
       y: { beginAtZero: true }
     }
   };
 
-  // Planned vs Actual savings cards (demo numbers)
+  // Planned vs Actual savings cards
   const plannedSavings = summary.plannedSavings;
-  const actualSavings = summary.actualSavings;
+  const actualSavings = summary.monthlySavingsActual || 0;
   const plannedColor = "#6366F1"; // indigo
   const actualColor = "#16A34A"; // green
   const savingsProgress = Math.min(100, Math.round((actualSavings / plannedSavings) * 100));
-
-  // Savings line chart (current year, dummy values)
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const aimedSeries = [400,450,500,550,600,600,600,600,600,600,600,600];
-  const actualSeries = [350,420,480,500,550,500,520,560,590,610,0,0];
-  const lineData = {
-    labels: months,
-    datasets: [
-      {
-        label: "Aimed savings",
-        data: aimedSeries,
-        borderColor: plannedColor,
-        backgroundColor: plannedColor,
-        tension: 0.25
-      },
-      {
-        label: "Actual savings",
-        data: actualSeries,
-        borderColor: actualColor,
-        backgroundColor: actualColor,
-        tension: 0.25
-      }
-    ]
-  };
 
   const doughnutOptions = {
     plugins: {
@@ -224,8 +203,14 @@ export default function HomePage() {
         </div>
 
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
-          <h2 className="text-lg font-medium mb-3">Current month income vs. outcome</h2>
-          <Bar data={barData} options={barOptions} />
+          <h2 className="text-lg font-medium mb-3">Daily view (income, outcome, savings)</h2>
+          {loading ? (
+            <p className="text-sm text-gray-500">Loading…</p>
+          ) : lineDailyData.labels.length ? (
+            <Line data={lineDailyChart} options={lineDailyOptions} />
+          ) : (
+            <p className="text-sm text-gray-500">No data for this month.</p>
+          )}
         </div>
       </section>
 
@@ -239,16 +224,21 @@ export default function HomePage() {
           <h3 className="text-lg font-medium mb-2">Actual saved</h3>
           <p className="text-2xl font-semibold" style={{ color: actualColor }}>{actualSavings.toFixed(0)} €</p>
           <p className="text-sm text-gray-500">{savingsProgress}% of target</p>
-          <div className="mt-3 h-2 w-full rounded bg-gray-200 dark:bg-neutral-800">
-            <div className="h-2 rounded" style={{ width: `${savingsProgress}%`, backgroundColor: actualColor }} />
+          <div className="mt-3 h-2 w-full rounded bg-gray-200 dark:bg-neutral-800" aria-hidden="true">
+            <div
+              className="h-2 rounded"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={savingsProgress}
+              aria-label="Monthly savings progress"
+              style={{ width: `${savingsProgress}%`, backgroundColor: actualColor }}
+            />
           </div>
         </div>
       </section>
 
-      <section aria-labelledby="savings-line" className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
-        <h2 id="savings-line" className="text-lg font-medium mb-3">Savings this year</h2>
-        <Line data={lineData} />
-      </section>
+      
     </main>
   );
 }

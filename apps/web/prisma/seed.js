@@ -26,9 +26,11 @@ async function main() {
   ];
   // Income categories
   const incomeCategories = ["Salary 1", "Salary 2", "Child benefit", "Misc Income"];
+  // Special category for savings transfers (outgoing to savings)
+  const savingsCategory = "Savings";
 
   const categoryMap = {};
-  for (const name of [...expenseCategories, ...incomeCategories]) {
+  for (const name of [...expenseCategories, ...incomeCategories, savingsCategory]) {
     const cat = await prisma.category.upsert({
       where: { name },
       update: {},
@@ -70,6 +72,17 @@ async function main() {
       }
     });
   }
+
+  // Create a savings transfer (outgoing) for this month to demonstrate monthly actual savings
+  await prisma.transaction.create({
+    data: {
+      accountId: account.id,
+      categoryId: categoryMap[savingsCategory],
+      amountCents: -15000, // 150 € moved to savings this month
+      description: "Monthly savings transfer",
+      occurredAt: new Date(baseDate.getTime() + 15 * 3600_000)
+    }
+  });
 
   // Seed a savings budget (planned monthly savings) using Budget model (category optional)
   const month = now.getMonth() + 1;
