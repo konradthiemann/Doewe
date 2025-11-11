@@ -1,3 +1,26 @@
+## [0.0.14] - 2025-10-19
+### Changed
+- Translated README to English (content preserved for review).
+- Cleaned Next.js guidelines by removing restrictive sections that blocked autonomous changes.
+### Why
+- Align documentation language and enable faster implementation without artificial blockers.
+### How
+- Updated [README.md](README.md) and revised [.github/nextjs.instructions.md](.github/nextjs.instructions.md).
+
+## [0.0.13] - 2025-10-19
+### Changed
+- GitHub guidelines translated to English; added mobile‑first approach and Tailwind usage; relaxed iteration constraints (quality‑first).
+### Added
+- Project requirements document at `project-requirements-document.md`.
+### Why
+- Align collaboration and coding standards with planned UI direction and styling choices; capture requirements centrally.
+### How
+- Updated [.github/github-instructions.md](.github/github-instructions.md); created `project-requirements-document.md`.
+
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
 ## [0.0.12] - 2025-10-19
 ### Added
 - Prisma + SQLite persistence in web: schema, client, seed.
@@ -9,10 +32,6 @@
 - Persist data beyond reloads and keep shared domain usable in the app.
 ### How
 - Added schema/seed under [apps/web/prisma](apps/web/prisma), API at [apps/web/app/api/transactions/route.ts](apps/web/app/api/transactions/route.ts), singleton client [apps/web/lib/prisma.ts](apps/web/lib/prisma.ts), CI hook in [.github/workflows/ci.yml](.github/workflows/ci.yml).
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
 
 ## [0.0.11] - 2025-10-19
 ### Added

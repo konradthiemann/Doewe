@@ -1,14 +1,10 @@
+- 2025-10-19: Docs alignment. Goal: Allow autonomous changes and English README. How: Removed restrictive parts in [.github/nextjs.instructions.md](.github/nextjs.instructions.md); translated [README.md](README.md).
+# Monorepo Timeline
+
 - 2025-10-19: Persistenz (Prisma + SQLite) für Transactions. Goal: Daten über Reloads behalten. How: Schema/Seed in [apps/web/prisma](apps/web/prisma), API auf Prisma umgestellt [apps/web/app/api/transactions/route.ts](apps/web/app/api/transactions/route.ts), CI `db:push`.
 - 2025-10-19: Minimaler Transactions-Flow (API+UI) in web. Goal: End-to-End Demo. How: /api/transactions (GET/POST) + /transactions Seite; shared als Workspace genutzt und in Next transpiliert.
 - 2025-10-19: Repo-Tooling stabilisiert. Goal: Einheitliche Umgebung & weniger Warnungen. How: .nvmrc=20, @typescript-eslint auf v7, Lint-Fixes.
+- 2025-10-19: Update collaboration guidelines (EN). Goal: Mobile‑first + Tailwind policy, relaxed iteration. How: Revised [.github/github-instructions.md](.github/github-instructions.md), added `project-requirements-document.md`.
 # Monorepo Timeline
 
 - 2025-10-19: Domain-Fundament (Money, Transaction) in shared inkl. Tests. Goal: Typ-sichere Beträge und validierte Transaktionen. How: [`packages/shared/src/money.ts`](packages/shared/src/money.ts), [`packages/shared/src/domain.ts`](packages/shared/src/domain.ts) + Tests.
-- 2025-10-19: Fix CI triggers. Goal: CI läuft auf allen Branches/PRs. Why: Push auf Nicht‑main Branch (4347575) triggerte nicht. How: Trigger in [.github/workflows/ci.yml](.github/workflows/ci.yml) auf `"**"` erweitert; `workflow_dispatch` hinzugefügt.
-- 2025-10-19: Fix Vitest Test-Erkennung. Goal: Tests werden vom Root und Workspace gefunden. Why: `No test files found`. How: `vitest.config.ts` Root gesetzt, Include-Pattern erweitert.
-- 2025-10-19: CI eingeführt. Goal: Automatische Lint/Typecheck/Test/Build‑Prüfung. Why: Frühe Qualitäts-Gates. How: [.github/workflows/ci.yml](.github/workflows/ci.yml) mit Node aus [.nvmrc](.nvmrc), npm cache, Workspaces‑Skripte.
-- 2025-10-19: TS-Basis zentralisiert. Goal: Einheitliche Typprüfung. Why: weniger Duplikate, klare Defaults. How: `shared/tsconfig/tsconfig.base.json` eingeführt; `apps/web`/`packages/shared` vererbt; Root-Skripte auf `-ws`.
-- 2025-10-19: Refactor Docs. Goal: Klarere Onboarding‑Doku. Why: Redundanz/Unschärfen. How: README neu strukturiert; Copilot‑Richtlinien konsolidiert und auf Deutsch; Changelog/Timeline aktualisiert.
-- 2025-10-19: Fix Next.js Config. Goal: Dev-Server starten. Why: Next 14 lädt kein next.config.ts. How: `apps/web/next.config.ts` entfernt, `apps/web/next.config.mjs` hinzugefügt.
-- 2025-10-19: Scaffold Next.js app in apps/web (App Router, TS, basic layout/page). Goal: UI Startpunkt. Why: frühe End‑to‑End Sicht. How: package.json aktualisiert, tsconfig/next.config, app/* Dateien, root dev:web Script.
-- 2025-10-19: Initial monorepo scaffolding created: workspaces (apps/*, packages/*), root scripts (lint, typecheck, test, build), .editorconfig, .gitignore, .npmrc, and empty app/package folders.

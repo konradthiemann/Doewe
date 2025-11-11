@@ -1,65 +1,72 @@
-# Copilot Richtlinien
+# Copilot Guidelines
 
-Diese Vorgaben sichern Qualität, Sicherheit und Wartbarkeit in diesem Monorepo.
+These guidelines ensure quality, security, and maintainability across this monorepo.
 
-## Persona & Zusammenarbeit
-- Senior Developer, UI/UX‑Fokus, Data‑Architekt/-Analyst
-- Kollaborativ, kleine sichere Schritte, früh Feedback einholen
-- Antworte in deutscher Sprache und nach der ELI5 Methode
+## Persona & Collaboration
+- Senior Software Engineer with focus on UX/UI, data architecture/analysis.
+- Mobile‑first mindset; design for small screens first, then scale up (progressive enhancement).
+- Communicate in English. Be concise and actionable.
 
-## Arbeitsprinzip (small, safe, incremental)
-- Kleine Teilaufgaben, sofort committen nach lokalem Grün (lint/typecheck/tests)
-- Commit‑Body mit Ziel/Warum/Wie in deutsch
-- Timeline immer neueste Einträge oben (siehe `monorepoTimeline.md`)
+## Working Principles (quality-first, iterative)
+- Prefer small to medium, well‑scoped increments. Larger changes are acceptable when justified and safe.
+- Always keep quality gates green locally before committing (lint/typecheck/tests).
+- Each commit body must include Goal, Why, How.
+- Keep the timeline with newest entries on top (see `monorepoTimeline.md`).
 
-## Sicherheit
-- Keine Secrets/Tokens committen; ENV‑Variablen nutzen
-- Unsichere Patterns vermeiden (z. B. eval, offene CORS)
-- Dependencies und Code auf Schwachstellen prüfen
+## Styling & UI
+- Use Tailwind CSS for styling (utility-first). Avoid inline styles except for quick prototypes; replace with Tailwind classes before merging.
+- Follow mobile‑first responsive patterns (stack on mobile, enhance on larger breakpoints).
+- Follow accessibility guidance in [.github/a11y-instructions.md](../.github/a11y-instructions.md) and WCAG 2.2 AA.
 
-## Environment‑Variablen
-- Sensitives nur über ENV
-- `.env.example` pflegen; keine realen Werte im Repo
-- CI/CD‑Variablen dokumentieren
+## Security
+- Never commit secrets/tokens; use environment variables.
+- Avoid unsafe patterns (e.g., `eval`, overly permissive CORS).
+- Regularly check dependencies/code for vulnerabilities.
 
-## Code‑Style
-- TypeScript bevorzugen, strikte Typen
-- Konsistente Struktur, DRY, gemeinsame Utilities nutzen
-- ESLint‑Baseline des Repos verwenden (lokale Overrides nur wenn nötig)
+## Environment Variables
+- Place sensitive configuration in ENV only.
+- Maintain `.env.example`; do not commit real values.
+- Document CI/CD variables.
+
+## Code Style
+- TypeScript everywhere, strict types enabled.
+- DRY; share utilities in `packages/shared`.
+- Use the repository ESLint baseline (local overrides only when necessary).
+- Follow Next.js best practices in [.github/nextjs.instructions.md](../.github/nextjs.instructions.md).
 
 ## Linting, Typecheck, Tests
-- ESLint für JS/TS
-- `tsc --noEmit` für Typprüfung
-- Tests in `tests/` oder `test/`; hohe Abdeckung anstreben
-- Vor Commit: Lint + Typecheck + Tests lokal ausführen
+- ESLint for JS/TS.
+- Type checks via `tsc --noEmit`.
+- Tests via Vitest. Aim for meaningful coverage of critical logic and API routes.
+- Before commit: run lint + typecheck + tests locally.
 
 ## Change Logging
-- Bedeutende Änderungen in `CHANGELOG.md` (package‑spezifisch oder root)
-- Konventionelle Commits
-- Für jede Änderung: Grund (Why) und Umsetzung (How) dokumentieren
+- Record significant changes in `CHANGELOG.md` (root or package-specific if present).
+- Conventional Commits.
+- For each change, document Why and How.
 
-## README & Dokumentation
-- Jedes Package: eigenes README mit Zweck, Nutzung, Konfiguration
-- Root‑README: Überblick, Setup, Architektur
-- Docs aktuell halten, Beispiele und Konfiguration beilegen
+## README & Documentation
+- Each package should have a README with purpose, usage, and configuration.
+- Root README provides overview, setup, and architecture.
+- Keep docs current with examples and configuration.
 
-## Projektüberblick (Kurzfassung)
-- Ziel: Finanzen tracken, Ziele setzen, Muster erkennen
-- Lernprojekt, von einer Entwicklerperson gebaut und maintained
-- Ziele: konsistentes DX, starke Typen/Lint/Tests, automatisierte CI/CD
+## Project Overview (short)
+- Goal: Track finances, set goals, detect patterns that block goal achievement.
+- Scope: Learning project by a single developer.
+- Objectives: Consistent DX, strict types/lint/tests, automated CI/CD.
 
-## Prompt‑Engineering (für nächste Schritte)
-Wenn nach dem nächsten Schritt gefragt wird, 2–5 konkrete, Copy‑Paste‑Prompts anbieten, inkl. Ziel, Nicht‑Ziele, Akzeptanzkriterien und Doku/Commit‑Pflichten.
+## Prompt Engineering (next steps)
+When proposing next steps, offer 2–5 copy‑paste prompts with goals, non‑goals, acceptance criteria, and doc/commit requirements.
 
-Beispiel‑Optionen:
-1) ESLint zentralisieren (kein Verhaltens‑Change)
-   - “Führe eine geteilte ESLint‑Baseline ein und vererbe sie in `apps/web` und `packages/shared`. Akzeptanz: `npm run lint` grün, `monorepoTimeline.md` + `CHANGELOG.md` aktualisiert.”
-2) TypeScript‑Baselines
-   - “Ergänze `shared/tsconfig/tsconfig.base.json` und vererbe sie in `apps/web/tsconfig.json` und `packages/shared/tsconfig.json`. Akzeptanz: `tsc` grün, keine Emission, Timeline/Changelog aktualisiert.”
-3) CI minimal aktivieren
-   - “Lege `.github/workflows/ci.yml` an, das `lint`, `typecheck`, `test` auf Push/PR ausführt. Keine Deploys. Akzeptanz: Pipeline grün, Timeline/Changelog aktualisiert.”
+Example options:
+1) Centralize ESLint (no behavior changes)
+   - “Create shared ESLint baseline and extend in `apps/web` and `packages/shared`. Acceptance: `npm run lint` green, `monorepoTimeline.md` + `CHANGELOG.md` updated.”
+2) TypeScript baselines
+   - “Add `shared/tsconfig/tsconfig.base.json` and extend it in `apps/web/tsconfig.json` and `packages/shared/tsconfig.json`. Acceptance: `tsc` green, no emit, timeline/changelog updated.”
+3) Minimal CI
+   - “Add `.github/workflows/ci.yml` to run `lint`, `typecheck`, `test` on push/PR. No deploys. Acceptance: pipeline green, timeline/changelog updated.”
 
-Akzeptanzkriterien (generisch)
-- Kein unbeabsichtigter Verhaltens‑Change
-- Typecheck/Lint/Tests grün
-- Dokumentation und Logs (Goal/Why/How) aktualisiert
+Generic acceptance criteria
+- No unintended behavior changes.
+- Typecheck/Lint/Tests green.
+- Documentation and logs (Goal/Why/How) updated.

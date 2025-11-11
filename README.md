@@ -1,61 +1,66 @@
-# Doewe – Familienmanagement
+# Doewe – Family Management
 
-Ziel ist es, ein Familienmanagement‑System zu entwickeln, mit dem Finanzen schnell erfasst, Ziele gesetzt und potenzielle Ausgaben vorgemerkt werden können. Auf Basis der Daten sollen Muster erkannt und Verhalten analysiert werden, um Hindernisse bei der Zielerreichung sichtbar zu machen.
+The goal is to develop a family management system that helps quickly capture finances, set goals, and earmark potential expenses. Based on the collected data, the app should detect patterns and analyze behavior to reveal obstacles to achieving goals.
 
 ## Status
-- Lernprojekt einer einzelnen Entwicklerperson
-- Inkrementelle Entwicklung, Fokus auf Code‑Qualität
+- Learning project by a single developer
+- Incremental development with a focus on code quality
 
-## MVP‑Umfang (erste Iteration)
-- Konten und Kategorien verwalten
-- Transaktionen erfassen (einmalig, wiederkehrend)
-- Budgets und Ziele definieren
-- Einfache Auswertungen/Insights
+## Persona
+- Primary users are parents aged 20–40.
 
-Nicht‑Ziele im MVP
-- Keine Mobile‑App
-- Kein Multi‑Tenancy
-- Kein Produktionseinsatz
+## MVP Scope (first iteration)
+- Manage accounts and categories
+- Record transactions (one‑time, recurring)
+- Define budgets and goals
+- Simple insights/analytics
 
-## Tech‑Stack
+Non‑Goals for the MVP
+- No native mobile app
+- No multi‑tenancy
+- No production deployment
+
+## Tech Stack
 - App: Next.js 14 (App Router), React 18, TypeScript
 - Monorepo: npm Workspaces (apps/*, packages/*)
-- Node: 20.x empfohlen (CI nutzt 20; lokale Abweichungen können Dev‑Probleme verursachen)
-- Lint/Typecheck/Tests: werden iterativ ergänzt
+- Node: 20.x recommended (CI uses 20; local deviations may cause dev issues)
+- Lint/Typecheck/Tests: added iteratively
+- Tailwind for styling
 
-## Schnellstart
-1) Installieren
+## Quick Start
+1) Install
    - `npm install`
-2) Entwicklung starten
-   - `npm run dev:web` (startet [apps/web](apps/web))
-3) Öffnen
+2) Start development
+   - `npm run dev:web` (starts [apps/web](apps/web))
+3) Open
    - http://localhost:3000
 
-## Nützliche Skripte
+## Useful Scripts
 - Root
-  - `dev:web` – Entwicklungsserver für die Web‑App
-- App (siehe [apps/web/package.json](apps/web/package.json))
+  - `dev:web` – Dev server for the web app
+- App (see [apps/web/package.json](apps/web/package.json))
   - `dev`, `build`, `start`, `lint`, `typecheck`
 
-## Repository‑Struktur
+## Repository Structure
 - apps/web – Next.js App (App Router)
-- packages/shared – Platzhalter für gemeinsame Typen/Logik
-- .github – Projekt‑Guidelines ([.github/github-instructions.md](.github/github-instructions.md))
-- CHANGELOG.md – Änderungsprotokoll (Root)
-- monorepoTimeline.md – Chronologische Entwickler‑Timeline (neueste zuerst)
+- packages/shared – Shared types/domain/utilities
+- .github – Project guidelines ([.github/github-instructions.md](.github/github-instructions.md))
+- CHANGELOG.md – Change log (root)
+- monorepoTimeline.md – Chronological developer timeline (newest first)
 
-## Qualitätsregeln (kurz)
-- Starke Typisierung (strict)
-- Linting/Typecheck/Tests verpflichtend vor Merges (wird ausgebaut)
-- Keine Secrets im Repo, `.env.example` pflegen
+## Quality Rules (short)
+- Strict typing
+- Lint/Typecheck/Tests required before merges (will be expanded)
+- No secrets in the repo, maintain `.env.example`
 
-## Sicherheit
-- Environment‑Variablen nutzen, keine sensiblen Daten committen
-- Eingaben validieren, unsichere Patterns vermeiden
+## Security
+- Use environment variables, do not commit sensitive data
+- Validate inputs, avoid unsafe patterns
 
-## Nächste Schritte
-- ESLint/TS‑Baselines zentralisieren
-- Minimalen CI‑Workflow hinzufügen
-- Domain‑Modelle und erste Use‑Cases skizzieren
-## UI-Demo
-- Transaktionen: http://localhost:3000/transactions (Formular zum Anlegen, Liste der Einträge)
+## Next Steps
+- Centralize ESLint/TS baselines
+- Add minimal CI workflow
+- Sketch domain models and initial use cases
+
+## UI Demo
+- Transactions: http://localhost:3000/transactions (Create form and list)
