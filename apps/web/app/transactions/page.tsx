@@ -107,15 +107,16 @@ export default function TransactionsPage() {
         {/* Shimmery glow border depending on type */}
         <div
           aria-hidden
-          className={`pointer-events-none absolute -inset-1 rounded-xl blur-md transition-opacity duration-500 ${
+          className={`pointer-events-none absolute -inset-1 rounded-xl blur-sm transition-opacity duration-700 ${
             txType === "income"
-              ? "bg-gradient-to-r from-green-500/30 via-emerald-400/30 to-green-400/30 opacity-100 animate-pulse"
-              : "bg-gradient-to-r from-rose-500/30 via-red-400/30 to-rose-400/30 opacity-100 animate-pulse"
+              ? "bg-gradient-to-r from-green-500/20 via-emerald-400/20 to-green-400/20 opacity-100 animate-pulse"
+              : "bg-gradient-to-r from-rose-500/20 via-red-400/20 to-rose-400/20 opacity-100 animate-pulse"
           }`}
+          style={{ animationDuration: "3.5s" }}
         />
         <form
           onSubmit={onSubmit}
-          className="relative space-y-4 rounded-xl border border-white/30 dark:border-white/10 bg-white/60 dark:bg-neutral-800/60 backdrop-blur-md shadow-lg p-4"
+          className="relative space-y-4 rounded-xl border border-white/40 dark:border-white/10 bg-white/90 dark:bg-neutral-800/90 backdrop-blur-sm shadow-lg p-4"
           aria-describedby={error ? "form-error" : undefined}
         >
         {/* Income/Outcome Toggle */}
@@ -136,7 +137,11 @@ export default function TransactionsPage() {
           >
             <span className="relative z-10">Income</span>
             {txType === "income" && (
-              <span aria-hidden className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500 via-emerald-500 to-green-400 animate-pulse opacity-90" />
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500 via-emerald-500 to-green-400 animate-pulse opacity-80"
+                style={{ animationDuration: "2.8s" }}
+              />
             )}
           </button>
           <button
@@ -155,7 +160,11 @@ export default function TransactionsPage() {
           >
             <span className="relative z-10">Outcome</span>
             {txType === "outcome" && (
-              <span aria-hidden className="absolute inset-0 rounded-md bg-gradient-to-r from-red-500 via-rose-500 to-red-400 animate-pulse opacity-90" />
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-md bg-gradient-to-r from-red-500 via-rose-500 to-red-400 animate-pulse opacity-80"
+                style={{ animationDuration: "2.8s" }}
+              />
             )}
           </button>
         </div>
