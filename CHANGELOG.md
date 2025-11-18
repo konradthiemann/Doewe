@@ -1,3 +1,17 @@
+## [0.0.18] - 2025-11-18
+### Added
+- Bottom navigation bar with icon links and a prominent add-transaction action overlapping the bar.
+- Search field anchored at the top of `/transactions` with a magnifying glass affordance.
+### Changed
+- `/transactions` opens a creation dialog when visited with `?new=1`, refreshes after create, and dropped the floating filter shortcut.
+- Navigation moved from the header to the sticky bottom bar; removed burger menu and textual app title.
+- Dashboard spending chart hides slice labels and moves the legend below the chart on small screens for readability.
+- Dashboard hero copy trimmed.
+### Why
+- Improve mobile usability, dedicate primary actions to the bottom nav, and help people find transactions or interpret charts faster.
+### How
+- Rebuilt the client `Header` as a bottom navigation, wired `/transactions` to react to query params for create mode, and updated Chart.js options to react to viewport size.
+
 ## [0.0.17] - 2025-11-18
 ### Added
 - Edit dialog for existing transactions with keyboard focus management.

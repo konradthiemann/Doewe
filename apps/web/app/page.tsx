@@ -8,15 +8,12 @@ import {
   LinearScale,
   Title,
   PointElement,
-  LineElement
+  LineElement,
+  type ChartOptions
 } from "chart.js";
-import ChartDataLabels from "chartjs-plugin-datalabels";
+import ChartDataLabels, { type Context as DataLabelsContext } from "chartjs-plugin-datalabels";
 import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Line } from "react-chartjs-2";
-
-import TransactionForm from "../components/TransactionForm";
-
-import type { Context as DataLabelsContext } from "chartjs-plugin-datalabels";
 
 ChartJS.register(
   ArcElement,
@@ -31,8 +28,8 @@ ChartJS.register(
 );
 
 export default function HomePage() {
-  const [showTxModal, setShowTxModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const [summary, setSummary] = useState<{
     incomeTotal: number;
     outcomeTotal: number;
@@ -54,6 +51,18 @@ export default function HomePage() {
       await fetchSummary();
       setLoading(false);
     })();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
   }, []);
   const outgoingLabels = useMemo(
     () => summary.outgoingByCategory.map((c) => c.name),
@@ -173,12 +182,21 @@ export default function HomePage() {
   const actualColor = "#16A34A"; // green
   const savingsProgress = Math.min(100, Math.round((actualSavings / plannedSavings) * 100));
 
-  const doughnutOptions = {
+  const doughnutOptions: ChartOptions<"doughnut"> = {
     plugins: {
-      legend: { position: "right" as const },
+      legend: {
+        position: isMobile ? "bottom" : "right",
+        align: isMobile ? "center" : "start",
+        labels: {
+          boxWidth: isMobile ? 12 : 18,
+          font: { size: isMobile ? 10 : 12 }
+        }
+      },
       datalabels: {
+        display: !isMobile,
         color: "#111827",
         formatter: (_val: number, ctx: DataLabelsContext) => {
+          if (isMobile) return "";
           const labels = (ctx.chart.data.labels || []) as string[];
           const i = typeof ctx.dataIndex === "number" ? ctx.dataIndex : 0;
           return labels[i] || "";
@@ -191,9 +209,6 @@ export default function HomePage() {
   return (
     <main id="maincontent" className="p-6 space-y-8">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
-      <p className="text-sm text-gray-700 dark:text-gray-300">
-        Visual overview using current month transactions (demo seed values). Replace with live aggregates later.
-      </p>
 
       <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
@@ -245,31 +260,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Floating Action Button */}
-      <button
-        type="button"
-        aria-label="Add transaction"
-        onClick={() => setShowTxModal(true)}
-        className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-2xl shadow-lg focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-      >
-        +
-      </button>
-
-      {/* Modal Dialog */}
-      {showTxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="tx-dialog-title">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowTxModal(false)} />
-          <div className="relative z-10 w-full max-w-md mx-4">
-              <TransactionForm
-                headingId="tx-dialog-title"
-                onSuccess={async () => {
-                  await fetchSummary();
-                }}
-                onClose={() => setShowTxModal(false)}
-              />
-          </div>
-        </div>
-      )}
     </main>
   );
 }
