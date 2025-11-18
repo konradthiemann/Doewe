@@ -119,6 +119,30 @@ export default function TransactionForm({
     return base;
   }, [categories, mode, transaction?.categoryId, txType]);
 
+  useEffect(() => {
+    if (form.categoryId === "" || categories.length === 0) {
+      return;
+    }
+
+    setForm((current) => {
+      if (current.categoryId === "") {
+        return current;
+      }
+
+      const allowed = categories.filter((category) => (txType === "income" ? category.isIncome : !category.isIncome));
+      if (allowed.some((category) => category.id === current.categoryId)) {
+        return current;
+      }
+
+      const fallback = allowed[0]?.id ?? "";
+      if (fallback === current.categoryId) {
+        return current;
+      }
+
+      return { ...current, categoryId: fallback };
+    });
+  }, [categories, form.categoryId, txType]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);

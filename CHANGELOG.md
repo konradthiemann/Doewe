@@ -1,3 +1,15 @@
+## [0.0.19] - 2025-11-18
+### Fixed
+- Switching a transaction from income to outcome no longer fails with a server error.
+### Changed
+- `TransactionForm` now reselects a valid category whenever the transaction type changes to avoid stale foreign keys.
+- Transaction create and update handlers normalize optional category IDs and surface Prisma foreign key issues as 400 responses instead of 500s.
+### Why
+- Editing an income into an outcome submitted the previous income category, triggering a foreign key violation and 500 response.
+### How
+- Added a type-aware category fallback in `apps/web/components/TransactionForm.tsx`.
+- Updated `apps/web/app/api/transactions/route.ts` and `apps/web/app/api/transactions/[id]/route.ts` to coerce optional categories to `null` and map Prisma errors to client-safe responses.
+
 ## [0.0.18] - 2025-11-18
 ### Added
 - Bottom navigation bar with icon links and a prominent add-transaction action overlapping the bar.

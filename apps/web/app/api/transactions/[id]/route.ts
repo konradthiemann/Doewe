@@ -19,7 +19,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       where: { id: params.id },
       data: {
         accountId: data.accountId,
-        categoryId: data.categoryId,
+        categoryId: data.categoryId ?? null,
         amountCents: data.amountCents,
         description: data.description,
         occurredAt
@@ -28,10 +28,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     return NextResponse.json(updated);
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
-      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2025") {
+        return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+      }
+      if (error.code === "P2003") {
+        return NextResponse.json({ error: "Invalid account or category reference" }, { status: 400 });
+      }
     }
-    throw error;
+
+    return NextResponse.json({ error: "Failed to update transaction" }, { status: 500 });
   }
 }
 
