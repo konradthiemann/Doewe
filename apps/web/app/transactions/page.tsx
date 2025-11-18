@@ -304,7 +304,7 @@ export default function TransactionsPage() {
       </section>
 
       {editingTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeEditDialog} />
           <div
             ref={editDialogRef}
@@ -327,7 +327,7 @@ export default function TransactionsPage() {
       )}
 
       {creating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeCreateDialog} />
           <div
             ref={createDialogRef}
@@ -347,7 +347,7 @@ export default function TransactionsPage() {
       )}
 
       {feedback && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" role="presentation">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center" role="presentation">
           <div className="absolute inset-0 bg-black/30" aria-hidden="true" />
           <div
             role="alertdialog"

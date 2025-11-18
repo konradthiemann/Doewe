@@ -1,5 +1,6 @@
 import "./globals.css";
 
+import BackToTopButton from "../components/BackToTopButton";
 import Header from "../components/Header";
 
 import type { Metadata } from "next";
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="flex-1 w-full pb-[calc(7rem+env(safe-area-inset-bottom))]">
           {children}
         </div>
+        <BackToTopButton />
         <Header />
       </body>
     </html>

@@ -236,26 +236,36 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section aria-labelledby="savings-cards" className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
-          <h3 id="savings-cards" className="text-lg font-medium mb-2">Planned savings</h3>
-          <p className="text-2xl font-semibold" style={{ color: plannedColor }}>{plannedSavings.toFixed(0)} €</p>
-          <p className="text-sm text-gray-500">Target for this month</p>
-        </div>
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
-          <h3 className="text-lg font-medium mb-2">Actual saved</h3>
-          <p className="text-2xl font-semibold" style={{ color: actualColor }}>{actualSavings.toFixed(0)} €</p>
-          <p className="text-sm text-gray-500">{savingsProgress}% of target</p>
-          <div className="mt-3 h-2 w-full rounded bg-gray-200 dark:bg-neutral-800" aria-hidden="true">
-            <div
-              className="h-2 rounded"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={savingsProgress}
-              aria-label="Monthly savings progress"
-              style={{ width: `${savingsProgress}%`, backgroundColor: actualColor }}
-            />
+      <section aria-labelledby="savings-overview" className="max-w-3xl">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="savings-overview" className="text-lg font-medium mb-4">
+            Savings overview
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">Planned savings</p>
+              <p className="text-2xl font-semibold" style={{ color: plannedColor }}>{plannedSavings.toFixed(0)} €</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">Target for this month</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">Actual saved</p>
+              <p className="text-2xl font-semibold" style={{ color: actualColor }}>{actualSavings.toFixed(0)} €</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{savingsProgress}% of target</p>
+            </div>
+          </div>
+          <div className="mt-5">
+            <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Progress</p>
+            <div className="mt-2 h-2 w-full rounded bg-gray-200 dark:bg-neutral-800" aria-hidden="true">
+              <div
+                className="h-2 rounded"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={savingsProgress}
+                aria-label="Monthly savings progress"
+                style={{ width: `${savingsProgress}%`, backgroundColor: actualColor }}
+              />
+            </div>
           </div>
         </div>
       </section>
