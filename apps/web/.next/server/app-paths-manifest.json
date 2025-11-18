@@ -1,10 +1,11 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/transactions/page": "app/transactions/page.js",
-  "/api/transactions/route": "app/api/transactions/route.js",
-  "/api/categories/route": "app/api/categories/route.js",
-  "/api/accounts/route": "app/api/accounts/route.js",
-  "/api/transactions/[id]/route": "app/api/transactions/[id]/route.js",
   "/page": "app/page.js",
-  "/api/analytics/summary/route": "app/api/analytics/summary/route.js"
+  "/api/transactions/route": "app/api/transactions/route.js",
+  "/api/analytics/summary/route": "app/api/analytics/summary/route.js",
+  "/saving-plan/page": "app/saving-plan/page.js",
+  "/api/accounts/route": "app/api/accounts/route.js",
+  "/transactions/page": "app/transactions/page.js",
+  "/api/saving-plan/route": "app/api/saving-plan/route.js",
+  "/api/categories/route": "app/api/categories/route.js",
+  "/api/transactions/[id]/route": "app/api/transactions/[id]/route.js"
 }

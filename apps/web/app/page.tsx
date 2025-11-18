@@ -7,13 +7,12 @@ import {
   CategoryScale,
   LinearScale,
   Title,
-  PointElement,
-  LineElement,
+  BarElement,
   type ChartOptions
 } from "chart.js";
 import ChartDataLabels, { type Context as DataLabelsContext } from "chartjs-plugin-datalabels";
 import { useEffect, useMemo, useState } from "react";
-import { Doughnut, Line } from "react-chartjs-2";
+import { Doughnut, Bar } from "react-chartjs-2";
 
 ChartJS.register(
   ArcElement,
@@ -22,8 +21,7 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   Title,
-  PointElement,
-  LineElement,
+  BarElement,
   ChartDataLabels
 );
 
@@ -37,7 +35,6 @@ export default function HomePage() {
     plannedSavings: number;
     monthlySavingsActual: number;
     outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
-    daily?: { labels: string[]; income: number[]; outcome: number[]; savings: number[] };
   }>({ incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, monthlySavingsActual: 0, outgoingByCategory: [] });
 
   async function fetchSummary() {
@@ -75,6 +72,19 @@ export default function HomePage() {
 
   // Totals and remaining for current month
   const remaining = Math.round(summary.remaining * 100) / 100;
+  const totalIncome = Math.max(0, summary.incomeTotal || 0);
+  const totalOutcome = Math.max(0, summary.outcomeTotal || 0);
+  const totalSavingsTransfer = Math.max(0, summary.monthlySavingsActual || 0);
+  const spentActual = Math.max(0, totalOutcome + totalSavingsTransfer);
+  const leftActual = Math.max(0, summary.remaining || 0);
+  const clampedRemaining = Math.max(0, Math.min(totalIncome, leftActual));
+  const spentForChart = totalIncome > 0 ? Math.min(spentActual, totalIncome) : 0;
+  const leftForChart = totalIncome > 0 ? Math.max(0, totalIncome - spentForChart) : 0;
+  const overspent = totalIncome > 0 ? Math.max(0, spentActual - totalIncome) : spentActual;
+  const spentPercent = totalIncome > 0 ? Math.round((spentActual / totalIncome) * 100) : 0;
+  const leftPercent = totalIncome > 0 ? Math.max(0, Math.round((clampedRemaining / totalIncome) * 100)) : 0;
+  const overspentPercent = totalIncome > 0 ? Math.max(0, Math.round((overspent / totalIncome) * 100)) : 0;
+  const hasIncomeData = totalIncome > 0;
 
   // Warm palette (reds/oranges/yellows) for outgoings only – avoids greens/blues/purples
   const warmPalette = [
@@ -136,45 +146,6 @@ export default function HomePage() {
     ]
   };
 
-  // Daily line chart for current month (income vs outcome vs global savings)
-  const lineDailyData = summary.daily || { labels: [], income: [], outcome: [], savings: [] };
-  const lineDailyChart = {
-    labels: lineDailyData.labels,
-    datasets: [
-      {
-        label: "Income",
-        data: lineDailyData.income,
-        borderColor: "#16A34A",
-        backgroundColor: "#16A34A",
-        tension: 0.25
-      },
-      {
-        label: "Outcome",
-        data: lineDailyData.outcome,
-        borderColor: "#DC2626",
-        backgroundColor: "#DC2626",
-        tension: 0.25
-      },
-      {
-        label: "Savings",
-        data: lineDailyData.savings,
-        borderColor: "#3B82F6",
-        backgroundColor: "#3B82F6",
-        tension: 0.25
-      }
-    ]
-  };
-  const lineDailyOptions = {
-    responsive: true,
-    plugins: {
-      legend: { position: "top" as const },
-      title: { display: true, text: "Current month: income vs. outcome vs. savings" }
-    },
-    scales: {
-      y: { beginAtZero: true }
-    }
-  };
-
   // Planned vs Actual savings cards
   const plannedSavings = summary.plannedSavings;
   const actualSavings = summary.monthlySavingsActual || 0;
@@ -206,6 +177,69 @@ export default function HomePage() {
     }
   };
 
+  const incomeUsageData = {
+    labels: ["Current month income"],
+    datasets: [
+      {
+        label: "Spent",
+        data: [hasIncomeData ? spentForChart : 0],
+        backgroundColor: "#DC2626",
+        borderRadius: 12
+      },
+      {
+        label: "Left",
+        data: [hasIncomeData ? leftForChart : 0],
+        backgroundColor: "#16A34A",
+        borderRadius: 12
+      }
+    ]
+  };
+
+  const incomeUsageOptions: ChartOptions<"bar"> = {
+    indexAxis: "y",
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: {
+          boxWidth: isMobile ? 12 : 18,
+          font: { size: isMobile ? 10 : 12 }
+        }
+      },
+      title: {
+        display: true,
+        text: "Current month income usage"
+      },
+      datalabels: {
+        color: "#111827",
+        formatter: (value: number) => {
+          if (!value) return "";
+          return `${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`;
+        },
+        font: { size: isMobile ? 10 : 12, weight: "bold" as const }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        beginAtZero: true,
+        ticks: {
+          callback: (value) => `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
+        },
+        suggestedMax: hasIncomeData ? Math.max(totalIncome, spentForChart) : undefined,
+        grid: { color: "rgba(203,213,225,0.4)" }
+      },
+      y: {
+        stacked: true,
+        grid: { display: false }
+      }
+    }
+  };
+
+  const formatCurrency = (value: number) =>
+    `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
   return (
     <main id="maincontent" className="p-6 space-y-8">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
@@ -225,13 +259,49 @@ export default function HomePage() {
         </div>
 
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
-          <h2 className="text-lg font-medium mb-3">Daily view (income, outcome, savings)</h2>
+          <h2 id="income-usage-heading" className="text-lg font-medium mb-3">
+            Monthly income usage
+          </h2>
           {loading ? (
             <p className="text-sm text-gray-500">Loading…</p>
-          ) : lineDailyData.labels.length ? (
-            <Line data={lineDailyChart} options={lineDailyOptions} />
+          ) : hasIncomeData ? (
+            <figure aria-labelledby="income-usage-heading income-usage-summary" className="space-y-4">
+              <div className="h-40">
+                <Bar data={incomeUsageData} options={incomeUsageOptions} />
+              </div>
+              <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
+                <dl className="grid gap-3 sm:grid-cols-3" aria-label="Income report breakdown">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Spent</dt>
+                    <dd className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(spentActual)}</dd>
+                    <p className="text-xs text-slate-600 dark:text-neutral-400">{spentPercent}% of this month&apos;s income.</p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Left</dt>
+                    <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(leftActual)}</dd>
+                    <p className="text-xs text-slate-600 dark:text-neutral-400">
+                      {leftActual > 0 ? `${leftPercent}% of income still available.` : "Fully allocated this month."}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Overspend</dt>
+                    <dd className={`text-lg font-semibold ${overspent > 0 ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-neutral-400"}`}>
+                      {overspent > 0 ? formatCurrency(overspent) : "0 €"}
+                    </dd>
+                    <p className="text-xs text-slate-600 dark:text-neutral-400">
+                      {overspent > 0 ? `${overspentPercent}% above income.` : "No overspend recorded."}
+                    </p>
+                  </div>
+                </dl>
+                <p>
+                  Spent {formatCurrency(spentActual)} of {formatCurrency(totalIncome)} income this month.
+                  {leftActual > 0 && ` ${formatCurrency(leftActual)} still available.`}
+                  {overspent > 0 && ` Overspent by ${formatCurrency(overspent)}.`}
+                </p>
+              </figcaption>
+            </figure>
           ) : (
-            <p className="text-sm text-gray-500">No data for this month.</p>
+            <p className="text-sm text-gray-500">Add income transactions to see how much has been spent and what remains.</p>
           )}
         </div>
       </section>

@@ -60,6 +60,7 @@ model Budget {
   id          String   @id @default(cuid())
   accountId   String
   categoryId  String?
+  title       String   @default("")
   month       Int      // 1-12
   year        Int
   amountCents Int      // goal amount for the month

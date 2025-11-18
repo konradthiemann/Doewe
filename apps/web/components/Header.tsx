@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo } from "react";
 
 const NAV_LINKS: Array<{
   href: string;
@@ -48,8 +49,8 @@ const NAV_LINKS: Array<{
     )
   },
   {
-    href: "/budgets",
-    label: "Budgets",
+    href: "/saving-plan",
+    label: "Saving plan",
     icon: (active) => (
       <svg
         aria-hidden="true"
@@ -61,9 +62,10 @@ const NAV_LINKS: Array<{
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M4 7h16v11H4z" />
-        <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-        <path d="M12 12a2 2 0 1 0 0 4 2 2 0 1 0 0-4Z" />
+        <path d="M5 4h14v4H5z" />
+        <path d="M5 8h14v12H5z" />
+        <path d="M9 12h6" />
+        <path d="M9 16h3" />
       </svg>
     )
   },
@@ -91,6 +93,53 @@ const NAV_LINKS: Array<{
 export default function Header() {
   const pathname = usePathname();
 
+  const primaryAction = useMemo(() => {
+    const normalized = pathname ?? "/";
+    if (normalized.startsWith("/saving-plan")) {
+      return {
+        href: "/saving-plan?new=1",
+        label: "Add planned saving",
+        icon: (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-7 w-7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 11a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4h-4l-3 3v-3H7a4 4 0 0 1-4-4Z" />
+            <path d="M8 9V5" />
+            <path d="M16 9V5" />
+            <path d="M9.5 13.5h5" />
+          </svg>
+        )
+      };
+    }
+
+    return {
+      href: "/transactions?new=1",
+      label: "Add transaction",
+      icon: (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="h-7 w-7"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </svg>
+      )
+    };
+  }, [pathname]);
+
   return (
     <nav
       aria-label="Primary"
@@ -115,23 +164,11 @@ export default function Header() {
             })}
           </div>
           <Link
-            href="/transactions?new=1"
+            href={primaryAction.href}
             className="absolute -top-7 flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-white bg-indigo-600 text-white shadow-xl transition hover:bg-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-900"
-            aria-label="Add transaction"
+            aria-label={primaryAction.label}
           >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-7 w-7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 5v14" />
-              <path d="M5 12h14" />
-            </svg>
+            {primaryAction.icon}
           </Link>
         </div>
       </div>
