@@ -18,7 +18,7 @@ afterAll(() => {
 });
 
 describe("/api/transactions", () => {
-  it("creates and lists transactions", async () => {
+  it("creates, updates, and lists transactions", async () => {
     // Seed minimal account & category directly via PrismaClient
     const { PrismaClient } = await import("@prisma/client");
     const prisma = new PrismaClient();
@@ -27,6 +27,7 @@ describe("/api/transactions", () => {
 
     // Import route after env + schema are ready
     const routes = await import("../app/api/transactions/route");
+    const detailRoutes = await import("../app/api/transactions/[id]/route");
 
     const body = {
       accountId: account.id,
@@ -42,15 +43,49 @@ describe("/api/transactions", () => {
     });
     const res = await routes.POST(req);
     expect(res.status).toBe(201);
-  const created: { id: string; amountCents: number } = await res.json();
-  expect(created.id).toBeTruthy();
-  expect(created.amountCents).toBe(2500);
+    const created: { id: string; amountCents: number; description: string; occurredAt: string } = await res.json();
+    expect(created.id).toBeTruthy();
+    expect(created.amountCents).toBe(2500);
+
+    const patchBody = {
+      accountId: account.id,
+      categoryId: category.id,
+      amountCents: -1500,
+      description: "Updated Tx",
+      occurredAt: created.occurredAt
+    };
+
+    const patchReq = new Request(`http://localhost/api/transactions/${created.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patchBody)
+    });
+
+    const patchRes = await detailRoutes.PATCH(patchReq, { params: { id: created.id } });
+    expect(patchRes.status).toBe(200);
+    const updated: { id: string; amountCents: number; description: string } = await patchRes.json();
+    expect(updated.amountCents).toBe(-1500);
+    expect(updated.description).toBe("Updated Tx");
 
     const listRes = await routes.GET();
     expect(listRes.status).toBe(200);
-  const list: Array<{ id: string; description: string }> = await listRes.json();
+    const list: Array<{ id: string; description: string; amountCents: number }> = await listRes.json();
     expect(list.length).toBeGreaterThan(0);
-    expect(list.some((t) => t.description === "Test Tx")).toBe(true);
+    const match = list.find((t) => t.id === created.id);
+    expect(match).toBeTruthy();
+    expect(match?.amountCents).toBe(-1500);
+    expect(match?.description).toBe("Updated Tx");
+
+    const deleteReq = new Request(`http://localhost/api/transactions/${created.id}`, {
+      method: "DELETE"
+    });
+    const deleteRes = await detailRoutes.DELETE(deleteReq, { params: { id: created.id } });
+    expect(deleteRes.status).toBe(204);
+
+    const listAfterDeleteRes = await routes.GET();
+    expect(listAfterDeleteRes.status).toBe(200);
+    const listAfterDelete: Array<{ id: string }> = await listAfterDeleteRes.json();
+    expect(listAfterDelete.some((t) => t.id === created.id)).toBe(false);
 
     await prisma.$disconnect();
   });

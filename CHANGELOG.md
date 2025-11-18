@@ -1,3 +1,18 @@
+## [0.0.17] - 2025-11-18
+### Added
+- Edit dialog for existing transactions with keyboard focus management.
+- Delete confirmation dialog and `DELETE /api/transactions/[id]` route.
+- `PATCH /api/transactions/[id]` route to update transaction records.
+### Changed
+- `TransactionForm` now supports both create and edit flows with improved validation feedback.
+- Transactions page uses a mobile-friendly card layout, gear action button, confirmation UI, and refreshes the list after updates with feedback overlays.
+### Why
+- Allow users to correct or refine individual transactions after they are created.
+### How
+- Extended `apps/web/app/transactions/page.tsx` with edit state and modal wiring.
+- Added `apps/web/app/api/transactions/[id]/route.ts` and shared schema for validation.
+- Refactored `apps/web/components/TransactionForm.tsx` to handle edit mode and better error handling.
+
 ## [0.0.16] - 2025-11-11
 ### Added
 - Budgets page `/budgets` with Tailwind-styled form and list.

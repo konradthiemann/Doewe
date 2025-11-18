@@ -261,6 +261,7 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowTxModal(false)} />
           <div className="relative z-10 w-full max-w-md mx-4">
               <TransactionForm
+                headingId="tx-dialog-title"
                 onSuccess={async () => {
                   await fetchSummary();
                 }}

@@ -1,16 +1,7 @@
-import { ensureNonEmpty } from "@doewe/shared";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
 import { prisma } from "../../../lib/prisma";
-
-const TransactionInput = z.object({
-  accountId: z.string().min(1),
-  categoryId: z.string().min(1).optional(),
-  amountCents: z.number().int(),
-  description: z.string().transform((s) => ensureNonEmpty(s)),
-  occurredAt: z.union([z.string(), z.date()])
-});
+import { TransactionInput } from "./schema";
 
 export async function GET() {
   const items = await prisma.transaction.findMany({

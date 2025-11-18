@@ -1,3 +1,4 @@
+- 2025-11-18: Transaction editing & deletion. Goal: Allow adjustments or removal of existing transactions without manual data fixes. How: Added gear-driven edit modal on `/transactions`, integrated delete flow inside the dialog with feedback overlay, reused `TransactionForm` for edit mode, introduced PATCH/DELETE API routes.
 - 2025-10-19: Docs alignment. Goal: Allow autonomous changes and English README. How: Removed restrictive parts in [.github/nextjs.instructions.md](.github/nextjs.instructions.md); translated [README.md](README.md).
 # Monorepo Timeline
 

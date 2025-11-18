@@ -1,37 +1,206 @@
-# Doewe – Family Management
+# Doewe Monorepo
 
-Family management app to capture finances, set goals, and detect behavioral patterns hindering goal achievement (mobile‑first).
+[![CI](https://github.com/konradthiemann/Doewe/actions/workflows/ci.yml/badge.svg)](https://github.com/konradthiemann/Doewe/actions/workflows/ci.yml)
+![Node >=18.18.0](https://img.shields.io/badge/node-%3E=18.18.0-339933?logo=node.js)
+![Next.js 14.2.5](https://img.shields.io/badge/Next.js-14.2.5-black?logo=next.js)
+![TypeScript 5.6.3](https://img.shields.io/badge/TypeScript-5.6.3-3178C6?logo=typescript)
 
-## Tech Stack
-- Next.js 14 (App Router), React 18, TypeScript
-- Workspace packages: `apps/web`, `packages/shared`
-- Persistence: Prisma + SQLite (dev)
-- Styling: Tailwind CSS (utility-first, mobile-first)
-- Tests: Vitest
-- CI: GitHub Actions (lint, typecheck, test, build)
+## Project Name and Description
+Doewe is a personal finance tracking and insights platform. It helps you record transactions, categorize spending, define and monitor budgets, manage recurring transactions, and surface analytics summaries so you can spot patterns that block financial goals.
 
-## Quick Start
-1. `npm install`
-2. Copy `apps/web/.env.example` to `apps/web/.env`
-3. `npm run dev:web`
-4. Open http://localhost:3000
+Primary goals:
+- Strong developer experience (DX) with strict types, linting, testing, and CI.
+- Learn and apply modern monorepo + Next.js + TypeScript practices.
+- Provide a foundation for future goal‑oriented financial coaching features.
 
-## Structure
-- [`apps/web`](apps/web/package.json) – Web app
-- [`packages/shared`](packages/shared/package.json) – Domain & utilities
-- [`project-requirements-document.md`](project-requirements-document.md) – Detailed scope & requirements
-- [`monorepoTimeline.md`](monorepoTimeline.md) & [`CHANGELOG.md`](CHANGELOG.md) – History & changes
-- Guidelines: [.github/promps/github.instructions.md](.github/promps/github.instructions.md)
+## Technology Stack
+Core technologies (derived from workspace manifests and config):
+- Runtime: Node.js (>= 18.18.0)
+- Framework: Next.js 14.2.5 (App Router)
+- Language: TypeScript (strict) / React 18.3.1
+- Styling: Tailwind CSS 3.4.x + @tailwindcss/forms
+- Data Layer: Prisma ORM 5.19.x with SQLite/PostgreSQL (configurable) & generated client
+- Validation: Zod
+- Charts/Visualization: chart.js + react-chartjs-2 + chartjs-plugin-datalabels
+- Testing: Vitest 1.6.x (unit + integration) & custom test config
+- Tooling: ESLint (typescript, import, unused imports), SWC (Next.js build), PostCSS + Autoprefixer
+- Monorepo: npm workspaces (apps/*, packages/*)
+- Shared Library: `@doewe/shared` for domain primitives (money, strings, domain logic)
 
-## Key Features (current)
-- Transactions CRUD via `/transactions` and `/api/transactions`
-- Budgets list + create via `/budgets` and `/api/budgets`
+## Project Architecture
+High-level overview:
+```
+root
+├─ apps/web             # Next.js application (App Router) + API route handlers
+│  ├─ app/              # Layout, pages, nested routes, API endpoints under app/api/*
+│  ├─ components/       # UI components (forms, charts, etc.)
+│  ├─ lib/prisma.ts     # Prisma client bootstrap (singleton pattern)
+│  ├─ prisma/           # Prisma schema & seed script
+│  ├─ tests/            # API route tests (Vitest)
+│  ├─ tailwind.config.ts
+│  └─ next.config.mjs   # Next.js config (transpile shared workspace)
+├─ packages/shared      # Reusable domain logic (money handling, string utilities)
+│  └─ src/              # Domain types & functions with tests
+├─ shared/              # Centralized ESLint and tsconfig baselines
+│  ├─ eslint/           # ESLint base configuration
+│  └─ tsconfig/         # Shared tsconfig for extension
+├─ .github/             # Workflows (CI) & prompt/instruction docs
+└─ vitest.config.ts     # Global test configuration (monorepo aware)
+```
 
-## Documentation
-Refer to:
-- Requirements: [`project-requirements-document.md`](project-requirements-document.md)
-- Guidelines: [.github/promps/github.instructions.md](.github/promps/github.instructions.md)
-- Accessibility: [.github/promps/a11y.instructions.md](.github/promps/a11y.instructions.md)
+Architectural principles:
+- Separation of web/application concerns (`apps/web`) from pure domain logic (`packages/shared`).
+- Single Prisma client instance to avoid multi-instance overhead.
+- Shared TypeScript configuration and lint baselines to enforce consistency.
+- API routes in `app/api/*` follow Next.js route handler pattern (export HTTP verb functions).
+- Strict typing + domain primitives (e.g., Money) to reduce runtime errors.
+- Mobile‑first responsive UI with accessibility guardrails baked into component patterns.
+
+## Getting Started
+### Prerequisites
+- Node.js >= 18.18.0 (install via nvm recommended)
+- npm (comes with Node)
+- A database for Prisma (defaults often to SQLite; configure via `DATABASE_URL` in `.env.local`)
+
+### Installation & Setup
+```bash
+# Clone
+git clone https://github.com/konradthiemann/Doewe.git
+cd Doewe
+
+# (Optional) ensure Node version
+nvm use 18
+
+# Install all workspace dependencies
+npm ci
+
+# Initialize Prisma schema & seed database for web app
+npm --workspace @doewe/web run db:push
+npm --workspace @doewe/web run db:seed
+
+# Start development server
+npm run dev:web
+```
+
+### Environment Variables
+Create `.env.local` (not committed). Example:
+```
+DATABASE_URL="file:./dev.db"        # or postgres://user:pass@host:5432/dbname
+```
+After changing schema run:
+```bash
+npm --workspace @doewe/web run prisma:generate
+```
+
+### Scripts (root)
+- `npm run dev:web` – Next.js dev server
+- `npm run lint` / `lint:fix` – ESLint across workspaces
+- `npm run typecheck` – TypeScript noEmit across all workspaces
+- `npm run test` – Vitest tests (monorepo filter)
+- `npm run build` – Build all workspaces (web app + stub others)
+
+## Project Structure
+See architecture tree above. Monorepo uses npm workspaces:
+- Apps reside in `apps/`
+- Shared libraries in `packages/`
+- Central config baselines under `shared/`
+- Global test config at root; tests colocated per workspace.
+
+## Key Features
+Current implemented features include:
+- Transaction management (create, edit, delete, list) via `app/api/transactions`.
+- Budget endpoints for tracking planned vs actual spending.
+- Categories management (`app/api/categories`).
+- Recurring transactions handling.
+- Analytics summary endpoint (`app/api/analytics/summary`) for aggregated insights.
+- Domain utilities (money formatting, numeric handling, string helpers) in `@doewe/shared`.
+- Chart visualization using Chart.js to display spending patterns.
+- Accessible, mobile‑first UI components styled with Tailwind.
+
+Planned / extensible areas:
+- Goal tracking & alerts.
+- Advanced anomaly detection across spending categories.
+- Multi-user authentication & role-based access (future enhancement).
+
+## Development Workflow
+- Conventional Commits for clarity (e.g., `feat: add transaction API`)
+- Each commit body includes Goal / Why / How.
+- Update `monorepoTimeline.md` and `CHANGELOG.md` with notable changes (newest entries on top).
+- CI pipeline (`.github/workflows/ci.yml`) runs: lint → typecheck → test → build with concurrency control.
+- Prefer small, incremental PRs; keep quality gates green locally before pushing.
+- Branching: flexible (CI runs on all branches); recommend feature branches named `feat/<short-name>` or `chore/<short-name>`.
+
+## Coding Standards
+- TypeScript strict everywhere; domain types first.
+- Tailwind for styling (avoid inline styles by merge-time).
+- Accessibility: follow WCAG 2.2 AA; leverage semantic HTML & ARIA where necessary (see a11y instructions).
+- Next.js best practices: App Router, server components by default, isolate client logic in `'use client'` components, avoid `next/dynamic` with `ssr:false` in server components.
+- Shared ESLint baseline in `shared/eslint/eslint.base.cjs`; extend in workspaces.
+- DRY: prefer pulling common utilities into `@doewe/shared`.
+- Secure defaults: no secrets committed; use `.env.example` (to be added) for reference.
+
+## Testing
+- Test runner: Vitest (configured globally in `vitest.config.ts`).
+- Test locations:
+	- Domain tests: `packages/shared/src/*.test.ts`
+	- API tests: `apps/web/tests/*.test.ts`
+- Strategy: Focus on domain correctness (money/math), API contract validation (status codes, payload shapes), and regression protection for critical logic.
+- Run tests:
+```bash
+npm run test
+```
+- Type safety acts as first defense; add tests for complex calculations, parsing, and error paths.
+
+## Contributing
+Guidelines:
+1. Create a branch (`feat/`, `fix/`, `chore/`).
+2. Implement change with focus on accessibility, DX, and performance.
+3. Run local quality gates:
+	 ```bash
+	 npm run lint
+	 npm run typecheck
+	 npm run test
+	 ```
+4. Update `CHANGELOG.md` and `monorepoTimeline.md` (top‑append newest change).
+5. Ensure commit body has Goal / Why / How.
+6. Open PR; CI must pass before merge.
+
+Reference Docs:
+- Next.js Best Practices: `.github/promps/nextjs.instructions.md`
+- Accessibility Guidelines: `.github/promps/a11y.instructions.md`
+- Copilot / Collaboration Principles: `.github/promps/github.instructions.md`
 
 ## License
-(Define when choosing an OSS strategy.)
+No license file present yet. Until a license is added, this code should be treated as "All rights reserved" by default. Recommended next step: add an MIT OR Apache-2.0 `LICENSE` file to clarify usage.
+
+## Suggested Badges (Add After Setup)
+- Code Coverage (enable Vitest coverage first)
+- Security scan (e.g., Dependabot / Snyk)
+
+## Quick Reference
+```bash
+# Install & bootstrap
+npm ci && npm --workspace @doewe/web run db:push && npm --workspace @doewe/web run db:seed
+
+# Dev server
+npm run dev:web
+
+# Prisma generate (after schema change)
+npm --workspace @doewe/web run prisma:generate
+
+# Quality gates
+npm run lint && npm run typecheck && npm run test
+```
+
+## Roadmap (High-Level)
+- Authentication & user accounts
+- Budget goal alerts via scheduled jobs
+- Enhanced analytics (trend lines, category forecasts)
+- Export/import (CSV, OFX)
+- Performance budget & bundle size tracking
+
+## Acknowledgements
+Built with modern Next.js & TypeScript standards, emphasizing accessibility and clean domain modeling.
+
+---
+Generated with accessibility, clarity, and maintainability in mind. Please review and adapt as the project evolves.
