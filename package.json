@@ -13,6 +13,7 @@
     "build": "npm run build -ws",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build",
     "dev:web": "npm --workspace @doewe/web run dev",
+    "dev:web:lan": "node -e \"console.log('LAN dev server: http://192.168.2.137:3000')\" && cross-env HOST=0.0.0.0 PORT=3000 npm --workspace @doewe/web run dev",
     "postinstall": "npm --workspace @doewe/web run prisma:generate"
   },
   "engines": {
@@ -25,6 +26,7 @@
     "eslint-import-resolver-typescript": "3.6.1",
     "eslint-plugin-import": "2.29.1",
     "eslint-plugin-unused-imports": "3.2.0",
-    "vitest": "1.6.0"
+    "vitest": "1.6.0",
+    "cross-env": "7.0.3"
   }
 }
