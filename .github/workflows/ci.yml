@@ -64,10 +64,10 @@ jobs:
       - run: npm ci
       - run: npm --workspace @doewe/web run db:push
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/doewe?schema=public
       - run: npm run test -ws
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/doewe?schema=public
 
   build:
     name: Build
