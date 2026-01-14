@@ -2,7 +2,7 @@
 
 import { fromCents, toDecimalString } from "@doewe/shared";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import TransactionForm from "../../components/TransactionForm";
 
@@ -15,7 +15,7 @@ type Tx = {
   categoryId?: string | null;
 };
 
-export default function TransactionsPage() {
+function TransactionsPage() {
   const [items, setItems] = useState<Tx[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
@@ -374,5 +374,13 @@ export default function TransactionsPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function TransactionsPageWithSuspense() {
+  return (
+    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">Loading transactions…</p></main>}>
+      <TransactionsPage />
+    </Suspense>
   );
 }

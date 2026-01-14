@@ -2,7 +2,7 @@
 
 import { fromCents, toDecimalString } from "@doewe/shared";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import PlannedSavingForm from "../../components/PlannedSavingForm";
 
@@ -37,7 +37,7 @@ function formatCurrency(cents: number) {
   return `${toDecimalString(fromCents(cents))} €`;
 }
 
-export default function SavingPlanPage() {
+function SavingPlanPage() {
   const [plan, setPlan] = useState<SavingPlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -311,5 +311,13 @@ export default function SavingPlanPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function SavingPlanPageWithSuspense() {
+  return (
+    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">Loading saving plan…</p></main>}>
+      <SavingPlanPage />
+    </Suspense>
   );
 }

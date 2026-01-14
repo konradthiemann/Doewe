@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic"; // avoid build-time prerender, always run at request time
+
 import { prisma } from "../../../../lib/prisma";
 
 function getMonthYear(date = new Date()) {
