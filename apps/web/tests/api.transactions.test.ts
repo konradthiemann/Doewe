@@ -3,9 +3,11 @@ import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-// Point Prisma to a dedicated test database before any imports that instantiate Prisma
+// Point Prisma to the test database (Postgres in CI, or fall back to local default)
 const appDir = path.resolve(__dirname, "..");
-process.env.DATABASE_URL = `file:${path.join(appDir, "prisma", "test.db")}`;
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/doewe?schema=public";
+}
 
 // Prepare the test database schema
 beforeAll(() => {
