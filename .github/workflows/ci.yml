@@ -41,6 +41,20 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: doewe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,7 +63,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm --workspace @doewe/web run db:push
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/doewe?schema=public
       - run: npm run test -ws
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/doewe?schema=public
 
   build:
     name: Build
