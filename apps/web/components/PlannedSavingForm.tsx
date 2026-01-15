@@ -44,7 +44,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
         const data: Account[] = await res.json();
         if (!active) return;
         setAccounts(data);
-        const defaultAccount = data.find((account) => account.id === "acc_demo") ?? data[0];
+        const defaultAccount = data[0];
         setForm((current) => ({ ...current, accountId: current.accountId || defaultAccount?.id || "" }));
       } catch (fetchError) {
         if (!active) return;

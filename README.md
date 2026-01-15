@@ -94,7 +94,6 @@ npm --workspace @doewe/web run prisma:generate
 
 ### Scripts (root)
 - `npm run dev:web` – Next.js dev server
-- `npm run dev:web:lan` – Next.js dev server bound to all interfaces (prints LAN URL, uses HOST=0.0.0.0 PORT=3000)
 - `npm run lint` / `lint:fix` – ESLint across workspaces
 - `npm run typecheck` – TypeScript noEmit across all workspaces
 - `npm run test` – Vitest tests (monorepo filter)
@@ -191,11 +190,6 @@ npm --workspace @doewe/web run prisma:generate
 
 # Quality gates
 npm run lint && npm run typecheck && npm run test
-
-# LAN-accessible dev server
-# (binds to all interfaces and prints the URL)
-npm run dev:web:lan
-# Open from another device on the same network using the shown URL, e.g. http://192.168.2.137:3000
 ```
 
 ## Roadmap (High-Level)

@@ -1,12 +1,24 @@
 /* Enhanced seed: demo incomes & outgoings for dashboard charts */
 const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
 const prisma = new PrismaClient();
 
 async function main() {
+  const passwordHash = await bcrypt.hash("demo1234", 10);
+  const user = await prisma.user.upsert({
+    where: { email: "demo@doewe.test" },
+    update: { password: passwordHash },
+    create: {
+      email: "demo@doewe.test",
+      name: "Demo User",
+      password: passwordHash
+    }
+  });
+
   const account = await prisma.account.upsert({
     where: { id: "acc_demo" },
-    update: {},
-    create: { id: "acc_demo", name: "Demo Account" }
+    update: { userId: user.id },
+    create: { id: "acc_demo", name: "Demo Account", userId: user.id }
   });
 
   // Expense categories (outgoings)
@@ -33,9 +45,9 @@ async function main() {
   for (const name of [...expenseCategories, ...incomeCategories, savingsCategory]) {
     const isIncome = incomeCategories.includes(name);
     const cat = await prisma.category.upsert({
-      where: { name },
+      where: { userId_name: { userId: user.id, name } },
       update: { isIncome },
-      create: { name, isIncome }
+      create: { name, isIncome, userId: user.id }
     });
     categoryMap[name] = cat.id;
   }
