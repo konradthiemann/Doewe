@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic"; // avoid build-time prerender, always run at request time
 
+import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 
 function getMonthYear(date = new Date()) {
@@ -9,15 +10,22 @@ function getMonthYear(date = new Date()) {
 }
 
 export async function GET() {
-  // For now, assume single demo account
-  const accountId = "acc_demo";
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const account = await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+  if (!account) {
+    return NextResponse.json({ error: "No account found for user" }, { status: 404 });
+  }
+
+  const accountId = account.id;
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
   // Resolve special category for savings (if present)
   const savingsCategory = await prisma.category.findFirst({
-    where: { name: "Savings" },
+    where: { name: "Savings", userId: user.id },
     select: { id: true }
   });
   const savingsCatId = savingsCategory?.id ?? null;
@@ -55,7 +63,7 @@ export async function GET() {
   // Resolve category names
   const catIds = Object.keys(byCategory).filter((id) => id !== "uncategorized");
   const categories = await prisma.category.findMany({
-    where: { id: { in: catIds } },
+    where: { id: { in: catIds }, userId: user.id },
     select: { id: true, name: true }
   });
   const nameMap: Record<string, string> = {};

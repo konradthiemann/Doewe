@@ -72,7 +72,7 @@ export default function TransactionForm({
         setCategories(cat);
 
         if (mode === "create") {
-          const defaultAccount = acc.find((a) => a.id === "acc_demo") ?? acc[0];
+          const defaultAccount = acc[0];
           const defaultCategory = (txType === "income" ? cat.find((c) => c.isIncome) : cat.find((c) => !c.isIncome)) ?? cat[0];
 
           setForm((current) => ({

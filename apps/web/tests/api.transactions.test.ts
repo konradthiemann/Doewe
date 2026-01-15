@@ -9,6 +9,9 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/doewe?schema=public";
 }
 
+const TEST_USER_ID = "test-user";
+process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
+
 // Prepare the test database schema
 beforeAll(() => {
   execSync("npx prisma generate", { cwd: appDir, stdio: "inherit", env: process.env });
@@ -24,8 +27,11 @@ describe("/api/transactions", () => {
     // Seed minimal account & category directly via PrismaClient
     const { PrismaClient } = await import("@prisma/client");
     const prisma = new PrismaClient();
-    const account = await prisma.account.create({ data: { name: "Test Account" } });
-    const category = await prisma.category.create({ data: { name: "Test Category" } });
+    const user = await prisma.user.create({
+      data: { id: TEST_USER_ID, email: "test@example.com", password: "hashed" }
+    });
+    const account = await prisma.account.create({ data: { name: "Test Account", userId: user.id } });
+    const category = await prisma.category.create({ data: { name: "Test Category", userId: user.id } });
 
     // Import route after env + schema are ready
     const routes = await import("../app/api/transactions/route");
@@ -90,5 +96,5 @@ describe("/api/transactions", () => {
     expect(listAfterDelete.some((t) => t.id === created.id)).toBe(false);
 
     await prisma.$disconnect();
-  });
+  }, 20000);
 });

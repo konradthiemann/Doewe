@@ -2,6 +2,7 @@ import { ensureNonEmpty } from "@doewe/shared";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 
 const SavingPlanInput = z.object({
@@ -14,8 +15,6 @@ const SavingPlanInput = z.object({
   targetYear: z.number().int().min(1970).max(9999),
   amountCents: z.number().int().min(1)
 });
-
-const ACCOUNT_ID = "acc_demo";
 
 function normalizeTitle({
   title,
@@ -38,9 +37,9 @@ function normalizeTitle({
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
-async function resolveSavingsBalanceCents(accountId: string) {
+async function resolveSavingsBalanceCents(accountId: string, userId: string) {
   const savingsCategory = await prisma.category.findFirst({
-    where: { name: "Savings" },
+    where: { name: "Savings", userId },
     select: { id: true }
   });
 
@@ -57,7 +56,15 @@ async function resolveSavingsBalanceCents(accountId: string) {
 }
 
 export async function GET() {
-  const accountId = ACCOUNT_ID;
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const account = await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+  if (!account) {
+    return NextResponse.json({ error: "No account found for user" }, { status: 404 });
+  }
+
+  const accountId = account.id;
 
   const [goalsRaw, availableCents] = await Promise.all([
     prisma.budget.findMany({
@@ -65,7 +72,7 @@ export async function GET() {
       orderBy: [{ year: "asc" }, { month: "asc" }, { createdAt: "asc" }],
       include: { category: { select: { name: true } } }
     }),
-    resolveSavingsBalanceCents(accountId)
+    resolveSavingsBalanceCents(accountId, user.id)
   ]);
 
   const goals = goalsRaw.map((goal) => ({
@@ -97,6 +104,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const json = await req.json();
   const parsed = SavingPlanInput.safeParse({
     ...json,
@@ -109,6 +119,11 @@ export async function POST(req: Request) {
   }
 
   const payload = parsed.data;
+
+  const account = await prisma.account.findFirst({ where: { id: payload.accountId, userId: user.id } });
+  if (!account) {
+    return NextResponse.json({ error: "Account not found" }, { status: 404 });
+  }
 
   const created = await prisma.budget.create({
     data: {

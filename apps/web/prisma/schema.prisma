@@ -10,20 +10,31 @@ datasource db {
 model Account {
   id          String        @id @default(cuid())
   name        String
+  userId      String
   createdAt   DateTime      @default(now())
   transactions Transaction[]
   recurring    RecurringTransaction[]
   budgets      Budget[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Category {
   id          String        @id @default(cuid())
-  name        String        @unique
+  name        String
+  userId      String
   isIncome    Boolean       @default(false)
   createdAt   DateTime      @default(now())
   transactions Transaction[]
   recurring    RecurringTransaction[]
   budgets      Budget[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 model Transaction {
@@ -70,4 +81,15 @@ model Budget {
   category Category? @relation(fields: [categoryId], references: [id])
 
   @@unique([accountId, categoryId, month, year])
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String
+  name      String?
+  createdAt DateTime  @default(now())
+
+  accounts  Account[]
+  categories Category[]
 }
