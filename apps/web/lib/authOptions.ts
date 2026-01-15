@@ -6,6 +6,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 
 export const authOptions: NextAuthOptions = {
+  // NEXTAUTH_SECRET is required in production; AUTH_SECRET keeps NextAuth v5 compatibility
+  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
