@@ -60,7 +60,7 @@ Architectural principles:
 ### Prerequisites
 - Node.js >= 18.18.0 (install via nvm recommended)
 - npm (comes with Node)
-- A database for Prisma (defaults often to SQLite; configure via `DATABASE_URL` in `.env.local`)
+- PostgreSQL database for Prisma (local Docker is fine)
 
 ### Installation & Setup
 ```bash
@@ -85,11 +85,31 @@ npm run dev:web
 ### Environment Variables
 Create `.env.local` (not committed). Example:
 ```
-DATABASE_URL="file:./dev.db"        # or postgres://user:pass@host:5432/dbname
+DATABASE_URL="postgresql://user:pass@localhost:5432/doewe_local"
+NEXTAUTH_SECRET="set-a-strong-random-secret"
+NEXTAUTH_URL="http://localhost:3000"
+SEED_USER_EMAIL="demo@doewe.test"
+SEED_USER_PASSWORD="demo1234"
+SEED_USER_NAME="Demo User"
 ```
 After changing schema run:
 ```bash
 npm --workspace @doewe/web run prisma:generate
+```
+
+### Local database (Docker)
+If you don’t have Postgres locally, run a disposable container:
+```bash
+docker run --name doewe-postgres -e POSTGRES_USER=doewe -e POSTGRES_PASSWORD=doewe -e POSTGRES_DB=doewe_local -p 5432:5432 -d postgres:16
+```
+Then set:
+```
+DATABASE_URL="postgresql://doewe:doewe@localhost:5432/doewe_local"
+```
+Seed the database (creates a demo account with the `SEED_USER_*` credentials):
+```bash
+npm --workspace @doewe/web run db:push
+npm --workspace @doewe/web run db:seed
 ```
 
 ### Scripts (root)
