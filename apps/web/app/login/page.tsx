@@ -23,7 +23,8 @@ export default function LoginPage() {
     const result = await signIn("credentials", {
       redirect: false,
       email,
-      password
+      password,
+      callbackUrl: "/"
     });
 
     setLoading(false);
@@ -34,7 +35,7 @@ export default function LoginPage() {
     }
 
     setMessage("Logged in. Redirecting…");
-    router.push("/");
+    window.location.assign(result?.url ?? "/");
   }
 
   async function handleRegister(event: React.FormEvent) {
