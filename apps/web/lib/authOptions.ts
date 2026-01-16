@@ -5,6 +5,17 @@ import CredentialsProvider from "next-auth/providers/credentials";
 
 import { prisma } from "./prisma";
 
+const rawNextAuthUrl = process.env.NEXTAUTH_URL || process.env.NUXTAUTH_URL;
+if (rawNextAuthUrl && !process.env.NEXTAUTH_URL) {
+  process.env.NEXTAUTH_URL = rawNextAuthUrl.startsWith("http")
+    ? rawNextAuthUrl
+    : `https://${rawNextAuthUrl}`;
+}
+
+if (!process.env.NEXTAUTH_SECRET && process.env.NUXTAUTH_SECRET) {
+  process.env.NEXTAUTH_SECRET = process.env.NUXTAUTH_SECRET;
+}
+
 export const authOptions: NextAuthOptions = {
   // NEXTAUTH_SECRET is required in production; AUTH_SECRET keeps NextAuth v5 compatibility
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
