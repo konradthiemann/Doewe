@@ -82,6 +82,16 @@ npm --workspace @doewe/web run db:seed
 npm run dev:web
 ```
 
+### Local dev with Docker Postgres
+If you have Docker Desktop installed, you can run a local database only for local dev:
+```bash
+# Start local Postgres, migrate + seed, then run the app
+npm run dev:web:local
+
+# Stop local Postgres when done
+npm run db:down:local
+```
+
 ### Environment Variables
 Create `.env.local` (not committed). Example:
 ```
@@ -114,6 +124,8 @@ npm --workspace @doewe/web run db:seed
 
 ### Scripts (root)
 - `npm run dev:web` – Next.js dev server
+- `npm run dev:web:local` – Starts local Postgres (Docker), pushes schema, seeds, then runs dev server
+- `npm run db:up:local` / `npm run db:down:local` – Start/stop the local Postgres container
 - `npm run lint` / `lint:fix` – ESLint across workspaces
 - `npm run typecheck` – TypeScript noEmit across all workspaces
 - `npm run test` – Vitest tests (monorepo filter)
