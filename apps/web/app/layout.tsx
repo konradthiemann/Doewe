@@ -2,6 +2,8 @@ import "./globals.css";
 
 import BackToTopButton from "../components/BackToTopButton";
 import Header from "../components/Header";
+import LogoutButton from "../components/LogoutButton";
+
 import Providers from "./providers";
 
 import type { Metadata } from "next";
@@ -19,6 +21,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main
         </a>
         <Providers>
+          <div className="fixed right-4 top-4 z-50">
+            <LogoutButton />
+          </div>
           <div className="flex-1 w-full pb-[calc(7rem+env(safe-area-inset-bottom))]">
             {children}
           </div>
