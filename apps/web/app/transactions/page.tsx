@@ -3,10 +3,11 @@
 import { fromCents, toDecimalString } from "@doewe/shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
+
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 type Tx = {
   id: string;
@@ -103,23 +104,23 @@ function TransactionsPage() {
     setRecurringItems(json);
   }
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
-  const nextDate = new Date(currentYear, currentMonth, 1);
-  const nextYear = nextDate.getFullYear();
-  const nextMonth = nextDate.getMonth() + 1;
+  const now = useMemo(() => new Date(), []);
+  const currentYear = useMemo(() => now.getFullYear(), [now]);
+  const currentMonth = useMemo(() => now.getMonth() + 1, [now]);
+  const nextDate = useMemo(() => new Date(currentYear, currentMonth, 1), [currentYear, currentMonth]);
+  const nextYear = useMemo(() => nextDate.getFullYear(), [nextDate]);
+  const nextMonth = useMemo(() => nextDate.getMonth() + 1, [nextDate]);
 
-  const monthIndex = (year: number, month: number) => year * 12 + (month - 1);
+  const monthIndex = useCallback((year: number, month: number) => year * 12 + (month - 1), []);
 
-  const occursInMonth = (recurring: RecurringTx, year: number, month: number) => {
+  const occursInMonth = useCallback((recurring: RecurringTx, year: number, month: number) => {
     const base = new Date(recurring.nextOccurrence);
     const baseIndex = monthIndex(base.getFullYear(), base.getMonth() + 1);
     const targetIndex = monthIndex(year, month);
     const interval = recurring.intervalMonths ?? 1;
     const diff = targetIndex - baseIndex;
     return diff >= 0 && diff % interval === 0;
-  };
+  }, [monthIndex]);
 
   const closeEditDialog = useCallback(() => {
     setEditingTx(null);
@@ -269,7 +270,7 @@ function TransactionsPage() {
     refreshRecurring();
     loadSkips(currentYear, currentMonth, setSkipsCurrent);
     loadSkips(nextYear, nextMonth, setSkipsNext);
-  }, []);
+  }, [currentMonth, currentYear, nextMonth, nextYear]);
 
   useEffect(() => {
     (async () => {
@@ -324,11 +325,11 @@ function TransactionsPage() {
       if (!occursInMonth(rec, currentYear, currentMonth)) return false;
       return !skipsCurrent.has(rec.id);
     });
-  }, [currentMonth, currentYear, recurringItems, skipsCurrent]);
+  }, [currentMonth, currentYear, occursInMonth, recurringItems, skipsCurrent]);
 
   const nextRecurring = useMemo(() => {
     return recurringItems.filter((rec) => occursInMonth(rec, nextYear, nextMonth));
-  }, [nextMonth, nextYear, recurringItems]);
+  }, [nextMonth, nextYear, occursInMonth, recurringItems]);
 
   const currentRecurringTotalCents = useMemo(() => {
     return currentRecurring.reduce((total, rec) => total + rec.amountCents, 0);
@@ -448,7 +449,6 @@ function TransactionsPage() {
 
       {activeTab === "transactions" && (
         <section
-          aria-labelledby="tx-list-heading"
           className="space-y-4 max-w-2xl mx-auto"
           id="tab-panel-transactions"
           role="tabpanel"

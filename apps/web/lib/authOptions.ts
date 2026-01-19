@@ -1,9 +1,10 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { compare } from "bcryptjs";
-import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 import { prisma } from "./prisma";
+
+import type { NextAuthOptions } from "next-auth";
 
 const rawNextAuthUrl = process.env.NEXTAUTH_URL || process.env.NUXTAUTH_URL;
 if (rawNextAuthUrl && !process.env.NEXTAUTH_URL) {
