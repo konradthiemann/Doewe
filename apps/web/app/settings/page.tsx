@@ -10,11 +10,6 @@ export default function SettingsPage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">{t("settings.title")}</h1>
-        <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.subtitle")}</p>
-      </div>
-
       <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
         <h2 className="text-lg font-medium">{t("settings.accountTitle")}</h2>
         <p className="text-sm text-gray-600 dark:text-neutral-300">

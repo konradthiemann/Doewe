@@ -154,13 +154,6 @@ function SavingPlanPage() {
 
   return (
     <main id="maincontent" className="p-6 pb-24 space-y-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{t("savingPlan.title")}</h1>
-        <p className="text-sm text-gray-500 dark:text-neutral-400">
-          {t("savingPlan.subtitle")}
-        </p>
-      </div>
-
       {feedback && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200">
           {feedback}

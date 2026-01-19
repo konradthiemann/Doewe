@@ -246,8 +246,6 @@ export default function HomePage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
-      <h1 className="text-2xl font-semibold">{t("dashboard.title")}</h1>
-
       <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
