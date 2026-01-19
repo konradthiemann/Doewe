@@ -60,11 +60,26 @@ model RecurringTransaction {
   description    String
   // Allowed values: DAILY | WEEKLY | MONTHLY | YEARLY (validated in API)
   frequency      String
+  intervalMonths Int       @default(1)
   nextOccurrence DateTime
   createdAt      DateTime  @default(now())
 
   account  Account   @relation(fields: [accountId], references: [id])
   category Category? @relation(fields: [categoryId], references: [id])
+  skips    RecurringTransactionSkip[]
+}
+
+model RecurringTransactionSkip {
+  id          String   @id @default(cuid())
+  recurringId String
+  year        Int
+  month       Int
+  createdAt   DateTime @default(now())
+
+  recurring RecurringTransaction @relation(fields: [recurringId], references: [id], onDelete: Cascade)
+
+  @@unique([recurringId, year, month])
+  @@index([recurringId])
 }
 
 model Budget {

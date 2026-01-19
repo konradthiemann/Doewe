@@ -4,13 +4,16 @@ const bcrypt = require("bcryptjs");
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash("demo1234", 10);
+  const seedEmail = process.env.SEED_USER_EMAIL || "demo@doewe.test";
+  const seedPassword = process.env.SEED_USER_PASSWORD || "demo1234";
+  const seedName = process.env.SEED_USER_NAME || "Demo User";
+  const passwordHash = await bcrypt.hash(seedPassword, 10);
   const user = await prisma.user.upsert({
-    where: { email: "demo@doewe.test" },
+    where: { email: seedEmail },
     update: { password: passwordHash },
     create: {
-      email: "demo@doewe.test",
-      name: "Demo User",
+      email: seedEmail,
+      name: seedName,
       password: passwordHash
     }
   });
