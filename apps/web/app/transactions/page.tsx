@@ -575,20 +575,19 @@ function TransactionsPage() {
             {filteredItems.map((tx) => (
               <li
                 key={tx.id}
-                className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
+                className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="space-y-2">
-                    <p className="text-base font-medium text-gray-900 dark:text-neutral-100">
-                      {tx.description}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-neutral-400">
+                <div className="flex items-stretch justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">
+                        {tx.description}
+                      </p>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <time dateTime={tx.occurredAt}>
                         {new Date(tx.occurredAt).toLocaleString(dateLocale)}
                       </time>
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        {t("transactions.accountLabel")}: {tx.accountId}
-                      </span>
                       {tx.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
                           {t("transactions.categoryLabel")}: {categoriesById[tx.categoryId] ?? tx.categoryId}
@@ -596,9 +595,9 @@ function TransactionsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
+                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch">
                     <span
-                      className={`text-base font-semibold ${
+                      className={`text-sm font-semibold text-right ${
                         tx.amountCents < 0 ? "text-red-600" : "text-green-600"
                       }`}
                     >
@@ -606,7 +605,7 @@ function TransactionsPage() {
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-2xl text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingTx(tx);

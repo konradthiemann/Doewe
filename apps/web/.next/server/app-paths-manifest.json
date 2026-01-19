@@ -1,8 +1,7 @@
 {
-  "/page": "app/page.js",
   "/transactions/page": "app/transactions/page.js",
-  "/saving-plan/page": "app/saving-plan/page.js",
-  "/settings/page": "app/settings/page.js",
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
-  "/api/saving-plan/route": "app/api/saving-plan/route.js"
+  "/api/transactions/route": "app/api/transactions/route.js",
+  "/api/recurring-transactions/skips/route": "app/api/recurring-transactions/skips/route.js",
+  "/api/recurring-transactions/route": "app/api/recurring-transactions/route.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js"
 }
