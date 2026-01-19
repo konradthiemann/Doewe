@@ -470,18 +470,29 @@ function TransactionsPage() {
           )}
 
           {currentRecurring.length > 0 && (
-            <details className="rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
+            <details className="group rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-indigo-700 dark:text-indigo-200">Recurring transactions (this month)</p>
                   <p className="text-xs text-indigo-600 dark:text-indigo-300">Includes monthly recurring items</p>
                 </div>
-                <span
-                  className={`text-base font-semibold ${
-                    currentRecurringTotalCents < 0 ? "text-red-600" : "text-green-600"
-                  }`}
-                >
-                  {toDecimalString(fromCents(currentRecurringTotalCents))} €
+                <span className="flex items-center gap-2">
+                  <span
+                    className={`text-base font-semibold ${
+                      currentRecurringTotalCents < 0 ? "text-red-600" : "text-green-600"
+                    }`}
+                  >
+                    {toDecimalString(fromCents(currentRecurringTotalCents))} €
+                  </span>
+                  <svg
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 text-indigo-500 transition-transform duration-200 group-open:rotate-90"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M7 5L12 10L7 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </span>
               </summary>
               <ul className="mt-3 space-y-2">
@@ -509,14 +520,22 @@ function TransactionsPage() {
             </details>
           )}
 
-          <details className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
+          <details className="group rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <div>
-                <p className="text-base font-semibold text-gray-900 dark:text-neutral-100">Upcoming recurring (next month)</p>
-                <p className="text-xs text-gray-500 dark:text-neutral-400">Uncheck to skip next month’s execution.</p>
+                <p className="text-base font-semibold text-gray-900 dark:text-neutral-100">Upcoming recurring</p>
               </div>
-              <span className="text-xs text-gray-500 dark:text-neutral-400">
+              <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                 {nextDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                <svg
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 text-gray-400 transition-transform duration-200 group-open:rotate-90 dark:text-neutral-400"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M7 5L12 10L7 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </span>
             </summary>
             {nextRecurring.length === 0 ? (
