@@ -4,101 +4,100 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 
-const NAV_LINKS: Array<{
-  href: string;
-  label: string;
-  icon: (active: boolean) => JSX.Element;
-}> = [
-  {
-    href: "/",
-    label: "Dashboard",
-    icon: (active) => (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M3 11.5 12 4l9 7.5" />
-        <path d="M6.5 10v9h11v-9" />
-      </svg>
-    )
-  },
-  {
-    href: "/transactions",
-    label: "Transactions",
-    icon: (active) => (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M5 6h14" />
-        <path d="M5 12h10" />
-        <path d="M5 18h8" />
-      </svg>
-    )
-  },
-  {
-    href: "/saving-plan",
-    label: "Saving plan",
-    icon: (active) => (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M5 4h14v4H5z" />
-        <path d="M5 8h14v12H5z" />
-        <path d="M9 12h6" />
-        <path d="M9 16h3" />
-      </svg>
-    )
-  },
-  {
-    href: "/settings",
-    label: "Settings",
-    icon: (active) => (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.06A1.65 1.65 0 0 0 9 4.09V4a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.06a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.06A1.65 1.65 0 0 0 19.91 11H20a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
-      </svg>
-    )
-  }
-];
+import { useI18n } from "../lib/i18n";
 
 export default function Header() {
   const pathname = usePathname();
+  const { t } = useI18n();
+
+  const navLinks: Array<{ href: string; label: string; icon: (active: boolean) => JSX.Element }> = [
+    {
+      href: "/",
+      label: t("nav.dashboard"),
+      icon: (active) => (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M3 11.5 12 4l9 7.5" />
+          <path d="M6.5 10v9h11v-9" />
+        </svg>
+      )
+    },
+    {
+      href: "/transactions",
+      label: t("nav.transactions"),
+      icon: (active) => (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M5 6h14" />
+          <path d="M5 12h10" />
+          <path d="M5 18h8" />
+        </svg>
+      )
+    },
+    {
+      href: "/saving-plan",
+      label: t("nav.savingPlan"),
+      icon: (active) => (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M5 4h14v4H5z" />
+          <path d="M5 8h14v12H5z" />
+          <path d="M9 12h6" />
+          <path d="M9 16h3" />
+        </svg>
+      )
+    },
+    {
+      href: "/settings",
+      label: t("nav.settings"),
+      icon: (active) => (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className={`h-6 w-6 transition ${active ? "text-indigo-600" : "text-gray-500 dark:text-neutral-400"}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.06A1.65 1.65 0 0 0 9 4.09V4a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.06a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.06A1.65 1.65 0 0 0 19.91 11H20a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+        </svg>
+      )
+    }
+  ];
 
   const primaryAction = useMemo(() => {
     const normalized = pathname ?? "/";
     if (normalized.startsWith("/saving-plan")) {
       return {
         href: "/saving-plan?new=1",
-        label: "Add planned saving",
+        label: t("action.addPlannedSaving"),
         icon: (
           <svg
             aria-hidden="true"
@@ -121,7 +120,7 @@ export default function Header() {
 
     return {
       href: "/transactions?new=1",
-      label: "Add transaction",
+      label: t("action.addTransaction"),
       icon: (
         <svg
           aria-hidden="true"
@@ -138,7 +137,7 @@ export default function Header() {
         </svg>
       )
     };
-  }, [pathname]);
+  }, [pathname, t]);
 
   return (
     <nav
@@ -148,7 +147,7 @@ export default function Header() {
       <div className="mx-auto max-w-xl">
         <div className="relative flex items-end justify-center">
           <div className="flex w-full items-center justify-between gap-4 rounded-full border border-gray-200 bg-white/95 px-6 pb-3 pt-5 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-neutral-700 dark:bg-neutral-900/95 dark:supports-[backdrop-filter]:bg-neutral-900/80">
-            {NAV_LINKS.map(({ href, label, icon }) => {
+            {navLinks.map(({ href, label, icon }) => {
               const active = pathname === href;
               return (
                 <Link

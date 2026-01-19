@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import PlannedSavingForm from "../../components/PlannedSavingForm";
+import { useI18n } from "../../lib/i18n";
 
 type SavingGoal = {
   id: string;
@@ -38,6 +39,7 @@ function formatCurrency(cents: number) {
 }
 
 function SavingPlanPage() {
+  const { locale, t } = useI18n();
   const [plan, setPlan] = useState<SavingPlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +48,7 @@ function SavingPlanPage() {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
   const fetchPlan = useCallback(async () => {
     setLoading(true);
@@ -53,17 +56,17 @@ function SavingPlanPage() {
     try {
       const res = await fetch("/api/saving-plan", { cache: "no-store" });
       if (!res.ok) {
-        throw new Error(`Failed to load saving plan (${res.status}).`);
+        throw new Error(t("savingPlan.errorLoad", { status: res.status }));
       }
       const json: SavingPlanResponse = await res.json();
       setPlan(json);
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : "Unable to load saving plan.");
+      setError(fetchError instanceof Error ? fetchError.message : t("savingPlan.errorLoadFallback"));
       setPlan(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchPlan();
@@ -141,10 +144,10 @@ function SavingPlanPage() {
   const handleSuccess = useCallback(
     async (message?: string) => {
       await fetchPlan();
-      setFeedback(message ?? "Planned saving added.");
+      setFeedback(message ?? t("savingPlan.feedbackAdded"));
       closeDialog();
     },
-    [closeDialog, fetchPlan]
+    [closeDialog, fetchPlan, t]
   );
 
   const timelineEmpty = !loading && goalsWithProgress.length === 0;
@@ -152,9 +155,9 @@ function SavingPlanPage() {
   return (
     <main id="maincontent" className="p-6 pb-24 space-y-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Saving plan</h1>
+        <h1 className="text-2xl font-semibold">{t("savingPlan.title")}</h1>
         <p className="text-sm text-gray-500 dark:text-neutral-400">
-          Track each planned saving goal and see how your savings pot matches the timeline.
+          {t("savingPlan.subtitle")}
         </p>
       </div>
 
@@ -175,28 +178,32 @@ function SavingPlanPage() {
         className="grid gap-4 rounded-xl border border-gray-200 bg-white/95 p-5 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90"
       >
         <h2 id="saving-plan-summary" className="text-lg font-medium">
-          Savings balance
+          {t("savingPlan.summaryTitle")}
         </h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Available</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryAvailable")}</p>
             <p className="text-xl font-semibold">{formatCurrency(availableCents)}</p>
-            <p className="text-xs text-slate-600 dark:text-neutral-400">Money currently set aside for goals.</p>
+            <p className="text-xs text-slate-600 dark:text-neutral-400">{t("savingPlan.summaryAvailableHelp")}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Planned total</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryPlannedTotal")}</p>
             <p className="text-xl font-semibold">{formatCurrency(plan?.totals.totalTargetCents ?? 0)}</p>
-            <p className="text-xs text-slate-600 dark:text-neutral-400">Sum of all planned savings goals.</p>
+            <p className="text-xs text-slate-600 dark:text-neutral-400">{t("savingPlan.summaryPlannedHelp")}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Remaining after goals</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryRemainingAfter")}</p>
             <p className="text-xl font-semibold">{formatCurrency(remainingAfterGoals)}</p>
-            <p className="text-xs text-slate-600 dark:text-neutral-400">{remainingAfterGoals > 0 ? "Extra savings once all goals are covered." : "Extra savings will appear once goals are met."}</p>
+            <p className="text-xs text-slate-600 dark:text-neutral-400">
+              {remainingAfterGoals > 0
+                ? t("savingPlan.summaryRemainingHelpPositive")
+                : t("savingPlan.summaryRemainingHelpNegative")}
+            </p>
           </div>
         </div>
         {shortfall > 0 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200">
-            You need {formatCurrency(shortfall)} more to cover every goal in the plan.
+            {t("savingPlan.shortfall", { amount: formatCurrency(shortfall) })}
           </p>
         )}
       </section>
@@ -204,21 +211,21 @@ function SavingPlanPage() {
       <section aria-labelledby="saving-plan-timeline" className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 id="saving-plan-timeline" className="text-lg font-medium">
-            Timeline
+            {t("savingPlan.timelineTitle")}
           </h2>
-          <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-neutral-400">Top = earliest goal</span>
+          <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-neutral-400">{t("savingPlan.timelineHint")}</span>
         </div>
         {loading ? (
-          <p className="text-sm text-gray-500 dark:text-neutral-400">Loading timeline…</p>
+          <p className="text-sm text-gray-500 dark:text-neutral-400">{t("savingPlan.timelineLoading")}</p>
         ) : timelineEmpty ? (
           <div className="rounded-xl border border-dashed border-gray-300 bg-white/60 p-8 text-center text-sm text-gray-500 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400">
-            <p>No planned savings yet. Add your first goal to start the timeline.</p>
+            <p>{t("savingPlan.timelineEmpty")}</p>
           </div>
         ) : (
           <ol className="relative border-l border-slate-200 pl-6 dark:border-neutral-700">
             {goalsWithProgress.map((goal, index) => {
               const isLast = index === goalsWithProgress.length - 1;
-              const dueDate = new Date(goal.year, goal.month - 1, 1).toLocaleDateString(undefined, {
+              const dueDate = new Date(goal.year, goal.month - 1, 1).toLocaleDateString(dateLocale, {
                 month: "long",
                 year: "numeric"
               });
@@ -252,22 +259,24 @@ function SavingPlanPage() {
                         </p>
                         <h3 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{goal.title}</h3>
                         {goal.categoryName && (
-                          <p className="text-xs text-slate-500 dark:text-neutral-400">Category: {goal.categoryName}</p>
+                          <p className="text-xs text-slate-500 dark:text-neutral-400">
+                            {t("savingPlan.timelineCategory")}: {goal.categoryName}
+                          </p>
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-neutral-400">Goal</p>
+                        <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.timelineGoal")}</p>
                         <p className="text-xl font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(goal.amountCents)}</p>
                         <p className="text-xs text-slate-500 dark:text-neutral-400">
-                          {formatCurrency(goal.achievedCents)} saved
+                          {t("savingPlan.timelineSaved", { amount: formatCurrency(goal.achievedCents) })}
                         </p>
                       </div>
                     </div>
                     <div>
                       <div className="flex justify-between text-xs text-slate-500 dark:text-neutral-400">
-                        <span>{percentClamped}% complete</span>
+                        <span>{t("savingPlan.timelinePercentComplete", { percent: percentClamped })}</span>
                         <span>
-                          Target: {formatCurrency(goal.cumulativeTargetCents)}
+                          {t("savingPlan.timelineTarget", { amount: formatCurrency(goal.cumulativeTargetCents) })}
                         </span>
                       </div>
                       <div className="mt-1 h-2 w-full rounded-full bg-slate-200 dark:bg-neutral-700" aria-hidden="true">
@@ -278,12 +287,12 @@ function SavingPlanPage() {
                       </div>
                       {goal.status === "current" && (
                         <p className="mt-2 text-xs font-medium text-indigo-600 dark:text-indigo-300">
-                          You are currently working on this goal.
+                          {t("savingPlan.timelineCurrent")}
                         </p>
                       )}
                       {goal.status === "upcoming" && (
                         <p className="mt-2 text-xs text-slate-500 dark:text-neutral-400">
-                          Starts after {formatCurrency(goal.cumulativeTargetCents - goal.amountCents)} is fully allocated.
+                          {t("savingPlan.timelineUpcoming", { amount: formatCurrency(goal.cumulativeTargetCents - goal.amountCents) })}
                         </p>
                       )}
                     </div>
@@ -315,8 +324,10 @@ function SavingPlanPage() {
 }
 
 export default function SavingPlanPageWithSuspense() {
+  const { t } = useI18n();
+
   return (
-    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">Loading saving plan…</p></main>}>
+    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">{t("savingPlan.loading")}</p></main>}>
       <SavingPlanPage />
     </Suspense>
   );

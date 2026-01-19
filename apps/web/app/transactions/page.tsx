@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
+import { useI18n } from "../../lib/i18n";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -38,6 +39,7 @@ type RecurringSkip = {
 type ActiveTab = "transactions" | "recurring";
 
 function TransactionsPage() {
+  const { locale, t } = useI18n();
   const [items, setItems] = useState<Tx[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
@@ -60,11 +62,14 @@ function TransactionsPage() {
   const [skipsNext, setSkipsNext] = useState<Set<string>>(new Set());
   const router = useRouter();
   const searchParams = useSearchParams();
+  const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
-  const tabs: Array<{ id: ActiveTab; label: string }> = [
-    { id: "transactions", label: "Transactions" },
-    { id: "recurring", label: "Recurring" }
-  ];
+  const tabs: Array<{ id: ActiveTab; label: string }> = useMemo(() => (
+    [
+      { id: "transactions", label: t("transactions.tabTransactions") },
+      { id: "recurring", label: t("transactions.tabRecurring") }
+    ]
+  ), [t]);
 
   const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
@@ -80,29 +85,29 @@ function TransactionsPage() {
     tabRefs.current[nextIndex]?.focus();
   };
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setError(null);
     const res = await fetch("/api/transactions", { cache: "no-store" });
     if (!res.ok) {
-      setError(`Failed to load: ${res.status}`);
+      setError(t("errors.failedLoad", { status: res.status }));
       setItems([]);
       return;
     }
     const json: Tx[] = await res.json();
     setItems(json);
-  }
+  }, [t]);
 
-  async function refreshRecurring() {
+  const refreshRecurring = useCallback(async () => {
     setRecurringError(null);
     const res = await fetch("/api/recurring-transactions", { cache: "no-store" });
     if (!res.ok) {
-      setRecurringError(`Failed to load recurring: ${res.status}`);
+      setRecurringError(t("errors.failedLoadRecurring", { status: res.status }));
       setRecurringItems([]);
       return;
     }
     const json: RecurringTx[] = await res.json();
     setRecurringItems(json);
-  }
+  }, [t]);
 
   const now = useMemo(() => new Date(), []);
   const currentYear = useMemo(() => now.getFullYear(), [now]);
@@ -225,32 +230,32 @@ function TransactionsPage() {
   const handleEditSuccess = async (message?: string) => {
     await refresh();
     closeEditDialog();
-    showFeedback(message ?? "Transaction updated.");
+      showFeedback(message ?? t("transactionForm.updated"));
   };
 
   const handleDeleteSuccess = async (message?: string) => {
     await refresh();
     closeEditDialog();
-    showFeedback(message ?? "Transaction deleted.");
+      showFeedback(message ?? t("transactionForm.deleted"));
   };
 
   const handleRecurringEditSuccess = async (message?: string) => {
     await refreshRecurring();
     closeRecurringDialog();
-    showFeedback(message ?? "Recurring transaction updated.");
+    showFeedback(message ?? t("recurringForm.updated"));
   };
 
   const handleRecurringDeleteSuccess = async (message?: string) => {
     await refreshRecurring();
     closeRecurringDialog();
-    showFeedback(message ?? "Recurring transaction deleted.");
+    showFeedback(message ?? t("recurringForm.deleted"));
   };
 
   const handleCreateSuccess = async (message?: string) => {
     await refresh();
     await refreshRecurring();
     closeCreateDialog();
-    showFeedback(message ?? "Transaction added.");
+    showFeedback(message ?? t("transactionForm.saved"));
   };
 
   async function loadSkips(year: number, month: number, setter: (value: Set<string>) => void) {
@@ -264,13 +269,13 @@ function TransactionsPage() {
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     refreshRecurring();
     loadSkips(currentYear, currentMonth, setSkipsCurrent);
     loadSkips(nextYear, nextMonth, setSkipsNext);
-  }, [currentMonth, currentYear, nextMonth, nextYear]);
+  }, [currentMonth, currentYear, nextMonth, nextYear, refreshRecurring]);
 
   useEffect(() => {
     (async () => {
@@ -314,11 +319,11 @@ function TransactionsPage() {
       const account = t.accountId?.toLowerCase?.() ?? "";
       const categoryName = t.categoryId ? (categoriesById[t.categoryId]?.toLowerCase?.() ?? "") : "";
       const amount = toDecimalString(fromCents(t.amountCents)).toLowerCase();
-      const occurred = new Date(t.occurredAt).toLocaleString().toLowerCase();
+      const occurred = new Date(t.occurredAt).toLocaleString(dateLocale).toLowerCase();
 
       return [description, account, categoryName, amount, occurred].some((value) => value.includes(normalizedQuery));
     });
-  }, [categoriesById, items, normalizedQuery]);
+  }, [categoriesById, dateLocale, items, normalizedQuery]);
 
   const currentRecurring = useMemo(() => {
     return recurringItems.filter((rec) => {
@@ -345,7 +350,7 @@ function TransactionsPage() {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        setRecurringError(`Failed to skip recurring: ${res.status}`);
+        setRecurringError(t("errors.failedSkip", { status: res.status }));
         setSkipsNext((current) => {
           const next = new Set(current);
           next.delete(recurringId);
@@ -366,7 +371,7 @@ function TransactionsPage() {
       body: JSON.stringify(payload)
     });
     if (!res.ok) {
-      setRecurringError(`Failed to unskip recurring: ${res.status}`);
+      setRecurringError(t("errors.failedUnskip", { status: res.status }));
       setSkipsNext((current) => new Set(current).add(recurringId));
     }
   };
@@ -375,7 +380,7 @@ function TransactionsPage() {
     <main id="maincontent" className="p-6 space-y-8">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-xl font-semibold">Transactions</h1>
+          <h1 className="text-xl font-semibold">{t("transactions.title")}</h1>
           {activeTab === "transactions" && (
             <form
               role="search"
@@ -386,7 +391,7 @@ function TransactionsPage() {
               }}
             >
               <label htmlFor="transaction-search" className="sr-only">
-                Search transactions
+                {t("transactions.searchLabel")}
               </label>
               <div className="relative">
                 <span
@@ -415,14 +420,15 @@ function TransactionsPage() {
                   inputMode="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search transactions"
+                  placeholder={t("transactions.searchPlaceholder")}
                   className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
                 />
               </div>
             </form>
           )}
         </div>
-        <div role="tablist" aria-label="Transaction views" className="flex gap-2" onKeyDown={handleTabKeyDown}>
+        <div role="tablist" aria-label={t("transactions.tabsLabel")}
+             className="flex gap-2" onKeyDown={handleTabKeyDown}>
           {tabs.map((tab, index) => (
             <button
               key={tab.id}
@@ -456,7 +462,7 @@ function TransactionsPage() {
           tabIndex={0}
         >
           <h2 id="tx-list-heading" className="sr-only">
-            Transactions list
+            {t("transactions.listHeading")}
           </h2>
           {error && (
             <p id="form-error" role="alert" className="text-sm text-red-600">
@@ -473,8 +479,8 @@ function TransactionsPage() {
             <details className="group rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
-                  <p className="text-base font-semibold text-indigo-700 dark:text-indigo-200">Recurring transactions (this month)</p>
-                  <p className="text-xs text-indigo-600 dark:text-indigo-300">Includes monthly recurring items</p>
+                  <p className="text-base font-semibold text-indigo-700 dark:text-indigo-200">{t("transactions.recurringSummaryTitle")}</p>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-300">{t("transactions.recurringSummarySubtitle")}</p>
                 </div>
                 <span className="flex items-center gap-2">
                   <span
@@ -510,9 +516,9 @@ function TransactionsPage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
-                        Recurring
+                        {t("transactions.recurringBadge")}
                       </span>
-                      <span>Every {rec.intervalMonths ?? 1} month(s)</span>
+                      <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
                     </div>
                   </li>
                 ))}
@@ -523,10 +529,10 @@ function TransactionsPage() {
           <details className="group rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <div>
-                <p className="text-base font-semibold text-gray-900 dark:text-neutral-100">Upcoming recurring</p>
+                <p className="text-base font-semibold text-gray-900 dark:text-neutral-100">{t("transactions.upcomingRecurring")}</p>
               </div>
               <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
-                {nextDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                {nextDate.toLocaleDateString(dateLocale, { month: "long", year: "numeric" })}
                 <svg
                   aria-hidden="true"
                   className="h-3.5 w-3.5 text-gray-400 transition-transform duration-200 group-open:rotate-90 dark:text-neutral-400"
@@ -539,7 +545,7 @@ function TransactionsPage() {
               </span>
             </summary>
             {nextRecurring.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">No recurring transactions scheduled.</p>
+              <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noRecurringScheduled")}</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {nextRecurring.map((rec) => {
@@ -566,26 +572,26 @@ function TransactionsPage() {
           </details>
 
           <ul className="space-y-2">
-            {filteredItems.map((t) => (
+            {filteredItems.map((tx) => (
               <li
-                key={t.id}
+                key={tx.id}
                 className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-2">
                     <p className="text-base font-medium text-gray-900 dark:text-neutral-100">
-                      {t.description}
+                      {tx.description}
                     </p>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-neutral-400">
-                      <time dateTime={t.occurredAt}>
-                        {new Date(t.occurredAt).toLocaleString()}
+                      <time dateTime={tx.occurredAt}>
+                        {new Date(tx.occurredAt).toLocaleString(dateLocale)}
                       </time>
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        Account: {t.accountId}
+                        {t("transactions.accountLabel")}: {tx.accountId}
                       </span>
-                      {t.categoryId && (
+                      {tx.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                          Category: {categoriesById[t.categoryId] ?? t.categoryId}
+                          {t("transactions.categoryLabel")}: {categoriesById[tx.categoryId] ?? tx.categoryId}
                         </span>
                       )}
                     </div>
@@ -593,19 +599,21 @@ function TransactionsPage() {
                   <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
                     <span
                       className={`text-base font-semibold ${
-                        t.amountCents < 0 ? "text-red-600" : "text-green-600"
+                        tx.amountCents < 0 ? "text-red-600" : "text-green-600"
                       }`}
                     >
-                      {toDecimalString(fromCents(t.amountCents))} €
+                      {toDecimalString(fromCents(tx.amountCents))} €
                     </span>
                     <button
                       type="button"
                       className="inline-flex h-10 w-10 items-center justify-center rounded-full text-2xl text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
-                        setEditingTx(t);
+                        setEditingTx(tx);
                       }}
-                      aria-label={`Manage transaction ${t.description || "without description"}`}
+                      aria-label={t("transactions.manageTransaction", {
+                        description: tx.description || t("transactions.withoutDescription")
+                      })}
                     >
                       <span aria-hidden="true" className="leading-none">
                         ⚙
@@ -616,11 +624,11 @@ function TransactionsPage() {
               </li>
             ))}
             {items.length === 0 && !error && (
-              <li className="text-sm text-gray-500 dark:text-neutral-400">No transactions yet.</li>
+              <li className="text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noTransactionsYet")}</li>
             )}
             {items.length > 0 && filteredItems.length === 0 && normalizedQuery && (
               <li className="text-sm text-gray-500 dark:text-neutral-400" role="status">
-                No transactions match your search.
+                {t("transactions.noSearchMatches")}
               </li>
             )}
           </ul>
@@ -635,7 +643,7 @@ function TransactionsPage() {
           aria-labelledby="tab-recurring"
           tabIndex={0}
         >
-          <h2 className="text-lg font-semibold">Recurring transactions</h2>
+          <h2 className="text-lg font-semibold">{t("transactions.recurringSectionTitle")}</h2>
           {recurringError && (
             <p role="alert" className="text-sm text-red-600">
               {recurringError}
@@ -648,13 +656,13 @@ function TransactionsPage() {
                   <div className="space-y-2">
                     <p className="text-base font-medium text-gray-900 dark:text-neutral-100">{rec.description}</p>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
-                      <span>Every {rec.intervalMonths ?? 1} month(s)</span>
+                      <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        Next: {new Date(rec.nextOccurrence).toLocaleDateString()}
+                        {t("transactions.nextLabel", { date: new Date(rec.nextOccurrence).toLocaleDateString(dateLocale) })}
                       </span>
                       {rec.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                          Category: {categoriesById[rec.categoryId] ?? rec.categoryId}
+                          {t("transactions.categoryLabel")}: {categoriesById[rec.categoryId] ?? rec.categoryId}
                         </span>
                       )}
                     </div>
@@ -670,7 +678,9 @@ function TransactionsPage() {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingRecurring(rec);
                       }}
-                      aria-label={`Manage recurring transaction ${rec.description || "without description"}`}
+                      aria-label={t("transactions.manageRecurring", {
+                        description: rec.description || t("transactions.withoutDescription")
+                      })}
                     >
                       <span aria-hidden="true" className="leading-none">
                         ⚙
@@ -681,7 +691,7 @@ function TransactionsPage() {
               </li>
             ))}
             {recurringItems.length === 0 && (
-              <li className="text-sm text-gray-500 dark:text-neutral-400">No recurring transactions yet.</li>
+              <li className="text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noRecurringYet")}</li>
             )}
           </ul>
         </section>
@@ -770,7 +780,7 @@ function TransactionsPage() {
             className="relative z-10 w-full max-w-xs rounded-lg border border-indigo-200 bg-white p-4 text-sm shadow-lg focus:outline-none dark:border-indigo-500/40 dark:bg-neutral-900"
           >
             <h3 id="feedback-title" className="text-base font-semibold text-gray-900 dark:text-neutral-100">
-              {feedback.variant === "success" ? "Success" : "Notice"}
+              {feedback.variant === "success" ? t("transactions.successTitle") : t("transactions.noticeTitle")}
             </h3>
             <p className="mt-2 text-sm text-gray-700 dark:text-neutral-300">{feedback.message}</p>
             <div className="mt-4 flex justify-end">
@@ -780,7 +790,7 @@ function TransactionsPage() {
                 onClick={() => setFeedback(null)}
                 className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
               >
-                OK
+                {t("transactions.ok")}
               </button>
             </div>
           </div>
@@ -791,8 +801,10 @@ function TransactionsPage() {
 }
 
 export default function TransactionsPageWithSuspense() {
+  const { t } = useI18n();
+
   return (
-    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">Loading transactions…</p></main>}>
+    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">{t("transactions.loading")}</p></main>}>
       <TransactionsPage />
     </Suspense>
   );

@@ -4,6 +4,7 @@ import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { appConfig } from "../lib/config";
+import { useI18n } from "../lib/i18n";
 
 type TransactionDetails = {
   id: string;
@@ -31,6 +32,7 @@ export default function TransactionForm({
   onClose,
   onDelete
 }: Props) {
+  const { t } = useI18n();
   const [form, setForm] = useState(() => ({
     description: transaction?.description ?? "",
     amount: transaction ? toDecimalString(fromCents(Math.abs(transaction.amountCents))) : "",
@@ -70,7 +72,7 @@ export default function TransactionForm({
         ]);
 
         if (!accRes.ok || !catRes.ok) {
-          throw new Error("Unable to load reference data.");
+          throw new Error(t("transactionForm.errorLoadRef"));
         }
 
         const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string; isIncome: boolean }>]
@@ -93,14 +95,14 @@ export default function TransactionForm({
         }
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load reference data.");
+        setError(err instanceof Error ? err.message : t("transactionForm.errorLoadRefFallback"));
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [mode, txType]);
+  }, [mode, t, txType]);
 
   useEffect(() => {
     if (mode === "edit" && transaction) {
@@ -170,12 +172,12 @@ export default function TransactionForm({
     try {
       rawCents = parseCents(form.amount);
     } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : "Invalid amount entered.");
+      setError(parseError instanceof Error ? parseError.message : t("transactionForm.errorInvalidAmount"));
       return;
     }
 
     if (isRecurring && intervalMonths < 1) {
-      setRecurringError("Please enter an interval of at least 1 month.");
+      setRecurringError(t("transactionForm.errorInterval"));
       return;
     }
 
@@ -209,16 +211,16 @@ export default function TransactionForm({
         });
 
         if (!res.ok) {
-          setError(`Save failed: ${res.status}`);
+          setError(t("transactionForm.errorSaveFailed", { status: res.status }));
           return;
         }
       }
 
       const message = mode === "edit"
-        ? "Transaction updated."
+        ? t("transactionForm.updated")
         : isRecurring
-          ? "Recurring transaction saved."
-          : "Transaction saved.";
+          ? t("transactionForm.recurringSaved")
+          : t("transactionForm.saved");
       setInlineSuccess(message);
       onSuccess?.(message);
 
@@ -226,7 +228,7 @@ export default function TransactionForm({
         setForm((current) => ({ ...current, description: "", amount: "" }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save transaction.");
+      setError(err instanceof Error ? err.message : t("transactionForm.errorSave"));
     } finally {
       setLoading(false);
     }
@@ -247,7 +249,7 @@ export default function TransactionForm({
 
     if (!res.ok) {
       const details = await res.json().catch(() => null);
-      const message = details?.error ? JSON.stringify(details.error) : `Save failed: ${res.status}`;
+      const message = details?.error ? JSON.stringify(details.error) : t("transactionForm.errorSaveFailed", { status: res.status });
       throw new Error(message);
     }
   }
@@ -256,7 +258,7 @@ export default function TransactionForm({
     setNewCategoryError(null);
     const trimmed = newCategoryName.trim();
     if (!trimmed) {
-      setNewCategoryError("Please enter a category name.");
+      setNewCategoryError(t("transactionForm.errorCategoryName"));
       return;
     }
 
@@ -270,7 +272,7 @@ export default function TransactionForm({
 
       if (!res.ok) {
         const details = await res.json().catch(() => null);
-        const message = details?.error ? JSON.stringify(details.error) : `Save failed: ${res.status}`;
+        const message = details?.error ? JSON.stringify(details.error) : t("transactionForm.errorSaveFailed", { status: res.status });
         setNewCategoryError(message);
         return;
       }
@@ -281,7 +283,7 @@ export default function TransactionForm({
       setNewCategoryName("");
       setShowNewCategory(false);
     } catch (err) {
-      setNewCategoryError(err instanceof Error ? err.message : "Failed to add category.");
+      setNewCategoryError(err instanceof Error ? err.message : t("transactionForm.errorAddCategory"));
     } finally {
       setNewCategoryLoading(false);
     }
@@ -295,22 +297,26 @@ export default function TransactionForm({
     try {
       const res = await fetch(`/api/transactions/${transaction.id}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) {
-        setDeleteError(`Delete failed: ${res.status}`);
+        setDeleteError(t("transactionForm.errorDeleteFailed", { status: res.status }));
         setDeleteLoading(false);
         return;
       }
 
-      const message = "Transaction deleted.";
+      const message = t("transactionForm.deleted");
       onDelete?.(message);
       onClose?.();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete transaction.");
+      setDeleteError(err instanceof Error ? err.message : t("transactionForm.errorDelete"));
     } finally {
       setDeleteLoading(false);
     }
   }
 
-  const submitLabel = loading ? "Saving…" : mode === "edit" ? "Save" : "Add";
+  const submitLabel = loading
+    ? t("transactionForm.saving")
+    : mode === "edit"
+      ? t("transactionForm.save")
+      : t("transactionForm.add");
 
   return (
     <div className="relative mx-auto w-full max-w-lg sm:max-w-xl">
@@ -330,13 +336,13 @@ export default function TransactionForm({
       >
         <div className="flex items-center justify-between">
           <h3 id={headingId} className="text-base font-semibold">
-            {mode === "edit" ? "Edit transaction" : "Add transaction"}
+            {mode === "edit" ? t("transactionForm.editTitle") : t("transactionForm.addTitle")}
           </h3>
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t("common.close")}
               className="rounded p-1 hover:bg-black/5 dark:hover:bg-white/10"
             >
               ×
@@ -344,7 +350,11 @@ export default function TransactionForm({
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-2" role="group" aria-label="Transaction type">
+        <div
+          className="flex items-center justify-center gap-2"
+          role="group"
+          aria-label={t("transactionForm.typeLabel")}
+        >
           <button
             type="button"
             className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
@@ -359,7 +369,7 @@ export default function TransactionForm({
               setForm((current) => ({ ...current, categoryId: first?.id ?? current.categoryId }));
             }}
           >
-            <span className="relative z-10">Income</span>
+            <span className="relative z-10">{t("transactionForm.income")}</span>
             {txType === "income" && (
               <span
                 aria-hidden
@@ -382,7 +392,7 @@ export default function TransactionForm({
               setForm((current) => ({ ...current, categoryId: first?.id ?? current.categoryId }));
             }}
           >
-            <span className="relative z-10">Outcome</span>
+            <span className="relative z-10">{t("transactionForm.outcome")}</span>
             {txType === "outcome" && (
               <span
                 aria-hidden
@@ -393,52 +403,10 @@ export default function TransactionForm({
           </button>
         </div>
 
-        {mode === "create" && (
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Recurring transaction</legend>
-            <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-700 shadow-sm dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200">
-              <span>Repeat monthly</span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={isRecurring}
-                onChange={(event) => setIsRecurring(event.target.checked)}
-                className="h-5 w-9 rounded-full border-gray-300 text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-                aria-checked={isRecurring}
-              />
-            </label>
-            {isRecurring && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium" htmlFor="tx-interval-months">
-                  Interval in months <span className="text-red-600">*</span>
-                </label>
-                <input
-                  id="tx-interval-months"
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={intervalMonths}
-                  onChange={(event) => setIntervalMonths(Number(event.target.value))}
-                  className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-                  aria-required="true"
-                  aria-invalid={!!recurringError}
-                  aria-describedby={recurringError ? "tx-recurring-error" : undefined}
-                />
-                <p className="text-xs text-gray-500 dark:text-neutral-400">Runs on the 1st of each month.</p>
-                {recurringError && (
-                  <p id="tx-recurring-error" role="alert" className="text-sm text-red-600">
-                    {recurringError}
-                  </p>
-                )}
-              </div>
-            )}
-          </fieldset>
-        )}
-
         {appConfig.enableAccountSelection && (
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
-              Account <span className="text-red-600">*</span>
+              {t("transactionForm.accountLabel")} <span className="text-red-600">*</span>
             </label>
             <select
               id="tx-account"
@@ -450,7 +418,7 @@ export default function TransactionForm({
               aria-invalid={!!error && !form.accountId}
             >
               <option value="" disabled>
-                Select account
+                {t("transactionForm.accountPlaceholder")}
               </option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
@@ -463,7 +431,7 @@ export default function TransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-category">
-            Category
+            {t("transactionForm.categoryLabel")}
           </label>
           <select
             id="tx-category"
@@ -483,18 +451,18 @@ export default function TransactionForm({
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
             aria-describedby={newCategoryError ? "tx-category-error" : undefined}
           >
-            <option value="">(none)</option>
+            <option value="">{t("transactionForm.categoryNone")}</option>
             {filteredCategories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
               </option>
             ))}
-            <option value="__new__">Add new category…</option>
+            <option value="__new__">{t("transactionForm.categoryAddNew")}</option>
           </select>
           {showNewCategory && (
             <div className="mt-2 space-y-2">
               <label className="block text-sm font-medium" htmlFor="tx-category-new">
-                New category name
+                {t("transactionForm.categoryNewLabel")}
               </label>
               <input
                 id="tx-category-new"
@@ -512,7 +480,7 @@ export default function TransactionForm({
                   disabled={newCategoryLoading}
                   className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900"
                 >
-                  {newCategoryLoading ? "Saving…" : "Add category"}
+                  {newCategoryLoading ? t("transactionForm.saving") : t("transactionForm.categoryAddButton")}
                 </button>
                 <button
                   type="button"
@@ -524,7 +492,7 @@ export default function TransactionForm({
                   }}
                   className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
                 >
-                  Cancel
+                  {t("transactionForm.categoryCancel")}
                 </button>
               </div>
               {newCategoryError && (
@@ -538,7 +506,7 @@ export default function TransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-description">
-            Description <span className="text-red-600">*</span>
+            {t("transactionForm.descriptionLabel")} <span className="text-red-600">*</span>
           </label>
           <input
             id="tx-description"
@@ -554,7 +522,7 @@ export default function TransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-amount">
-            Amount (e.g. 12.34) <span className="text-red-600">*</span>
+            {t("transactionForm.amountLabel")} <span className="text-red-600">*</span>
           </label>
           <input
             id="tx-amount"
@@ -567,6 +535,57 @@ export default function TransactionForm({
             aria-invalid={!!error && form.amount.trim() === ""}
           />
         </div>
+
+        {mode === "create" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg bg-indigo-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-indigo-900/20 dark:text-neutral-200">
+              <div>
+                <p className="font-medium">{t("transactionForm.recurringToggleTitle")}</p>
+                <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  {t("transactionForm.recurringToggleDescription")}
+                </p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={isRecurring}
+                  onChange={(event) => setIsRecurring(event.target.checked)}
+                  aria-checked={isRecurring}
+                />
+                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-indigo-600 dark:bg-neutral-700" />
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+              </label>
+            </div>
+            {isRecurring && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium" htmlFor="tx-interval-months">
+                  {t("transactionForm.intervalLabel")} <span className="text-red-600">*</span>
+                </label>
+                <input
+                  id="tx-interval-months"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={intervalMonths}
+                  onChange={(event) => setIntervalMonths(Number(event.target.value))}
+                  className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                  aria-required="true"
+                  aria-invalid={!!recurringError}
+                  aria-describedby={recurringError ? "tx-recurring-error" : undefined}
+                />
+                <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  {t("transactionForm.intervalHelper")}
+                </p>
+                {recurringError && (
+                  <p id="tx-recurring-error" role="alert" className="text-sm text-red-600">
+                    {recurringError}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -582,7 +601,7 @@ export default function TransactionForm({
               onClick={onClose}
               className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
             >
-              Cancel
+              {t("transactionForm.cancel")}
             </button>
           )}
         </div>
@@ -610,12 +629,12 @@ export default function TransactionForm({
                 }}
                 className="inline-flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-700 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
               >
-                Delete transaction
+                {t("transactionForm.deleteAction")}
               </button>
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-gray-700 dark:text-neutral-300">
-                  This action cannot be undone. Are you sure you want to delete this transaction?
+                  {t("transactionForm.deleteConfirmText")}
                 </p>
                 {deleteError && (
                   <p role="alert" className="text-sm text-red-600">
@@ -629,7 +648,7 @@ export default function TransactionForm({
                     disabled={deleteLoading}
                     className="inline-flex flex-1 items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
                   >
-                    {deleteLoading ? "Deleting…" : "Delete"}
+                    {deleteLoading ? t("transactionForm.deleteLoading") : t("transactionForm.delete")}
                   </button>
                   <button
                     type="button"
@@ -639,7 +658,7 @@ export default function TransactionForm({
                     }}
                     className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
                   >
-                    Cancel delete
+                    {t("transactionForm.cancelDelete")}
                   </button>
                 </div>
               </div>

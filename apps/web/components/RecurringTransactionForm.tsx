@@ -4,6 +4,7 @@ import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { appConfig } from "../lib/config";
+import { useI18n } from "../lib/i18n";
 
 type RecurringDetails = {
   id: string;
@@ -29,6 +30,7 @@ export default function RecurringTransactionForm({
   onClose,
   onDelete
 }: Props) {
+  const { t } = useI18n();
   const [form, setForm] = useState(() => ({
     description: recurring.description,
     amount: toDecimalString(fromCents(Math.abs(recurring.amountCents))),
@@ -60,7 +62,7 @@ export default function RecurringTransactionForm({
         ]);
 
         if (!accRes.ok || !catRes.ok) {
-          throw new Error("Unable to load reference data.");
+          throw new Error(t("recurringForm.errorLoadRef"));
         }
 
         const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string; isIncome: boolean }>]
@@ -72,14 +74,14 @@ export default function RecurringTransactionForm({
         setCategories(cat);
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load reference data.");
+        setError(err instanceof Error ? err.message : t("recurringForm.errorLoadRefFallback"));
       }
     })();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     descriptionRef.current?.focus();
@@ -125,12 +127,12 @@ export default function RecurringTransactionForm({
     try {
       rawCents = parseCents(form.amount);
     } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : "Invalid amount entered.");
+      setError(parseError instanceof Error ? parseError.message : t("recurringForm.errorInvalidAmount"));
       return;
     }
 
     if (form.intervalMonths < 1) {
-      setError("Interval must be at least 1 month.");
+      setError(t("recurringForm.errorInterval"));
       return;
     }
 
@@ -153,15 +155,15 @@ export default function RecurringTransactionForm({
       });
 
       if (!res.ok) {
-        setError(`Save failed: ${res.status}`);
+        setError(t("recurringForm.errorSaveFailed", { status: res.status }));
         return;
       }
 
-      const message = "Recurring transaction updated.";
+      const message = t("recurringForm.updated");
       setInlineSuccess(message);
       onSuccess?.(message);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save recurring transaction.");
+      setError(err instanceof Error ? err.message : t("recurringForm.errorSave"));
     } finally {
       setLoading(false);
     }
@@ -174,22 +176,22 @@ export default function RecurringTransactionForm({
     try {
       const res = await fetch(`/api/recurring-transactions/${recurring.id}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) {
-        setDeleteError(`Delete failed: ${res.status}`);
+        setDeleteError(t("recurringForm.errorDeleteFailed", { status: res.status }));
         setDeleteLoading(false);
         return;
       }
 
-      const message = "Recurring transaction deleted.";
+      const message = t("recurringForm.deleted");
       onDelete?.(message);
       onClose?.();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete recurring transaction.");
+      setDeleteError(err instanceof Error ? err.message : t("recurringForm.errorDelete"));
     } finally {
       setDeleteLoading(false);
     }
   }
 
-  const submitLabel = loading ? "Saving…" : "Save";
+  const submitLabel = loading ? t("recurringForm.saving") : t("recurringForm.save");
 
   return (
     <div className="relative mx-auto w-full max-w-lg sm:max-w-xl">
@@ -204,13 +206,13 @@ export default function RecurringTransactionForm({
       >
         <div className="flex items-center justify-between">
           <h3 id={headingId} className="text-base font-semibold">
-            Edit recurring transaction
+            {t("recurringForm.title")}
           </h3>
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t("common.close")}
               className="rounded p-1 hover:bg-black/5 dark:hover:bg-white/10"
             >
               ×
@@ -218,7 +220,11 @@ export default function RecurringTransactionForm({
           )}
         </div>
 
-        <div className="flex items-center justify-center gap-2" role="group" aria-label="Transaction type">
+        <div
+          className="flex items-center justify-center gap-2"
+          role="group"
+          aria-label={t("recurringForm.typeLabel")}
+        >
           <button
             type="button"
             className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
@@ -229,7 +235,7 @@ export default function RecurringTransactionForm({
             aria-pressed={txType === "income"}
             onClick={() => setTxType("income")}
           >
-            <span className="relative z-10">Income</span>
+            <span className="relative z-10">{t("recurringForm.income")}</span>
             {txType === "income" && (
               <span
                 aria-hidden
@@ -248,7 +254,7 @@ export default function RecurringTransactionForm({
             aria-pressed={txType === "outcome"}
             onClick={() => setTxType("outcome")}
           >
-            <span className="relative z-10">Outcome</span>
+            <span className="relative z-10">{t("recurringForm.outcome")}</span>
             {txType === "outcome" && (
               <span
                 aria-hidden
@@ -262,7 +268,7 @@ export default function RecurringTransactionForm({
         {appConfig.enableAccountSelection && (
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="recurring-account">
-              Account <span className="text-red-600">*</span>
+              {t("recurringForm.accountLabel")} <span className="text-red-600">*</span>
             </label>
             <select
               id="recurring-account"
@@ -274,7 +280,7 @@ export default function RecurringTransactionForm({
               aria-invalid={!!error && !form.accountId}
             >
               <option value="" disabled>
-                Select account
+                {t("recurringForm.accountPlaceholder")}
               </option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
@@ -287,7 +293,7 @@ export default function RecurringTransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-description">
-            Description <span className="text-red-600">*</span>
+            {t("recurringForm.descriptionLabel")} <span className="text-red-600">*</span>
           </label>
           <input
             id="recurring-description"
@@ -303,7 +309,7 @@ export default function RecurringTransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-amount">
-            Amount (e.g. 12.34) <span className="text-red-600">*</span>
+            {t("recurringForm.amountLabel")} <span className="text-red-600">*</span>
           </label>
           <input
             id="recurring-amount"
@@ -319,7 +325,7 @@ export default function RecurringTransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-category">
-            Category
+            {t("recurringForm.categoryLabel")}
           </label>
           <select
             id="recurring-category"
@@ -328,7 +334,7 @@ export default function RecurringTransactionForm({
             onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
           >
-            <option value="">(none)</option>
+            <option value="">{t("recurringForm.categoryNone")}</option>
             {filteredCategories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -339,7 +345,7 @@ export default function RecurringTransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-interval">
-            Interval in months <span className="text-red-600">*</span>
+            {t("recurringForm.intervalLabel")} <span className="text-red-600">*</span>
           </label>
           <input
             id="recurring-interval"
@@ -352,7 +358,7 @@ export default function RecurringTransactionForm({
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
             aria-invalid={!!error && form.intervalMonths < 1}
           />
-          <p className="text-xs text-gray-500 dark:text-neutral-400">Runs on the 1st of each month.</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.intervalHelper")}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -369,7 +375,7 @@ export default function RecurringTransactionForm({
               onClick={onClose}
               className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
             >
-              Cancel
+              {t("recurringForm.cancel")}
             </button>
           )}
         </div>
@@ -393,11 +399,11 @@ export default function RecurringTransactionForm({
               onClick={() => setDeleteConfirm(true)}
               className="text-sm font-semibold text-red-600 hover:text-red-500 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
             >
-              Delete recurring transaction
+              {t("recurringForm.deleteAction")}
             </button>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-red-600">Delete this recurring transaction?</p>
+              <p className="text-sm text-red-600">{t("recurringForm.deletePrompt")}</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -405,7 +411,7 @@ export default function RecurringTransactionForm({
                   disabled={deleteLoading}
                   className="inline-flex items-center justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
                 >
-                  {deleteLoading ? "Deleting…" : "Confirm delete"}
+                  {deleteLoading ? t("recurringForm.deleteLoading") : t("recurringForm.deleteConfirm")}
                 </button>
                 <button
                   type="button"
@@ -415,7 +421,7 @@ export default function RecurringTransactionForm({
                   }}
                   className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
                 >
-                  Cancel
+                  {t("recurringForm.cancel")}
                 </button>
               </div>
               {deleteError && (
