@@ -54,7 +54,9 @@ function TransactionsPage() {
   const feedbackDismissRef = useRef<HTMLButtonElement | null>(null);
   const [categoriesById, setCategoriesById] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
+  const [recurringQuery, setRecurringQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const recurringSearchRef = useRef<HTMLInputElement | null>(null);
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("transactions");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -325,6 +327,25 @@ function TransactionsPage() {
     });
   }, [categoriesById, dateLocale, items, normalizedQuery]);
 
+  const normalizedRecurringQuery = recurringQuery.trim().toLowerCase();
+  const filteredRecurringItems = useMemo(() => {
+    if (!normalizedRecurringQuery) {
+      return recurringItems;
+    }
+
+    return recurringItems.filter((rec) => {
+      const description = rec.description?.toLowerCase?.() ?? "";
+      const account = rec.accountId?.toLowerCase?.() ?? "";
+      const categoryName = rec.categoryId ? (categoriesById[rec.categoryId]?.toLowerCase?.() ?? "") : "";
+      const amount = toDecimalString(fromCents(rec.amountCents)).toLowerCase();
+      const nextOccurrence = new Date(rec.nextOccurrence).toLocaleDateString(dateLocale).toLowerCase();
+      const interval = String(rec.intervalMonths ?? 1);
+
+      return [description, account, categoryName, amount, nextOccurrence, interval]
+        .some((value) => value.includes(normalizedRecurringQuery));
+    });
+  }, [categoriesById, dateLocale, normalizedRecurringQuery, recurringItems]);
+
   const currentRecurring = useMemo(() => {
     return recurringItems.filter((rec) => {
       if (!occursInMonth(rec, currentYear, currentMonth)) return false;
@@ -380,7 +401,6 @@ function TransactionsPage() {
     <main id="maincontent" className="p-6 space-y-8">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-xl font-semibold">{t("transactions.title")}</h1>
           {activeTab === "transactions" && (
             <form
               role="search"
@@ -421,6 +441,51 @@ function TransactionsPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={t("transactions.searchPlaceholder")}
+                  className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
+                />
+              </div>
+            </form>
+          )}
+          {activeTab === "recurring" && (
+            <form
+              role="search"
+              className="w-full sm:w-72"
+              onSubmit={(event) => {
+                event.preventDefault();
+                recurringSearchRef.current?.blur();
+              }}
+            >
+              <label htmlFor="recurring-search" className="sr-only">
+                {t("transactions.recurringSearchLabel")}
+              </label>
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-neutral-500"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M9 14.25a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5Zm6 1.5-2.9-2.9"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                <input
+                  ref={recurringSearchRef}
+                  id="recurring-search"
+                  type="search"
+                  inputMode="search"
+                  value={recurringQuery}
+                  onChange={(event) => setRecurringQuery(event.target.value)}
+                  placeholder={t("transactions.recurringSearchPlaceholder")}
                   className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
                 />
               </div>
@@ -529,7 +594,7 @@ function TransactionsPage() {
           <details className="group rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <div>
-                <p className="text-base font-semibold text-gray-900 dark:text-neutral-100">{t("transactions.upcomingRecurring")}</p>
+                <p className="text-xs font-normal text-gray-600 dark:text-neutral-300">{t("transactions.upcomingRecurring")}</p>
               </div>
               <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                 {nextDate.toLocaleDateString(dateLocale, { month: "long", year: "numeric" })}
@@ -642,19 +707,20 @@ function TransactionsPage() {
           aria-labelledby="tab-recurring"
           tabIndex={0}
         >
-          <h2 className="text-lg font-semibold">{t("transactions.recurringSectionTitle")}</h2>
           {recurringError && (
             <p role="alert" className="text-sm text-red-600">
               {recurringError}
             </p>
           )}
           <ul className="space-y-2">
-            {recurringItems.map((rec) => (
-              <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="space-y-2">
-                    <p className="text-base font-medium text-gray-900 dark:text-neutral-100">{rec.description}</p>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
+            {filteredRecurringItems.map((rec) => (
+              <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
+                <div className="flex items-stretch justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">{rec.description}</p>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
                         {t("transactions.nextLabel", { date: new Date(rec.nextOccurrence).toLocaleDateString(dateLocale) })}
@@ -666,13 +732,13 @@ function TransactionsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
-                    <span className={`text-base font-semibold ${rec.amountCents < 0 ? "text-red-600" : "text-green-600"}`}>
+                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch">
+                    <span className={`text-sm font-semibold text-right ${rec.amountCents < 0 ? "text-red-600" : "text-green-600"}`}>
                       {toDecimalString(fromCents(rec.amountCents))} €
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-2xl text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingRecurring(rec);
@@ -691,6 +757,11 @@ function TransactionsPage() {
             ))}
             {recurringItems.length === 0 && (
               <li className="text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noRecurringYet")}</li>
+            )}
+            {recurringItems.length > 0 && filteredRecurringItems.length === 0 && normalizedRecurringQuery && (
+              <li className="text-sm text-gray-500 dark:text-neutral-400" role="status">
+                {t("transactions.noRecurringMatches")}
+              </li>
             )}
           </ul>
         </section>
