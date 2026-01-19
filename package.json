@@ -14,6 +14,9 @@
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build",
     "dev:web": "npm --workspace @doewe/web run dev",
     "dev:web:lan": "node -e \"console.log('LAN dev server: http://192.168.2.137:3000')\" && cross-env HOST=0.0.0.0 PORT=3000 npm --workspace @doewe/web run dev",
+    "db:up:local": "docker compose up -d",
+    "db:down:local": "docker compose down",
+    "dev:web:local": "npm run db:up:local && npm --workspace @doewe/web run db:push && npm --workspace @doewe/web run db:seed && npm --workspace @doewe/web run dev",
     "postinstall": "npm --workspace @doewe/web run prisma:generate"
   },
   "engines": {

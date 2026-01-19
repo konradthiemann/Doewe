@@ -3,6 +3,8 @@
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { appConfig } from "../lib/config";
+
 type TransactionDetails = {
   id: string;
   accountId: string;
@@ -44,10 +46,18 @@ export default function TransactionForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryLoading, setNewCategoryLoading] = useState(false);
+  const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [intervalMonths, setIntervalMonths] = useState(1);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
+  const newCategoryRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -105,6 +115,12 @@ export default function TransactionForm({
   }, [mode, transaction]);
 
   useEffect(() => {
+    if (showNewCategory) {
+      newCategoryRef.current?.focus();
+    }
+  }, [showNewCategory]);
+
+  useEffect(() => {
     descriptionRef.current?.focus();
   }, [mode, transaction?.id]);
 
@@ -119,8 +135,9 @@ export default function TransactionForm({
     return base;
   }, [categories, mode, transaction?.categoryId, txType]);
 
+
   useEffect(() => {
-    if (form.categoryId === "" || categories.length === 0) {
+    if (form.categoryId === "" || form.categoryId === "__new__" || categories.length === 0) {
       return;
     }
 
@@ -147,12 +164,18 @@ export default function TransactionForm({
     event.preventDefault();
     setError(null);
     setInlineSuccess(null);
+    setRecurringError(null);
 
     let rawCents: number;
     try {
       rawCents = parseCents(form.amount);
     } catch (parseError) {
       setError(parseError instanceof Error ? parseError.message : "Invalid amount entered.");
+      return;
+    }
+
+    if (isRecurring && intervalMonths < 1) {
+      setRecurringError("Please enter an interval of at least 1 month.");
       return;
     }
 
@@ -166,22 +189,36 @@ export default function TransactionForm({
       amountCents: signedCents,
       description: form.description,
       occurredAt: mode === "edit" && transaction ? transaction.occurredAt : new Date().toISOString(),
-      categoryId: form.categoryId || undefined
+      categoryId: form.categoryId && form.categoryId !== "__new__" ? form.categoryId : undefined
     };
 
     try {
-      const res = await fetch(endpoint, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      if (mode === "create" && isRecurring) {
+        await handleRecurringSubmit({
+          accountId: payload.accountId,
+          categoryId: payload.categoryId,
+          amountCents: payload.amountCents,
+          description: payload.description,
+          intervalMonths
+        });
+      } else {
+        const res = await fetch(endpoint, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
 
-      if (!res.ok) {
-        setError(`Save failed: ${res.status}`);
-        return;
+        if (!res.ok) {
+          setError(`Save failed: ${res.status}`);
+          return;
+        }
       }
 
-      const message = mode === "edit" ? "Transaction updated." : "Transaction saved.";
+      const message = mode === "edit"
+        ? "Transaction updated."
+        : isRecurring
+          ? "Recurring transaction saved."
+          : "Transaction saved.";
       setInlineSuccess(message);
       onSuccess?.(message);
 
@@ -192,6 +229,61 @@ export default function TransactionForm({
       setError(err instanceof Error ? err.message : "Failed to save transaction.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRecurringSubmit(payload: {
+    accountId: string;
+    categoryId?: string | undefined;
+    amountCents: number;
+    description: string;
+    intervalMonths: number;
+  }) {
+    const res = await fetch("/api/recurring-transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const details = await res.json().catch(() => null);
+      const message = details?.error ? JSON.stringify(details.error) : `Save failed: ${res.status}`;
+      throw new Error(message);
+    }
+  }
+
+  async function handleAddCategory() {
+    setNewCategoryError(null);
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      setNewCategoryError("Please enter a category name.");
+      return;
+    }
+
+    setNewCategoryLoading(true);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed, isIncome: txType === "income" })
+      });
+
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message = details?.error ? JSON.stringify(details.error) : `Save failed: ${res.status}`;
+        setNewCategoryError(message);
+        return;
+      }
+
+      const created: { id: string; name: string; isIncome: boolean } = await res.json();
+      setCategories((current) => [created, ...current]);
+      setForm((current) => ({ ...current, categoryId: created.id }));
+      setNewCategoryName("");
+      setShowNewCategory(false);
+    } catch (err) {
+      setNewCategoryError(err instanceof Error ? err.message : "Failed to add category.");
+    } finally {
+      setNewCategoryLoading(false);
     }
   }
 
@@ -301,29 +393,73 @@ export default function TransactionForm({
           </button>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
-            Account <span className="text-red-600">*</span>
-          </label>
-          <select
-            id="tx-account"
-            name="accountId"
-            required
-            value={form.accountId}
-            onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && !form.accountId}
-          >
-            <option value="" disabled>
-              Select account
-            </option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
+        {mode === "create" && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Recurring transaction</legend>
+            <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-700 shadow-sm dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200">
+              <span>Repeat monthly</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={isRecurring}
+                onChange={(event) => setIsRecurring(event.target.checked)}
+                className="h-5 w-9 rounded-full border-gray-300 text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                aria-checked={isRecurring}
+              />
+            </label>
+            {isRecurring && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium" htmlFor="tx-interval-months">
+                  Interval in months <span className="text-red-600">*</span>
+                </label>
+                <input
+                  id="tx-interval-months"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={intervalMonths}
+                  onChange={(event) => setIntervalMonths(Number(event.target.value))}
+                  className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                  aria-required="true"
+                  aria-invalid={!!recurringError}
+                  aria-describedby={recurringError ? "tx-recurring-error" : undefined}
+                />
+                <p className="text-xs text-gray-500 dark:text-neutral-400">Runs on the 1st of each month.</p>
+                {recurringError && (
+                  <p id="tx-recurring-error" role="alert" className="text-sm text-red-600">
+                    {recurringError}
+                  </p>
+                )}
+              </div>
+            )}
+          </fieldset>
+        )}
+
+        {appConfig.enableAccountSelection && (
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
+              Account <span className="text-red-600">*</span>
+            </label>
+            <select
+              id="tx-account"
+              name="accountId"
+              required
+              value={form.accountId}
+              onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
+              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+              aria-invalid={!!error && !form.accountId}
+            >
+              <option value="" disabled>
+                Select account
               </option>
-            ))}
-          </select>
-        </div>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-category">
@@ -333,8 +469,19 @@ export default function TransactionForm({
             id="tx-category"
             name="categoryId"
             value={form.categoryId}
-            onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "__new__") {
+                setShowNewCategory(true);
+                setForm((current) => ({ ...current, categoryId: "__new__" }));
+                return;
+              }
+              setShowNewCategory(false);
+              setNewCategoryError(null);
+              setForm((current) => ({ ...current, categoryId: value }));
+            }}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            aria-describedby={newCategoryError ? "tx-category-error" : undefined}
           >
             <option value="">(none)</option>
             {filteredCategories.map((category) => (
@@ -342,7 +489,51 @@ export default function TransactionForm({
                 {category.name}
               </option>
             ))}
+            <option value="__new__">Add new category…</option>
           </select>
+          {showNewCategory && (
+            <div className="mt-2 space-y-2">
+              <label className="block text-sm font-medium" htmlFor="tx-category-new">
+                New category name
+              </label>
+              <input
+                id="tx-category-new"
+                ref={newCategoryRef}
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                aria-invalid={!!newCategoryError}
+                aria-describedby={newCategoryError ? "tx-category-error" : undefined}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddCategory}
+                  disabled={newCategoryLoading}
+                  className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900"
+                >
+                  {newCategoryLoading ? "Saving…" : "Add category"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewCategory(false);
+                    setNewCategoryName("");
+                    setNewCategoryError(null);
+                    setForm((current) => ({ ...current, categoryId: "" }));
+                  }}
+                  className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+              </div>
+              {newCategoryError && (
+                <p id="tx-category-error" role="alert" className="text-sm text-red-600">
+                  {newCategoryError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div>

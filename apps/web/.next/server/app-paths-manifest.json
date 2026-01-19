@@ -1,6 +1,18 @@
 {
+<<<<<<< HEAD
   "/page": "app/page.js",
   "/transactions/page": "app/transactions/page.js",
   "/api/categories/route": "app/api/categories/route.js",
   "/api/transactions/route": "app/api/transactions/route.js"
+=======
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
+  "/api/analytics/summary/route": "app/api/analytics/summary/route.js",
+  "/transactions/page": "app/transactions/page.js",
+  "/api/recurring-transactions/route": "app/api/recurring-transactions/route.js",
+  "/api/transactions/route": "app/api/transactions/route.js",
+  "/api/recurring-transactions/skips/route": "app/api/recurring-transactions/skips/route.js",
+  "/api/categories/route": "app/api/categories/route.js"
+>>>>>>> develop
 }

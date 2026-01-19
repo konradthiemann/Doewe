@@ -3,7 +3,9 @@
 import { fromCents, toDecimalString } from "@doewe/shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
+import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
 
 type Tx = {
@@ -15,12 +17,35 @@ type Tx = {
   categoryId?: string | null;
 };
 
+type RecurringTx = {
+  id: string;
+  accountId: string;
+  amountCents: number;
+  description: string;
+  categoryId?: string | null;
+  frequency: string;
+  intervalMonths?: number | null;
+  nextOccurrence: string;
+};
+
+type RecurringSkip = {
+  recurringId: string;
+  year: number;
+  month: number;
+};
+
+type ActiveTab = "transactions" | "recurring";
+
 function TransactionsPage() {
   const [items, setItems] = useState<Tx[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
+  const [recurringItems, setRecurringItems] = useState<RecurringTx[]>([]);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [editingRecurring, setEditingRecurring] = useState<RecurringTx | null>(null);
   const editDialogRef = useRef<HTMLDivElement>(null);
   const createDialogRef = useRef<HTMLDivElement>(null);
+  const recurringDialogRef = useRef<HTMLDivElement>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; variant: "success" | "error" } | null>(null);
   const feedbackDismissRef = useRef<HTMLButtonElement | null>(null);
@@ -28,8 +53,31 @@ function TransactionsPage() {
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [creating, setCreating] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("transactions");
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [skipsCurrent, setSkipsCurrent] = useState<Set<string>>(new Set());
+  const [skipsNext, setSkipsNext] = useState<Set<string>>(new Set());
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const tabs: Array<{ id: ActiveTab; label: string }> = [
+    { id: "transactions", label: "Transactions" },
+    { id: "recurring", label: "Recurring" }
+  ];
+
+  const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+    event.preventDefault();
+    const currentIndex = tabs.findIndex((tab) => tab.id === activeTab);
+    const nextIndex = event.key === "ArrowRight"
+      ? (currentIndex + 1) % tabs.length
+      : (currentIndex - 1 + tabs.length) % tabs.length;
+    const nextTab = tabs[nextIndex];
+    setActiveTab(nextTab.id);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   async function refresh() {
     setError(null);
@@ -42,6 +90,36 @@ function TransactionsPage() {
     const json: Tx[] = await res.json();
     setItems(json);
   }
+
+  async function refreshRecurring() {
+    setRecurringError(null);
+    const res = await fetch("/api/recurring-transactions", { cache: "no-store" });
+    if (!res.ok) {
+      setRecurringError(`Failed to load recurring: ${res.status}`);
+      setRecurringItems([]);
+      return;
+    }
+    const json: RecurringTx[] = await res.json();
+    setRecurringItems(json);
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const nextDate = new Date(currentYear, currentMonth, 1);
+  const nextYear = nextDate.getFullYear();
+  const nextMonth = nextDate.getMonth() + 1;
+
+  const monthIndex = (year: number, month: number) => year * 12 + (month - 1);
+
+  const occursInMonth = (recurring: RecurringTx, year: number, month: number) => {
+    const base = new Date(recurring.nextOccurrence);
+    const baseIndex = monthIndex(base.getFullYear(), base.getMonth() + 1);
+    const targetIndex = monthIndex(year, month);
+    const interval = recurring.intervalMonths ?? 1;
+    const diff = targetIndex - baseIndex;
+    return diff >= 0 && diff % interval === 0;
+  };
 
   const closeEditDialog = useCallback(() => {
     setEditingTx(null);
@@ -57,6 +135,13 @@ function TransactionsPage() {
       searchInputRef.current?.focus({ preventScroll: true });
     }, 0);
   }, [router]);
+
+  const closeRecurringDialog = useCallback(() => {
+    setEditingRecurring(null);
+    window.setTimeout(() => {
+      lastFocusedRef.current?.focus();
+    }, 0);
+  }, []);
 
   useEffect(() => {
     if (!editingTx) {
@@ -78,6 +163,27 @@ function TransactionsPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [closeEditDialog, editingTx]);
+
+  useEffect(() => {
+    if (!editingRecurring) {
+      return;
+    }
+
+    const node = recurringDialogRef.current;
+    node?.focus({ preventScroll: true });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRecurringDialog();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeRecurringDialog, editingRecurring]);
 
   useEffect(() => {
     if (!creating) {
@@ -102,14 +208,14 @@ function TransactionsPage() {
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
-    if (editingTx || creating) {
+    if (editingTx || creating || editingRecurring) {
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = previousOverflow;
       };
     }
     document.body.style.overflow = previousOverflow;
-  }, [editingTx, creating]);
+  }, [editingTx, creating, editingRecurring]);
 
   const showFeedback = (message: string, variant: "success" | "error" = "success") => {
     setFeedback({ message, variant });
@@ -127,14 +233,42 @@ function TransactionsPage() {
     showFeedback(message ?? "Transaction deleted.");
   };
 
+  const handleRecurringEditSuccess = async (message?: string) => {
+    await refreshRecurring();
+    closeRecurringDialog();
+    showFeedback(message ?? "Recurring transaction updated.");
+  };
+
+  const handleRecurringDeleteSuccess = async (message?: string) => {
+    await refreshRecurring();
+    closeRecurringDialog();
+    showFeedback(message ?? "Recurring transaction deleted.");
+  };
+
   const handleCreateSuccess = async (message?: string) => {
     await refresh();
+    await refreshRecurring();
     closeCreateDialog();
     showFeedback(message ?? "Transaction added.");
   };
 
+  async function loadSkips(year: number, month: number, setter: (value: Set<string>) => void) {
+    const res = await fetch(`/api/recurring-transactions/skips?year=${year}&month=${month}`, { cache: "no-store" });
+    if (!res.ok) {
+      return;
+    }
+    const json: RecurringSkip[] = await res.json();
+    setter(new Set(json.map((skip) => skip.recurringId)));
+  }
+
   useEffect(() => {
     refresh();
+  }, []);
+
+  useEffect(() => {
+    refreshRecurring();
+    loadSkips(currentYear, currentMonth, setSkipsCurrent);
+    loadSkips(nextYear, nextMonth, setSkipsNext);
   }, []);
 
   useEffect(() => {
@@ -185,123 +319,354 @@ function TransactionsPage() {
     });
   }, [categoriesById, items, normalizedQuery]);
 
+  const currentRecurring = useMemo(() => {
+    return recurringItems.filter((rec) => {
+      if (!occursInMonth(rec, currentYear, currentMonth)) return false;
+      return !skipsCurrent.has(rec.id);
+    });
+  }, [currentMonth, currentYear, recurringItems, skipsCurrent]);
+
+  const nextRecurring = useMemo(() => {
+    return recurringItems.filter((rec) => occursInMonth(rec, nextYear, nextMonth));
+  }, [nextMonth, nextYear, recurringItems]);
+
+  const currentRecurringTotalCents = useMemo(() => {
+    return currentRecurring.reduce((total, rec) => total + rec.amountCents, 0);
+  }, [currentRecurring]);
+
+  const toggleSkip = async (recurringId: string, shouldRun: boolean) => {
+    const payload = { recurringId, year: nextYear, month: nextMonth };
+    if (!shouldRun) {
+      setSkipsNext((current) => new Set(current).add(recurringId));
+      const res = await fetch("/api/recurring-transactions/skips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        setRecurringError(`Failed to skip recurring: ${res.status}`);
+        setSkipsNext((current) => {
+          const next = new Set(current);
+          next.delete(recurringId);
+          return next;
+        });
+      }
+      return;
+    }
+
+    setSkipsNext((current) => {
+      const next = new Set(current);
+      next.delete(recurringId);
+      return next;
+    });
+    const res = await fetch("/api/recurring-transactions/skips", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      setRecurringError(`Failed to unskip recurring: ${res.status}`);
+      setSkipsNext((current) => new Set(current).add(recurringId));
+    }
+  };
+
   return (
     <main id="maincontent" className="p-6 space-y-8">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold">Transactions</h1>
-        <form
-          role="search"
-          className="w-full sm:w-72"
-          onSubmit={(event) => {
-            event.preventDefault();
-            searchInputRef.current?.blur();
-          }}
-        >
-          <label htmlFor="transaction-search" className="sr-only">
-            Search transactions
-          </label>
-          <div className="relative">
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-neutral-500"
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-xl font-semibold">Transactions</h1>
+          {activeTab === "transactions" && (
+            <form
+              role="search"
+              className="w-full sm:w-72"
+              onSubmit={(event) => {
+                event.preventDefault();
+                searchInputRef.current?.blur();
+              }}
             >
-              <svg
-                className="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M9 14.25a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5Zm6 1.5-2.9-2.9"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              <label htmlFor="transaction-search" className="sr-only">
+                Search transactions
+              </label>
+              <div className="relative">
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-neutral-500"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M9 14.25a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5Zm6 1.5-2.9-2.9"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                <input
+                  ref={searchInputRef}
+                  id="transaction-search"
+                  type="search"
+                  inputMode="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search transactions"
+                  className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
                 />
-              </svg>
-            </span>
-            <input
-              ref={searchInputRef}
-              id="transaction-search"
-              type="search"
-              inputMode="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search transactions"
-              className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
-            />
-          </div>
-        </form>
-      </div>
-      <section aria-labelledby="tx-list-heading" className="space-y-4 max-w-2xl mx-auto" id="transactions-section">
-        <h2 id="tx-list-heading" className="sr-only">
-          Transactions list
-        </h2>
-        {error && (
-          <p id="form-error" role="alert" className="text-sm text-red-600">
-            {error}
-          </p>
-        )}
-        <ul className="space-y-2">
-          {filteredItems.map((t) => (
-            <li
-              key={t.id}
-              className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
+              </div>
+            </form>
+          )}
+        </div>
+        <div role="tablist" aria-label="Transaction views" className="flex gap-2" onKeyDown={handleTabKeyDown}>
+          {tabs.map((tab, index) => (
+            <button
+              key={tab.id}
+              ref={(node) => {
+                tabRefs.current[index] = node;
+              }}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`tab-panel-${tab.id}`}
+              id={`tab-${tab.id}`}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-full px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+                activeTab === tab.id
+                  ? "bg-indigo-600 text-white"
+                  : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-neutral-200"
+              }`}
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-2">
-                  <p className="text-base font-medium text-gray-900 dark:text-neutral-100">
-                    {t.description}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-neutral-400">
-                    <time dateTime={t.occurredAt}>
-                      {new Date(t.occurredAt).toLocaleString()}
-                    </time>
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                      Account: {t.accountId}
-                    </span>
-                    {t.categoryId && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        Category: {categoriesById[t.categoryId] ?? t.categoryId}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === "transactions" && (
+        <section
+          aria-labelledby="tx-list-heading"
+          className="space-y-4 max-w-2xl mx-auto"
+          id="tab-panel-transactions"
+          role="tabpanel"
+          aria-labelledby="tab-transactions"
+          tabIndex={0}
+        >
+          <h2 id="tx-list-heading" className="sr-only">
+            Transactions list
+          </h2>
+          {error && (
+            <p id="form-error" role="alert" className="text-sm text-red-600">
+              {error}
+            </p>
+          )}
+          {recurringError && (
+            <p role="alert" className="text-sm text-red-600">
+              {recurringError}
+            </p>
+          )}
+
+          {currentRecurring.length > 0 && (
+            <details className="rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                <div>
+                  <p className="text-base font-semibold text-indigo-700 dark:text-indigo-200">Recurring transactions (this month)</p>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-300">Includes monthly recurring items</p>
+                </div>
+                <span
+                  className={`text-base font-semibold ${
+                    currentRecurringTotalCents < 0 ? "text-red-600" : "text-green-600"
+                  }`}
+                >
+                  {toDecimalString(fromCents(currentRecurringTotalCents))} €
+                </span>
+              </summary>
+              <ul className="mt-3 space-y-2">
+                {currentRecurring.map((rec) => (
+                  <li key={rec.id} className="flex flex-col gap-1 rounded-md border border-indigo-100 bg-white/70 p-3 dark:border-indigo-900/40 dark:bg-neutral-900/70">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900 dark:text-neutral-100">{rec.description}</p>
+                      <span
+                        className={`text-sm font-semibold ${
+                          rec.amountCents < 0 ? "text-red-600" : "text-green-600"
+                        }`}
+                      >
+                        {toDecimalString(fromCents(rec.amountCents))} €
                       </span>
-                    )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
+                      <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
+                        Recurring
+                      </span>
+                      <span>Every {rec.intervalMonths ?? 1} month(s)</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          <details className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <div>
+                <p className="text-base font-semibold text-gray-900 dark:text-neutral-100">Upcoming recurring (next month)</p>
+                <p className="text-xs text-gray-500 dark:text-neutral-400">Uncheck to skip next month’s execution.</p>
+              </div>
+              <span className="text-xs text-gray-500 dark:text-neutral-400">
+                {nextDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+              </span>
+            </summary>
+            {nextRecurring.length === 0 ? (
+              <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">No recurring transactions scheduled.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {nextRecurring.map((rec) => {
+                  const checked = !skipsNext.has(rec.id);
+                  return (
+                    <li key={rec.id} className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50/80 p-3 dark:border-neutral-800 dark:bg-neutral-800/60">
+                      <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-neutral-100">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => toggleSkip(rec.id, event.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus-visible:ring-indigo-500"
+                        />
+                        <span>{rec.description}</span>
+                      </label>
+                      <span className={`text-sm font-semibold ${rec.amountCents < 0 ? "text-red-600" : "text-green-600"}`}>
+                        {toDecimalString(fromCents(rec.amountCents))} €
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </details>
+
+          <ul className="space-y-2">
+            {filteredItems.map((t) => (
+              <li
+                key={t.id}
+                className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-base font-medium text-gray-900 dark:text-neutral-100">
+                      {t.description}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-neutral-400">
+                      <time dateTime={t.occurredAt}>
+                        {new Date(t.occurredAt).toLocaleString()}
+                      </time>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        Account: {t.accountId}
+                      </span>
+                      {t.categoryId && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                          Category: {categoriesById[t.categoryId] ?? t.categoryId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
+                    <span
+                      className={`text-base font-semibold ${
+                        t.amountCents < 0 ? "text-red-600" : "text-green-600"
+                      }`}
+                    >
+                      {toDecimalString(fromCents(t.amountCents))} €
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-2xl text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      onClick={(event) => {
+                        lastFocusedRef.current = event.currentTarget;
+                        setEditingTx(t);
+                      }}
+                      aria-label={`Manage transaction ${t.description || "without description"}`}
+                    >
+                      <span aria-hidden="true" className="leading-none">
+                        ⚙
+                      </span>
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
-                  <span
-                    className={`text-base font-semibold ${
-                      t.amountCents < 0 ? "text-red-600" : "text-green-600"
-                    }`}
-                  >
-                    {toDecimalString(fromCents(t.amountCents))} €
-                  </span>
-                  <button
-                    type="button"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-2xl text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
-                    onClick={(event) => {
-                      lastFocusedRef.current = event.currentTarget;
-                      setEditingTx(t);
-                    }}
-                    aria-label={`Manage transaction ${t.description || "without description"}`}
-                  >
-                    <span aria-hidden="true" className="leading-none">
-                      ⚙
+              </li>
+            ))}
+            {items.length === 0 && !error && (
+              <li className="text-sm text-gray-500 dark:text-neutral-400">No transactions yet.</li>
+            )}
+            {items.length > 0 && filteredItems.length === 0 && normalizedQuery && (
+              <li className="text-sm text-gray-500 dark:text-neutral-400" role="status">
+                No transactions match your search.
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
+
+      {activeTab === "recurring" && (
+        <section
+          className="space-y-4 max-w-2xl mx-auto"
+          id="tab-panel-recurring"
+          role="tabpanel"
+          aria-labelledby="tab-recurring"
+          tabIndex={0}
+        >
+          <h2 className="text-lg font-semibold">Recurring transactions</h2>
+          {recurringError && (
+            <p role="alert" className="text-sm text-red-600">
+              {recurringError}
+            </p>
+          )}
+          <ul className="space-y-2">
+            {recurringItems.map((rec) => (
+              <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-base font-medium text-gray-900 dark:text-neutral-100">{rec.description}</p>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
+                      <span>Every {rec.intervalMonths ?? 1} month(s)</span>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        Next: {new Date(rec.nextOccurrence).toLocaleDateString()}
+                      </span>
+                      {rec.categoryId && (
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                          Category: {categoriesById[rec.categoryId] ?? rec.categoryId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start">
+                    <span className={`text-base font-semibold ${rec.amountCents < 0 ? "text-red-600" : "text-green-600"}`}>
+                      {toDecimalString(fromCents(rec.amountCents))} €
                     </span>
-                  </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-2xl text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      onClick={(event) => {
+                        lastFocusedRef.current = event.currentTarget;
+                        setEditingRecurring(rec);
+                      }}
+                      aria-label={`Manage recurring transaction ${rec.description || "without description"}`}
+                    >
+                      <span aria-hidden="true" className="leading-none">
+                        ⚙
+                      </span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
-          {items.length === 0 && !error && (
-            <li className="text-sm text-gray-500 dark:text-neutral-400">No transactions yet.</li>
-          )}
-          {items.length > 0 && filteredItems.length === 0 && normalizedQuery && (
-            <li className="text-sm text-gray-500 dark:text-neutral-400" role="status">
-              No transactions match your search.
-            </li>
-          )}
-        </ul>
-      </section>
+              </li>
+            ))}
+            {recurringItems.length === 0 && (
+              <li className="text-sm text-gray-500 dark:text-neutral-400">No recurring transactions yet.</li>
+            )}
+          </ul>
+        </section>
+      )}
 
       {editingTx && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center">
@@ -341,6 +706,35 @@ function TransactionsPage() {
               headingId={createDialogTitleId}
               onSuccess={handleCreateSuccess}
               onClose={closeCreateDialog}
+            />
+          </div>
+        </div>
+      )}
+
+      {editingRecurring && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeRecurringDialog} />
+          <div
+            ref={recurringDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`edit-recurring-${editingRecurring.id}`}
+            className="relative z-10 mx-4 flex w-full max-w-2xl justify-center focus:outline-none"
+            tabIndex={-1}
+          >
+            <RecurringTransactionForm
+              recurring={{
+                id: editingRecurring.id,
+                accountId: editingRecurring.accountId,
+                amountCents: editingRecurring.amountCents,
+                description: editingRecurring.description,
+                categoryId: editingRecurring.categoryId ?? null,
+                intervalMonths: editingRecurring.intervalMonths ?? 1
+              }}
+              headingId={`edit-recurring-${editingRecurring.id}`}
+              onSuccess={handleRecurringEditSuccess}
+              onDelete={handleRecurringDeleteSuccess}
+              onClose={closeRecurringDialog}
             />
           </div>
         </div>

@@ -3,6 +3,8 @@
 import { parseCents } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { appConfig } from "../lib/config";
+
 type Account = {
   id: string;
   name: string;
@@ -32,6 +34,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
   const [error, setError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
+
 
   useEffect(() => {
     let active = true;
@@ -173,28 +176,30 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-account">
-          Account <span className="text-red-600">*</span>
-        </label>
-        <select
-          id="saving-plan-account"
-          name="accountId"
-          required
-          value={form.accountId}
-          onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
-          className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-        >
-          <option value="" disabled>
-            Select account
-          </option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-      </div>
+        {appConfig.enableAccountSelection && (
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-account">
+              Account <span className="text-red-600">*</span>
+            </label>
+            <select
+              id="saving-plan-account"
+              name="accountId"
+              required
+              value={form.accountId}
+              onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
+              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            >
+              <option value="" disabled>
+                Select account
+              </option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

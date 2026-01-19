@@ -60,7 +60,7 @@ Architectural principles:
 ### Prerequisites
 - Node.js >= 18.18.0 (install via nvm recommended)
 - npm (comes with Node)
-- A database for Prisma (defaults often to SQLite; configure via `DATABASE_URL` in `.env.local`)
+- PostgreSQL database for Prisma (local Docker is fine)
 
 ### Installation & Setup
 ```bash
@@ -82,18 +82,50 @@ npm --workspace @doewe/web run db:seed
 npm run dev:web
 ```
 
+### Local dev with Docker Postgres
+If you have Docker Desktop installed, you can run a local database only for local dev:
+```bash
+# Start local Postgres, migrate + seed, then run the app
+npm run dev:web:local
+
+# Stop local Postgres when done
+npm run db:down:local
+```
+
 ### Environment Variables
 Create `.env.local` (not committed). Example:
 ```
-DATABASE_URL="file:./dev.db"        # or postgres://user:pass@host:5432/dbname
+DATABASE_URL="postgresql://user:pass@localhost:5432/doewe_local"
+NEXTAUTH_SECRET="set-a-strong-random-secret"
+NEXTAUTH_URL="http://localhost:3000"
+SEED_USER_EMAIL="demo@doewe.test"
+SEED_USER_PASSWORD="demo1234"
+SEED_USER_NAME="Demo User"
 ```
 After changing schema run:
 ```bash
 npm --workspace @doewe/web run prisma:generate
 ```
 
+### Local database (Docker)
+If you don’t have Postgres locally, run a disposable container:
+```bash
+docker run --name doewe-postgres -e POSTGRES_USER=doewe -e POSTGRES_PASSWORD=doewe -e POSTGRES_DB=doewe_local -p 5432:5432 -d postgres:16
+```
+Then set:
+```
+DATABASE_URL="postgresql://doewe:doewe@localhost:5432/doewe_local"
+```
+Seed the database (creates a demo account with the `SEED_USER_*` credentials):
+```bash
+npm --workspace @doewe/web run db:push
+npm --workspace @doewe/web run db:seed
+```
+
 ### Scripts (root)
 - `npm run dev:web` – Next.js dev server
+- `npm run dev:web:local` – Starts local Postgres (Docker), pushes schema, seeds, then runs dev server
+- `npm run db:up:local` / `npm run db:down:local` – Start/stop the local Postgres container
 - `npm run lint` / `lint:fix` – ESLint across workspaces
 - `npm run typecheck` – TypeScript noEmit across all workspaces
 - `npm run test` – Vitest tests (monorepo filter)
@@ -109,6 +141,7 @@ See architecture tree above. Monorepo uses npm workspaces:
 ## Key Features
 Current implemented features include:
 - Transaction management (create, edit, delete, list) via `app/api/transactions`.
+- Recurring transactions with monthly cadence and skips for upcoming runs.
 - Budget endpoints for tracking planned vs actual spending.
 - Categories management (`app/api/categories`).
 - Recurring transactions handling.
