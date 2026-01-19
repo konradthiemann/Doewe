@@ -4,6 +4,7 @@ import { parseCents } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { appConfig } from "../lib/config";
+import { useI18n } from "../lib/i18n";
 
 type Account = {
   id: string;
@@ -23,6 +24,7 @@ function nextMonthValue() {
 }
 
 export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Props) {
+  const { locale, t } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [form, setForm] = useState(() => ({
     title: "",
@@ -34,6 +36,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
   const [error, setError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
+  const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
 
   useEffect(() => {
@@ -42,7 +45,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
       try {
         const res = await fetch("/api/accounts", { cache: "no-store" });
         if (!res.ok) {
-          throw new Error(`Failed to load accounts (${res.status})`);
+          throw new Error(t("savingPlan.form.errorLoadAccounts", { status: res.status }));
         }
         const data: Account[] = await res.json();
         if (!active) return;
@@ -51,13 +54,13 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
         setForm((current) => ({ ...current, accountId: current.accountId || defaultAccount?.id || "" }));
       } catch (fetchError) {
         if (!active) return;
-        setError(fetchError instanceof Error ? fetchError.message : "Unable to load accounts.");
+        setError(fetchError instanceof Error ? fetchError.message : t("savingPlan.form.errorLoadAccountsFallback"));
       }
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -65,10 +68,10 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
 
   const dueLabel = useMemo(() => {
     const [year, month] = form.targetMonth.split("-");
-    if (!year || !month) return "Planned date";
+    if (!year || !month) return t("savingPlan.form.plannedDate");
     const date = new Date(Number(year), Number(month) - 1);
-    return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  }, [form.targetMonth]);
+    return date.toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
+  }, [dateLocale, form.targetMonth, t]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,7 +80,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
 
     const [year, month] = form.targetMonth.split("-");
     if (!year || !month) {
-      setError("Please choose a target month.");
+      setError(t("savingPlan.form.errorChooseMonth"));
       return;
     }
 
@@ -85,16 +88,16 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
     try {
       amountCents = parseCents(form.amount);
       if (amountCents <= 0) {
-        setError("Amount must be greater than zero.");
+        setError(t("savingPlan.form.errorAmountPositive"));
         return;
       }
     } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : "Invalid amount value.");
+      setError(parseError instanceof Error ? parseError.message : t("savingPlan.form.errorAmountInvalid"));
       return;
     }
 
     if (!form.accountId) {
-      setError("Select an account for this plan.");
+      setError(t("savingPlan.form.errorSelectAccount"));
       return;
     }
 
@@ -116,23 +119,25 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
 
       if (!res.ok) {
         const details = await res.json().catch(() => undefined);
-        const message = details?.error ? JSON.stringify(details.error) : `Save failed (${res.status}).`;
+        const message = details?.error
+          ? JSON.stringify(details.error)
+          : t("savingPlan.form.errorSaveFailed", { status: res.status });
         setError(message);
         return;
       }
 
-      const message = "Planned saving added.";
+      const message = t("savingPlan.form.added");
       setInlineSuccess(message);
       setForm((current) => ({ ...current, amount: "" }));
       onSuccess?.(message);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to save planned saving.");
+      setError(submitError instanceof Error ? submitError.message : t("savingPlan.form.errorSave"));
     } finally {
       setLoading(false);
     }
   }
 
-  const submitLabel = loading ? "Saving…" : "Save plan";
+  const submitLabel = loading ? t("savingPlan.form.saving") : t("savingPlan.form.save");
 
   return (
     <form
@@ -143,15 +148,15 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 id={headingId} className="text-lg font-semibold">
-            Add planned saving
+            {t("savingPlan.form.title")}
           </h3>
-          <p className="text-xs text-gray-500 dark:text-neutral-400">Set a goal amount and the month you want to reach it.</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("savingPlan.form.subtitle")}</p>
         </div>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
             className="rounded-md p-1.5 transition hover:bg-black/5 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:hover:bg-white/10 dark:focus-visible:ring-offset-neutral-900"
           >
             <span aria-hidden="true" className="text-xl leading-none">
@@ -163,7 +168,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
 
       <div>
         <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-title">
-          Goal name <span className="text-red-600">*</span>
+          {t("savingPlan.form.goalName")} <span className="text-red-600">*</span>
         </label>
         <input
           ref={titleRef}
@@ -176,35 +181,35 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
         />
       </div>
 
-        {appConfig.enableAccountSelection && (
-          <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-account">
-              Account <span className="text-red-600">*</span>
-            </label>
-            <select
-              id="saving-plan-account"
-              name="accountId"
-              required
-              value={form.accountId}
-              onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
-              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            >
-              <option value="" disabled>
-                Select account
+      {appConfig.enableAccountSelection && (
+        <div>
+          <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-account">
+            {t("savingPlan.form.account")} <span className="text-red-600">*</span>
+          </label>
+          <select
+            id="saving-plan-account"
+            name="accountId"
+            required
+            value={form.accountId}
+            onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+          >
+            <option value="" disabled>
+              {t("savingPlan.form.accountPlaceholder")}
+            </option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
               </option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-due">
-            Target month <span className="text-red-600">*</span>
+            {t("savingPlan.form.targetMonth")} <span className="text-red-600">*</span>
           </label>
           <input
             id="saving-plan-due"
@@ -221,7 +226,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
         </div>
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-amount">
-            Amount <span className="text-red-600">*</span>
+            {t("savingPlan.form.amount")} <span className="text-red-600">*</span>
           </label>
           <input
             id="saving-plan-amount"
@@ -232,7 +237,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
             onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
             aria-invalid={!!error && form.amount.trim() === ""}
-            placeholder="e.g. 600"
+            placeholder={t("savingPlan.form.amountPlaceholder")}
           />
         </div>
       </div>
@@ -251,7 +256,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
             onClick={onClose}
             className="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800 dark:focus-visible:ring-offset-neutral-900"
           >
-            Cancel
+            {t("savingPlan.form.cancel")}
           </button>
         )}
       </div>

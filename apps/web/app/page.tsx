@@ -14,6 +14,8 @@ import ChartDataLabels, { type Context as DataLabelsContext } from "chartjs-plug
 import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Bar } from "react-chartjs-2";
 
+import { useI18n } from "../lib/i18n";
+
 ChartJS.register(
   ArcElement,
   Tooltip,
@@ -26,8 +28,10 @@ ChartJS.register(
 );
 
 export default function HomePage() {
+  const { locale, t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const dateLocale = locale === "de" ? "de-DE" : "en-US";
   const [summary, setSummary] = useState<{
     incomeTotal: number;
     outcomeTotal: number;
@@ -115,9 +119,9 @@ export default function HomePage() {
 
   const doughnutLabels = [
     ...outgoingLabels,
-    ...(remainingSlice > 0 ? ["Remaining (left)"] : []),
-    ...(actualSavingsSlice > 0 ? ["Actual savings"] : []),
-    ...(remainingToSaveSlice > 0 ? ["Remaining to save"] : [])
+    ...(remainingSlice > 0 ? [t("dashboard.doughnutRemainingLeft")] : []),
+    ...(actualSavingsSlice > 0 ? [t("dashboard.doughnutActualSavings")] : []),
+    ...(remainingToSaveSlice > 0 ? [t("dashboard.doughnutRemainingToSave")] : [])
   ];
 
   const doughnutValues = [
@@ -178,16 +182,16 @@ export default function HomePage() {
   };
 
   const incomeUsageData = {
-    labels: ["Current month income"],
+    labels: [t("dashboard.currentMonthIncome")],
     datasets: [
       {
-        label: "Spent",
+        label: t("dashboard.spent"),
         data: [hasIncomeData ? spentForChart : 0],
         backgroundColor: "#DC2626",
         borderRadius: 12
       },
       {
-        label: "Left",
+        label: t("dashboard.left"),
         data: [hasIncomeData ? leftForChart : 0],
         backgroundColor: "#16A34A",
         borderRadius: 12
@@ -209,13 +213,13 @@ export default function HomePage() {
       },
       title: {
         display: true,
-        text: "Current month income usage"
+        text: t("dashboard.incomeUsageTitle")
       },
       datalabels: {
         color: "#111827",
         formatter: (value: number) => {
           if (!value) return "";
-          return `${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`;
+          return `${value.toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`;
         },
         font: { size: isMobile ? 10 : 12, weight: "bold" as const }
       }
@@ -225,7 +229,7 @@ export default function HomePage() {
         stacked: true,
         beginAtZero: true,
         ticks: {
-          callback: (value) => `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
+          callback: (value) => `${Number(value).toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
         },
         suggestedMax: hasIncomeData ? Math.max(totalIncome, spentForChart) : undefined,
         grid: { color: "rgba(203,213,225,0.4)" }
@@ -238,70 +242,79 @@ export default function HomePage() {
   };
 
   const formatCurrency = (value: number) =>
-    `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+    `${value.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <h1 className="text-2xl font-semibold">{t("dashboard.title")}</h1>
 
       <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
-            Outgoings by category (pie)
+            {t("dashboard.outgoingsByCategory")}
           </h2>
           {loading ? (
-            <p className="text-sm text-gray-500">Loading…</p>
+            <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
           ) : outgoingValues.length > 0 ? (
             <Doughnut data={doughnutData} options={doughnutOptions} />
           ) : (
-            <p className="text-sm text-gray-500">No outgoings this month.</p>
+            <p className="text-sm text-gray-500">{t("dashboard.noOutgoings")}</p>
           )}
         </div>
 
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="income-usage-heading" className="text-lg font-medium mb-3">
-            Monthly income usage
+            {t("dashboard.monthlyIncomeUsage")}
           </h2>
           {loading ? (
-            <p className="text-sm text-gray-500">Loading…</p>
+            <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
           ) : hasIncomeData ? (
             <figure aria-labelledby="income-usage-heading income-usage-summary" className="space-y-4">
               <div className="h-40">
                 <Bar data={incomeUsageData} options={incomeUsageOptions} />
               </div>
               <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
-                <dl className="grid gap-3 sm:grid-cols-3" aria-label="Income report breakdown">
+                <dl className="grid gap-3 sm:grid-cols-3" aria-label={t("dashboard.incomeReportBreakdown")}>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Spent</dt>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.spent")}</dt>
                     <dd className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(spentActual)}</dd>
-                    <p className="text-xs text-slate-600 dark:text-neutral-400">{spentPercent}% of this month&apos;s income.</p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Left</dt>
-                    <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(leftActual)}</dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
-                      {leftActual > 0 ? `${leftPercent}% of income still available.` : "Fully allocated this month."}
+                      {t("dashboard.spentOfIncome", { percent: spentPercent })}
                     </p>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">Overspend</dt>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.left")}</dt>
+                    <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(leftActual)}</dd>
+                    <p className="text-xs text-slate-600 dark:text-neutral-400">
+                      {leftActual > 0
+                        ? t("dashboard.leftAvailable", { percent: leftPercent })
+                        : t("dashboard.fullyAllocated")}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.overspend")}</dt>
                     <dd className={`text-lg font-semibold ${overspent > 0 ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-neutral-400"}`}>
-                      {overspent > 0 ? formatCurrency(overspent) : "0 €"}
+                      {overspent > 0 ? formatCurrency(overspent) : t("dashboard.zeroEuro")}
                     </dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
-                      {overspent > 0 ? `${overspentPercent}% above income.` : "No overspend recorded."}
+                      {overspent > 0
+                        ? t("dashboard.overspendAboveIncome", { percent: overspentPercent })
+                        : t("dashboard.noOverspend")}
                     </p>
                   </div>
                 </dl>
                 <p>
-                  Spent {formatCurrency(spentActual)} of {formatCurrency(totalIncome)} income this month.
-                  {leftActual > 0 && ` ${formatCurrency(leftActual)} still available.`}
-                  {overspent > 0 && ` Overspent by ${formatCurrency(overspent)}.`}
+                  {t("dashboard.spentSummary", {
+                    spent: formatCurrency(spentActual),
+                    income: formatCurrency(totalIncome)
+                  })}
+                  {leftActual > 0 && ` ${t("dashboard.leftSummary", { left: formatCurrency(leftActual) })}`}
+                  {overspent > 0 && ` ${t("dashboard.overspentSummary", { overspent: formatCurrency(overspent) })}`}
                 </p>
               </figcaption>
             </figure>
           ) : (
-            <p className="text-sm text-gray-500">Add income transactions to see how much has been spent and what remains.</p>
+            <p className="text-sm text-gray-500">{t("dashboard.addIncomeTransactions")}</p>
           )}
         </div>
       </section>
@@ -309,22 +322,24 @@ export default function HomePage() {
       <section aria-labelledby="savings-overview" className="max-w-3xl">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="savings-overview" className="text-lg font-medium mb-4">
-            Savings overview
+            {t("dashboard.savingsOverview")}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">Planned savings</p>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.plannedSavings")}</p>
               <p className="text-2xl font-semibold" style={{ color: plannedColor }}>{plannedSavings.toFixed(0)} €</p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">Target for this month</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.targetForMonth")}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">Actual saved</p>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.actualSaved")}</p>
               <p className="text-2xl font-semibold" style={{ color: actualColor }}>{actualSavings.toFixed(0)} €</p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">{savingsProgress}% of target</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">
+                {t("dashboard.percentOfTarget", { percent: savingsProgress })}
+              </p>
             </div>
           </div>
           <div className="mt-5">
-            <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Progress</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">{t("dashboard.progress")}</p>
             <div className="mt-2 h-2 w-full rounded bg-gray-200 dark:bg-neutral-800" aria-hidden="true">
               <div
                 className="h-2 rounded"
@@ -332,7 +347,7 @@ export default function HomePage() {
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={savingsProgress}
-                aria-label="Monthly savings progress"
+                aria-label={t("dashboard.savingsProgressLabel")}
                 style={{ width: `${savingsProgress}%`, backgroundColor: actualColor }}
               />
             </div>

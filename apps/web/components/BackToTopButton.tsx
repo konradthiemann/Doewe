@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 
+import { useI18n } from "../lib/i18n";
+
 export default function BackToTopButton() {
   const [visible, setVisible] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -19,7 +22,7 @@ export default function BackToTopButton() {
   return (
     <button
       type="button"
-      aria-label="Scroll to top"
+      aria-label={t("common.scrollTop")}
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       className={`fixed right-5 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-indigo-200 bg-white/95 text-indigo-600 shadow-lg transition focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-indigo-500/50 dark:bg-neutral-900/95 dark:text-indigo-300 dark:focus-visible:ring-offset-neutral-900 ${visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"}`}
     >
