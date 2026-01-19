@@ -1,10 +1,5 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/login/page": "app/login/page.js",
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
-  "/page": "app/page.js",
-  "/api/analytics/summary/route": "app/api/analytics/summary/route.js",
   "/transactions/page": "app/transactions/page.js",
-  "/api/transactions/route": "app/api/transactions/route.js",
-  "/api/categories/route": "app/api/categories/route.js"
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
+  "/page": "app/page.js"
 }

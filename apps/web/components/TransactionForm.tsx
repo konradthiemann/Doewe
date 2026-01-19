@@ -3,6 +3,8 @@
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { appConfig } from "../lib/config";
+
 type TransactionDetails = {
   id: string;
   accountId: string;
@@ -44,10 +46,15 @@ export default function TransactionForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryLoading, setNewCategoryLoading] = useState(false);
+  const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
+  const newCategoryRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -105,6 +112,12 @@ export default function TransactionForm({
   }, [mode, transaction]);
 
   useEffect(() => {
+    if (showNewCategory) {
+      newCategoryRef.current?.focus();
+    }
+  }, [showNewCategory]);
+
+  useEffect(() => {
     descriptionRef.current?.focus();
   }, [mode, transaction?.id]);
 
@@ -119,8 +132,9 @@ export default function TransactionForm({
     return base;
   }, [categories, mode, transaction?.categoryId, txType]);
 
+
   useEffect(() => {
-    if (form.categoryId === "" || categories.length === 0) {
+    if (form.categoryId === "" || form.categoryId === "__new__" || categories.length === 0) {
       return;
     }
 
@@ -166,7 +180,7 @@ export default function TransactionForm({
       amountCents: signedCents,
       description: form.description,
       occurredAt: mode === "edit" && transaction ? transaction.occurredAt : new Date().toISOString(),
-      categoryId: form.categoryId || undefined
+      categoryId: form.categoryId && form.categoryId !== "__new__" ? form.categoryId : undefined
     };
 
     try {
@@ -192,6 +206,41 @@ export default function TransactionForm({
       setError(err instanceof Error ? err.message : "Failed to save transaction.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAddCategory() {
+    setNewCategoryError(null);
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      setNewCategoryError("Please enter a category name.");
+      return;
+    }
+
+    setNewCategoryLoading(true);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed, isIncome: txType === "income" })
+      });
+
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        const message = details?.error ? JSON.stringify(details.error) : `Save failed: ${res.status}`;
+        setNewCategoryError(message);
+        return;
+      }
+
+      const created: { id: string; name: string; isIncome: boolean } = await res.json();
+      setCategories((current) => [created, ...current]);
+      setForm((current) => ({ ...current, categoryId: created.id }));
+      setNewCategoryName("");
+      setShowNewCategory(false);
+    } catch (err) {
+      setNewCategoryError(err instanceof Error ? err.message : "Failed to add category.");
+    } finally {
+      setNewCategoryLoading(false);
     }
   }
 
@@ -301,29 +350,31 @@ export default function TransactionForm({
           </button>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
-            Account <span className="text-red-600">*</span>
-          </label>
-          <select
-            id="tx-account"
-            name="accountId"
-            required
-            value={form.accountId}
-            onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && !form.accountId}
-          >
-            <option value="" disabled>
-              Select account
-            </option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
+        {appConfig.enableAccountSelection && (
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
+              Account <span className="text-red-600">*</span>
+            </label>
+            <select
+              id="tx-account"
+              name="accountId"
+              required
+              value={form.accountId}
+              onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
+              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+              aria-invalid={!!error && !form.accountId}
+            >
+              <option value="" disabled>
+                Select account
               </option>
-            ))}
-          </select>
-        </div>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-category">
@@ -333,8 +384,19 @@ export default function TransactionForm({
             id="tx-category"
             name="categoryId"
             value={form.categoryId}
-            onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "__new__") {
+                setShowNewCategory(true);
+                setForm((current) => ({ ...current, categoryId: "__new__" }));
+                return;
+              }
+              setShowNewCategory(false);
+              setNewCategoryError(null);
+              setForm((current) => ({ ...current, categoryId: value }));
+            }}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            aria-describedby={newCategoryError ? "tx-category-error" : undefined}
           >
             <option value="">(none)</option>
             {filteredCategories.map((category) => (
@@ -342,7 +404,51 @@ export default function TransactionForm({
                 {category.name}
               </option>
             ))}
+            <option value="__new__">Add new category…</option>
           </select>
+          {showNewCategory && (
+            <div className="mt-2 space-y-2">
+              <label className="block text-sm font-medium" htmlFor="tx-category-new">
+                New category name
+              </label>
+              <input
+                id="tx-category-new"
+                ref={newCategoryRef}
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                aria-invalid={!!newCategoryError}
+                aria-describedby={newCategoryError ? "tx-category-error" : undefined}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddCategory}
+                  disabled={newCategoryLoading}
+                  className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900"
+                >
+                  {newCategoryLoading ? "Saving…" : "Add category"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewCategory(false);
+                    setNewCategoryName("");
+                    setNewCategoryError(null);
+                    setForm((current) => ({ ...current, categoryId: "" }));
+                  }}
+                  className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+              </div>
+              {newCategoryError && (
+                <p id="tx-category-error" role="alert" className="text-sm text-red-600">
+                  {newCategoryError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
