@@ -50,6 +50,9 @@ export default function TransactionForm({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryLoading, setNewCategoryLoading] = useState(false);
   const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [intervalMonths, setIntervalMonths] = useState(1);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -161,12 +164,18 @@ export default function TransactionForm({
     event.preventDefault();
     setError(null);
     setInlineSuccess(null);
+    setRecurringError(null);
 
     let rawCents: number;
     try {
       rawCents = parseCents(form.amount);
     } catch (parseError) {
       setError(parseError instanceof Error ? parseError.message : "Invalid amount entered.");
+      return;
+    }
+
+    if (isRecurring && intervalMonths < 1) {
+      setRecurringError("Please enter an interval of at least 1 month.");
       return;
     }
 
@@ -184,18 +193,32 @@ export default function TransactionForm({
     };
 
     try {
-      const res = await fetch(endpoint, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      if (mode === "create" && isRecurring) {
+        await handleRecurringSubmit({
+          accountId: payload.accountId,
+          categoryId: payload.categoryId,
+          amountCents: payload.amountCents,
+          description: payload.description,
+          intervalMonths
+        });
+      } else {
+        const res = await fetch(endpoint, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
 
-      if (!res.ok) {
-        setError(`Save failed: ${res.status}`);
-        return;
+        if (!res.ok) {
+          setError(`Save failed: ${res.status}`);
+          return;
+        }
       }
 
-      const message = mode === "edit" ? "Transaction updated." : "Transaction saved.";
+      const message = mode === "edit"
+        ? "Transaction updated."
+        : isRecurring
+          ? "Recurring transaction saved."
+          : "Transaction saved.";
       setInlineSuccess(message);
       onSuccess?.(message);
 
@@ -206,6 +229,26 @@ export default function TransactionForm({
       setError(err instanceof Error ? err.message : "Failed to save transaction.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRecurringSubmit(payload: {
+    accountId: string;
+    categoryId?: string | undefined;
+    amountCents: number;
+    description: string;
+    intervalMonths: number;
+  }) {
+    const res = await fetch("/api/recurring-transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const details = await res.json().catch(() => null);
+      const message = details?.error ? JSON.stringify(details.error) : `Save failed: ${res.status}`;
+      throw new Error(message);
     }
   }
 
@@ -349,6 +392,48 @@ export default function TransactionForm({
             )}
           </button>
         </div>
+
+        {mode === "create" && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Recurring transaction</legend>
+            <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-700 shadow-sm dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200">
+              <span>Repeat monthly</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={isRecurring}
+                onChange={(event) => setIsRecurring(event.target.checked)}
+                className="h-5 w-9 rounded-full border-gray-300 text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                aria-checked={isRecurring}
+              />
+            </label>
+            {isRecurring && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium" htmlFor="tx-interval-months">
+                  Interval in months <span className="text-red-600">*</span>
+                </label>
+                <input
+                  id="tx-interval-months"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={intervalMonths}
+                  onChange={(event) => setIntervalMonths(Number(event.target.value))}
+                  className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                  aria-required="true"
+                  aria-invalid={!!recurringError}
+                  aria-describedby={recurringError ? "tx-recurring-error" : undefined}
+                />
+                <p className="text-xs text-gray-500 dark:text-neutral-400">Runs on the 1st of each month.</p>
+                {recurringError && (
+                  <p id="tx-recurring-error" role="alert" className="text-sm text-red-600">
+                    {recurringError}
+                  </p>
+                )}
+              </div>
+            )}
+          </fieldset>
+        )}
 
         {appConfig.enableAccountSelection && (
           <div>

@@ -1,18 +1,21 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 
-const AllowedFrequencies = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 const RecurringInput = z.object({
   accountId: z.string().min(1),
   categoryId: z.string().min(1).optional(),
   amountCents: z.number().int(),
   description: z.string().min(1),
-  frequency: z.enum(AllowedFrequencies),
-  nextOccurrence: z.union([z.string(), z.date()])
+  intervalMonths: z.number().int().min(1).max(24).optional()
 });
+
+function firstOfNextMonth(now = new Date()) {
+  return new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+}
 
 export async function GET() {
   const user = await getSessionUser();
@@ -35,10 +38,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const data = parsed.data;
-  const nextDate =
-    typeof data.nextOccurrence === "string"
-      ? new Date(data.nextOccurrence)
-      : data.nextOccurrence;
+  const nextDate = firstOfNextMonth();
 
   const account = await prisma.account.findFirst({ where: { id: data.accountId, userId: user.id } });
   if (!account) {
@@ -51,15 +51,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
   }
+  const createData = {
+    accountId: data.accountId,
+    categoryId: data.categoryId,
+    amountCents: data.amountCents,
+    description: data.description,
+    frequency: "MONTHLY",
+    intervalMonths: data.intervalMonths ?? 1,
+    nextOccurrence: nextDate
+  } as Prisma.RecurringTransactionUncheckedCreateInput;
+
   const created = await prisma.recurringTransaction.create({
-    data: {
-      accountId: data.accountId,
-      categoryId: data.categoryId,
-      amountCents: data.amountCents,
-      description: data.description,
-      frequency: data.frequency,
-      nextOccurrence: nextDate
-    }
+    data: createData
   });
   return NextResponse.json(created, { status: 201 });
 }

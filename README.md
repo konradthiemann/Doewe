@@ -141,6 +141,7 @@ See architecture tree above. Monorepo uses npm workspaces:
 ## Key Features
 Current implemented features include:
 - Transaction management (create, edit, delete, list) via `app/api/transactions`.
+- Recurring transactions with monthly cadence and skips for upcoming runs.
 - Budget endpoints for tracking planned vs actual spending.
 - Categories management (`app/api/categories`).
 - Recurring transactions handling.
