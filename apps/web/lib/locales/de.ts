@@ -194,6 +194,8 @@ export const de: Record<string, string> = {
   "transactionForm.accountPlaceholder": "Konto auswählen",
   "transactionForm.categoryLabel": "Kategorie",
   "transactionForm.categoryNone": "(keine)",
+  "transactionForm.categorySearchPlaceholder": "Kategorie suchen…",
+  "transactionForm.categoryNoResults": "Keine Kategorien gefunden",
   "transactionForm.categoryAddNew": "Neue Kategorie hinzufügen…",
   "transactionForm.categoryNewLabel": "Neuer Kategoriename",
   "transactionForm.categoryAddButton": "Kategorie hinzufügen",
