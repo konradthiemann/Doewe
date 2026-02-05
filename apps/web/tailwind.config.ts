@@ -6,7 +6,7 @@ const config: Config = {
     "./components/**/*.{ts,tsx}",
     "../../packages/shared/src/**/*.{ts,tsx}"
   ],
-  darkMode: "media",
+  darkMode: "class",
   theme: {
     extend: {
       fontFamily: {
