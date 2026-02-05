@@ -75,8 +75,17 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const created = await prisma.category.create({
-    data: { name: parsed.data.name, isIncome: parsed.data.isIncome, userId: user.id }
-  });
-  return NextResponse.json(created, { status: 201 });
+  
+  try {
+    const created = await prisma.category.create({
+      data: { name: parsed.data.name, isIncome: parsed.data.isIncome, userId: user.id }
+    });
+    return NextResponse.json(created, { status: 201 });
+  } catch (err) {
+    // Handle unique constraint violation (category name already exists)
+    if (err instanceof Error && err.message.includes("Unique constraint")) {
+      return NextResponse.json({ error: "Category with this name already exists" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "Failed to create category" }, { status: 500 });
+  }
 }
