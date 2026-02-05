@@ -23,6 +23,28 @@ export async function GET() {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
+  // === NEW: Calculate total balance (all transactions ever) ===
+  const allTransactions = await prisma.transaction.findMany({
+    where: { accountId },
+    select: { amountCents: true }
+  });
+  let totalBalanceCents = 0;
+  for (const t of allTransactions) {
+    totalBalanceCents += t.amountCents;
+  }
+  const totalBalance = totalBalanceCents / 100;
+
+  // === NEW: Calculate carryover from last month (balance at end of previous month) ===
+  const transactionsBeforeThisMonth = await prisma.transaction.findMany({
+    where: { accountId, occurredAt: { lt: start } },
+    select: { amountCents: true }
+  });
+  let carryoverCents = 0;
+  for (const t of transactionsBeforeThisMonth) {
+    carryoverCents += t.amountCents;
+  }
+  const carryoverFromLastMonth = carryoverCents / 100;
+
   // Resolve special category for savings (if present)
   const savingsCategory = await prisma.category.findFirst({
     where: { name: "Savings", userId: user.id },
@@ -137,6 +159,8 @@ export async function GET() {
   }
 
   return NextResponse.json({
+    totalBalance,
+    carryoverFromLastMonth,
     incomeTotal,
     outcomeTotal: outcomeTotalExclSavings,
     outcomeTotalExclSavings,
