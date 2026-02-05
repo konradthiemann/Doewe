@@ -599,8 +599,12 @@ function TransactionsPage() {
               <button
                 type="button"
                 onClick={() => setShowFilters(true)}
-                aria-label={t("transactions.filtersExpand")}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 shadow-sm transition-all duration-200 hover:bg-gray-50 hover:shadow-md focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                aria-label={hasFilters ? t("transactions.filtersExpandActive") : t("transactions.filtersExpand")}
+                className={`relative inline-flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+                  hasFilters 
+                    ? "border-indigo-500 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:shadow-md dark:border-indigo-400 dark:bg-indigo-950 dark:text-indigo-400 dark:hover:bg-indigo-900" 
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                }`}
               >
                 <svg
                   aria-hidden="true"
@@ -611,6 +615,12 @@ function TransactionsPage() {
                 >
                   <path d="M4 6H20M7 12H17M10 18H14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
+                {hasFilters && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75 dark:bg-indigo-500"></span>
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-indigo-500 dark:bg-indigo-400"></span>
+                  </span>
+                )}
               </button>
             </div>
           )}
