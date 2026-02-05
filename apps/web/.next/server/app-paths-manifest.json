@@ -1,1 +1,9 @@
-{}
+{
+  "/transactions/page": "app/transactions/page.js",
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/api/transactions/route": "app/api/transactions/route.js",
+  "/api/recurring-transactions/route": "app/api/recurring-transactions/route.js",
+  "/api/recurring-transactions/skips/route": "app/api/recurring-transactions/skips/route.js",
+  "/api/categories/route": "app/api/categories/route.js"
+}

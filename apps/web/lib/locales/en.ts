@@ -24,6 +24,8 @@ export const en: Record<string, string> = {
   "settings.categories.listEmpty": "No categories yet.",
   "settings.categories.badgeIncome": "Income",
   "settings.categories.badgeOutcome": "Outcome",
+  "settings.categories.badgeProtected": "Protected",
+  "settings.categories.protectedHint": "This category is protected and cannot be edited or deleted.",
   "settings.categories.working": "Working…",
   "settings.categories.selectPlaceholder": "Select",
   "settings.categories.renameLabel": "Rename",
