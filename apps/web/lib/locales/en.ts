@@ -64,6 +64,7 @@ export const en: Record<string, string> = {
   "transactions.filtersHint": "Limit the list by category, type or date.",
   "transactions.filtersClear": "Reset filters",
   "transactions.filtersExpand": "Open filters",
+  "transactions.filtersExpandActive": "Open filters (filters active)",
   "transactions.filtersCollapse": "Hide filters",
   "transactions.filtersClose": "Close filters",
   "transactions.filterTypeAll": "All",

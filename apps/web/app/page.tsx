@@ -391,8 +391,8 @@ export default function HomePage() {
             <p className="text-sm text-red-600 dark:text-red-400">{quarterlyError}</p>
           ) : quarterly && quarterly.quarters.length > 0 ? (
             <>
-              {/* Bar Chart */}
-              <div className="h-64 mb-6">
+              {/* Bar Chart - Responsive height */}
+              <div className="h-48 sm:h-64 mb-4 sm:mb-6">
                 <Bar
                   data={{
                     labels: quarterly.quarters.map(q => {
@@ -446,65 +446,67 @@ export default function HomePage() {
                 />
               </div>
               
-              {/* Summary Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-neutral-700">
-                      <th className="py-2 text-left font-medium text-gray-500 dark:text-neutral-400"></th>
-                      {quarterly.quarters.map(q => (
-                        <th key={`${q.year}-${q.month}`} className="py-2 text-right font-medium text-gray-500 dark:text-neutral-400">
-                          {new Date(q.year, q.month - 1, 1).toLocaleDateString(dateLocale, { month: "short" })}
-                        </th>
-                      ))}
-                      <th className="py-2 text-right font-semibold text-gray-700 dark:text-neutral-200">{t("dashboard.quarterlyTotal")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-100 dark:border-neutral-800">
-                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlyIncome")}</td>
-                      {quarterly.quarters.map(q => (
-                        <td key={`inc-${q.year}-${q.month}`} className="py-2 text-right text-emerald-600 dark:text-emerald-400">
-                          {formatCurrency(q.incomeCents / 100)}
+              {/* Summary Table - Mobile optimized with horizontal scroll */}
+              <div className="-mx-5 px-5 sm:mx-0 sm:px-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[320px] text-xs sm:text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-neutral-700">
+                        <th className="py-2 pr-2 text-left font-medium text-gray-500 dark:text-neutral-400 whitespace-nowrap"></th>
+                        {quarterly.quarters.map(q => (
+                          <th key={`${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right font-medium text-gray-500 dark:text-neutral-400 whitespace-nowrap">
+                            {new Date(q.year, q.month - 1, 1).toLocaleDateString(dateLocale, { month: "short" })}
+                          </th>
+                        ))}
+                        <th className="py-2 pl-2 text-right font-semibold text-gray-700 dark:text-neutral-200 whitespace-nowrap">{t("dashboard.quarterlyTotal")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-gray-100 dark:border-neutral-800">
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlyIncome")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`inc-${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right text-emerald-600 dark:text-emerald-400 whitespace-nowrap tabular-nums">
+                            {formatCurrency(q.incomeCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap tabular-nums">
+                          {formatCurrency(quarterly.totals.incomeCents / 100)}
                         </td>
-                      ))}
-                      <td className="py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(quarterly.totals.incomeCents / 100)}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-gray-100 dark:border-neutral-800">
-                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlyOutcome")}</td>
-                      {quarterly.quarters.map(q => (
-                        <td key={`out-${q.year}-${q.month}`} className="py-2 text-right text-red-600 dark:text-red-400">
-                          {formatCurrency(q.outcomeCents / 100)}
+                      </tr>
+                      <tr className="border-b border-gray-100 dark:border-neutral-800">
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlyOutcome")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`out-${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">
+                            {formatCurrency(q.outcomeCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">
+                          {formatCurrency(quarterly.totals.outcomeCents / 100)}
                         </td>
-                      ))}
-                      <td className="py-2 text-right font-semibold text-red-600 dark:text-red-400">
-                        {formatCurrency(quarterly.totals.outcomeCents / 100)}
-                      </td>
-                    </tr>
-                    <tr className="border-b border-gray-100 dark:border-neutral-800">
-                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlySavings")}</td>
-                      {quarterly.quarters.map(q => (
-                        <td key={`sav-${q.year}-${q.month}`} className="py-2 text-right text-blue-600 dark:text-blue-400">
-                          {formatCurrency(q.savingsCents / 100)}
+                      </tr>
+                      <tr className="border-b border-gray-100 dark:border-neutral-800">
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlySavings")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`sav-${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">
+                            {formatCurrency(q.savingsCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">
+                          {formatCurrency(quarterly.totals.savingsCents / 100)}
                         </td>
-                      ))}
-                      <td className="py-2 text-right font-semibold text-blue-600 dark:text-blue-400">
-                        {formatCurrency(quarterly.totals.savingsCents / 100)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlyBalance")}</td>
-                      {quarterly.quarters.map(q => (
-                        <td key={`bal-${q.year}-${q.month}`} className={`py-2 text-right ${q.balanceCents >= 0 ? "text-gray-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400"}`}>
-                          {formatCurrency(q.balanceCents / 100)}
-                        </td>
-                      ))}
-                      <td className="py-2 text-right font-semibold text-gray-700 dark:text-neutral-200">—</td>
-                    </tr>
-                  </tbody>
-                </table>
+                      </tr>
+                      <tr>
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlyBalance")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`bal-${q.year}-${q.month}`} className={`py-2 px-1 sm:px-2 text-right whitespace-nowrap tabular-nums ${q.balanceCents >= 0 ? "text-gray-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400"}`}>
+                            {formatCurrency(q.balanceCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-gray-700 dark:text-neutral-200 whitespace-nowrap">—</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           ) : (
