@@ -37,6 +37,7 @@ type RecurringSkip = {
 };
 
 type ActiveTab = "transactions" | "recurring";
+type SortOption = "newest" | "oldest" | "amountDesc" | "amountAsc" | "description";
 
 function TransactionsPage() {
   const { locale, t } = useI18n();
@@ -53,8 +54,14 @@ function TransactionsPage() {
   const [feedback, setFeedback] = useState<{ message: string; variant: "success" | "error" } | null>(null);
   const feedbackDismissRef = useRef<HTMLButtonElement | null>(null);
   const [categoriesById, setCategoriesById] = useState<Record<string, string>>({});
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [query, setQuery] = useState("");
   const [recurringQuery, setRecurringQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(true);
+  const [sortOption, setSortOption] = useState<SortOption>("newest");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const recurringSearchRef = useRef<HTMLInputElement | null>(null);
   const [creating, setCreating] = useState(false);
@@ -285,7 +292,9 @@ function TransactionsPage() {
         const res = await fetch("/api/categories", { cache: "no-store" });
         if (!res.ok) return;
         const data: Array<{ id: string; name: string }> = await res.json();
-        setCategoriesById(Object.fromEntries(data.map(({ id, name }) => [id, name])));
+        const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
+        setCategories(sorted);
+        setCategoriesById(Object.fromEntries(sorted.map(({ id, name }) => [id, name])));
       } catch {
         // ignore fetch errors for categories
       }
@@ -312,11 +321,25 @@ function TransactionsPage() {
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredItems = useMemo(() => {
-    if (!normalizedQuery) {
-      return items;
+    const fromDate = dateFrom ? new Date(dateFrom) : null;
+    const toDate = dateTo ? new Date(dateTo) : null;
+    if (toDate) {
+      toDate.setHours(23, 59, 59, 999);
     }
 
     return items.filter((t) => {
+      if (categoryFilter && t.categoryId !== categoryFilter) {
+        return false;
+      }
+
+      const occurredDate = new Date(t.occurredAt);
+      if (fromDate && occurredDate < fromDate) return false;
+      if (toDate && occurredDate > toDate) return false;
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
       const description = t.description?.toLowerCase?.() ?? "";
       const account = t.accountId?.toLowerCase?.() ?? "";
       const categoryName = t.categoryId ? (categoriesById[t.categoryId]?.toLowerCase?.() ?? "") : "";
@@ -325,7 +348,24 @@ function TransactionsPage() {
 
       return [description, account, categoryName, amount, occurred].some((value) => value.includes(normalizedQuery));
     });
-  }, [categoriesById, dateLocale, items, normalizedQuery]);
+  }, [categoryFilter, categoriesById, dateFrom, dateLocale, dateTo, items, normalizedQuery]);
+  const sortedItems = useMemo(() => {
+    const copy = [...filteredItems];
+    switch (sortOption) {
+      case "oldest":
+        return copy.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+      case "amountDesc":
+        return copy.sort((a, b) => b.amountCents - a.amountCents);
+      case "amountAsc":
+        return copy.sort((a, b) => a.amountCents - b.amountCents);
+      case "description":
+        return copy.sort((a, b) => (a.description || "").localeCompare(b.description || ""));
+      case "newest":
+      default:
+        return copy.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+    }
+  }, [filteredItems, sortOption]);
+  const hasFilters = Boolean(normalizedQuery || categoryFilter || dateFrom || dateTo);
 
   const normalizedRecurringQuery = recurringQuery.trim().toLowerCase();
   const filteredRecurringItems = useMemo(() => {
@@ -345,6 +385,9 @@ function TransactionsPage() {
         .some((value) => value.includes(normalizedRecurringQuery));
     });
   }, [categoriesById, dateLocale, normalizedRecurringQuery, recurringItems]);
+  const recurringTotalCents = useMemo(() => {
+    return filteredRecurringItems.reduce((total, rec) => total + rec.amountCents, 0);
+  }, [filteredRecurringItems]);
 
   const currentRecurring = useMemo(() => {
     return recurringItems.filter((rec) => {
@@ -540,6 +583,137 @@ function TransactionsPage() {
             </p>
           )}
 
+          {!showFilters && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFilters(true)}
+                aria-label={t("transactions.filtersExpand")}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M4 6H20M7 12H17M10 18H14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {showFilters && (
+          <div className="rounded-lg border border-gray-200 bg-white/90 p-4 shadow-sm transition-all dark:border-neutral-700 dark:bg-neutral-900/90">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">{t("transactions.filtersTitle")}</p>
+                <p className="text-xs text-gray-500 dark:text-neutral-400">{t("transactions.filtersHint")}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setQuery("");
+                  }}
+                  disabled={!hasFilters}
+                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-medium transition focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900 ${
+                    hasFilters
+                      ? "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                      : "border border-gray-200 text-gray-400 opacity-70 dark:border-neutral-700 dark:text-neutral-600"
+                  }`}
+                  aria-disabled={!hasFilters}
+                >
+                  {t("transactions.filtersClear")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(false)}
+                  aria-label={t("transactions.filtersCollapse")}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-600 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:focus-visible:ring-offset-neutral-900"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M6 8H18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path d="M9 12H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path d="M11 16H13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="filter-category" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+                  {t("transactions.filterCategoryLabel")}
+                </label>
+                <select
+                  id="filter-category"
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                >
+                  <option value="">{t("transactions.filterCategoryAll")}</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="filter-from" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+                  {t("transactions.filterDateFrom")}
+                </label>
+                <input
+                  id="filter-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="filter-to" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+                  {t("transactions.filterDateTo")}
+                </label>
+                <input
+                  id="filter-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="sort-transactions" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+                  {t("transactions.sortLabel")}
+                </label>
+                <select
+                  id="sort-transactions"
+                  value={sortOption}
+                  onChange={(event) => setSortOption(event.target.value as SortOption)}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                >
+                  <option value="newest">{t("transactions.sortNewest")}</option>
+                  <option value="oldest">{t("transactions.sortOldest")}</option>
+                  <option value="amountDesc">{t("transactions.sortAmountDesc")}</option>
+                  <option value="amountAsc">{t("transactions.sortAmountAsc")}</option>
+                  <option value="description">{t("transactions.sortDescription")}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          )}
+
           {currentRecurring.length > 0 && (
             <details className="group rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -637,7 +811,7 @@ function TransactionsPage() {
           </details>
 
           <ul className="space-y-2">
-            {filteredItems.map((tx) => (
+            {sortedItems.map((tx) => (
               <li
                 key={tx.id}
                 className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
@@ -690,9 +864,9 @@ function TransactionsPage() {
             {items.length === 0 && !error && (
               <li className="text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noTransactionsYet")}</li>
             )}
-            {items.length > 0 && filteredItems.length === 0 && normalizedQuery && (
+            {items.length > 0 && filteredItems.length === 0 && hasFilters && (
               <li className="text-sm text-gray-500 dark:text-neutral-400" role="status">
-                {t("transactions.noSearchMatches")}
+                {normalizedQuery ? t("transactions.noSearchMatches") : t("transactions.noFilterMatches")}
               </li>
             )}
           </ul>
@@ -712,6 +886,16 @@ function TransactionsPage() {
               {recurringError}
             </p>
           )}
+          <div className="flex items-center justify-end gap-2 text-sm text-gray-700 dark:text-neutral-200">
+            <span>{t("transactions.recurringTotalLabel")}</span>
+            <span
+              className={`inline-flex items-center rounded-full px-3 py-1 font-semibold ${
+                recurringTotalCents < 0 ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-200"
+              }`}
+            >
+              {toDecimalString(fromCents(recurringTotalCents))} €
+            </span>
+          </div>
           <ul className="space-y-2">
             {filteredRecurringItems.map((rec) => (
               <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">

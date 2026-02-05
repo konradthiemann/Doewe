@@ -33,13 +33,15 @@ export default function HomePage() {
   const [isMobile, setIsMobile] = useState(false);
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
   const [summary, setSummary] = useState<{
+    totalBalance: number;
+    carryoverFromLastMonth: number;
     incomeTotal: number;
     outcomeTotal: number;
     remaining: number;
     plannedSavings: number;
     monthlySavingsActual: number;
     outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
-  }>({ incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, monthlySavingsActual: 0, outgoingByCategory: [] });
+  }>({ totalBalance: 0, carryoverFromLastMonth: 0, incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, monthlySavingsActual: 0, outgoingByCategory: [] });
 
   async function fetchSummary() {
     const res = await fetch("/api/analytics/summary", { cache: "no-store" });
@@ -348,6 +350,31 @@ export default function HomePage() {
                 aria-label={t("dashboard.savingsProgressLabel")}
                 style={{ width: `${savingsProgress}%`, backgroundColor: actualColor }}
               />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Account Balance & Carryover Section */}
+      <section aria-labelledby="balance-overview" className="max-w-3xl">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="balance-overview" className="text-lg font-medium mb-4">
+            {t("dashboard.balanceOverview")}
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalance")}</p>
+              <p className={`text-2xl font-semibold ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                {formatCurrency(summary.totalBalance)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalanceHint")}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverFromLastMonth")}</p>
+              <p className={`text-2xl font-semibold ${summary.carryoverFromLastMonth >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+                {formatCurrency(summary.carryoverFromLastMonth)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverHint")}</p>
             </div>
           </div>
         </div>

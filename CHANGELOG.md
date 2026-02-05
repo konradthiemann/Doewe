@@ -1,3 +1,18 @@
+## [0.0.20] - 2026-02-05
+### Added
+- `totalBalance`: Gesamtsaldo aller Transaktionen (monatsunabhängig) in `/api/analytics/summary`
+- `carryoverFromLastMonth`: Übertrag aus dem Vormonat (Saldo Ende letzter Monat)
+- Neue Dashboard-Sektion "Kontostand" mit aktuellem Gesamtstand und Vormonatsübertrag
+- API-Tests für die neuen Analytics-Felder
+### Why
+- Nutzer sehen jetzt ihren tatsächlichen Kontostand unabhängig vom aktuellen Monat
+- Transparenz über den Übertrag aus dem Vormonat
+### How
+- Erweiterte `/api/analytics/summary` um zwei neue Berechnungen
+- Neue UI-Sektion in `apps/web/app/page.tsx`
+- Lokalisierung in `de.ts` und `en.ts`
+- Neuer Test `api.analytics.summary.test.ts`
+
 ## [0.0.19] - 2025-11-18
 ### Fixed
 - Switching a transaction from income to outcome no longer fails with a server error.

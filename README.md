@@ -107,6 +107,34 @@ After changing schema run:
 npm --workspace @doewe/web run prisma:generate
 ```
 
+### Migration troubleshooting (non-empty/prod DB)
+If a production or Railway database is already populated, Prisma can refuse to apply migrations (P3005) or the schema may drift from the Prisma model (missing columns or incorrect casing like `recurringId` vs `recurringid`). Use this checklist to recover quickly:
+
+1. **Point Prisma at the target DB**
+	Ensure `DATABASE_URL` is set to the production database you want to fix.
+
+2. **Try normal deploy first**
+	Run `npm --workspace @doewe/web run prisma:migrate:deploy`.
+
+3. **Baseline a non-empty DB (P3005)**
+	If Prisma reports the database is not empty, mark the first migration as applied:
+	- Use the migration ID from [apps/web/prisma/migrations](apps/web/prisma/migrations) (example: `20260119095855_add_recurring_skip`).
+	- Command: `npx prisma migrate resolve --applied <MIGRATION_ID> --schema apps/web/prisma/schema.prisma`.
+
+4. **Re-run deploy**
+	Run `npm --workspace @doewe/web run prisma:migrate:deploy` again.
+
+5. **If columns or constraints are still missing**
+	Apply the corrective SQL in [apps/web/prisma/migrations/20260119110500_fix_recurring_columns/migration.sql](apps/web/prisma/migrations/20260119110500_fix_recurring_columns/migration.sql). This migration is safe to run multiple times and will:
+	- Ensure `RecurringTransaction.intervalMonths` exists
+	- Ensure the `RecurringTransactionSkip` columns, FK, and indexes exist
+
+6. **Verify**
+	- App starts without `column does not exist` errors.
+	- Recurring transactions load and skips can be toggled.
+
+Tip: PostgreSQL is case-sensitive for quoted identifiers. If a column was created as `recurringid` (lowercase), Prisma will still look for `"recurringId"`. The fix migration above normalizes this.
+
 ### Local database (Docker)
 If you don’t have Postgres locally, run a disposable container:
 ```bash
