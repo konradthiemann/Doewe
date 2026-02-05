@@ -42,19 +42,41 @@ export default function HomePage() {
     monthlySavingsActual: number;
     outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
   }>({ totalBalance: 0, carryoverFromLastMonth: 0, incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, monthlySavingsActual: 0, outgoingByCategory: [] });
-
-  async function fetchSummary() {
-    const res = await fetch("/api/analytics/summary", { cache: "no-store" });
-    const data = res.ok ? await res.json() : undefined;
-    if (data) setSummary(data);
-  }
+  
+  const [quarterly, setQuarterly] = useState<{
+    quarters: Array<{ month: number; year: number; incomeCents: number; outcomeCents: number; savingsCents: number; balanceCents: number }>;
+    totals: { incomeCents: number; outcomeCents: number; savingsCents: number };
+  } | null>(null);
+  const [quarterlyLoading, setQuarterlyLoading] = useState(true);
+  const [quarterlyError, setQuarterlyError] = useState<string | null>(null);
 
   useEffect(() => {
+    async function fetchSummary() {
+      const res = await fetch("/api/analytics/summary", { cache: "no-store" });
+      const data = res.ok ? await res.json() : undefined;
+      if (data) setSummary(data);
+    }
+
+    async function fetchQuarterly() {
+      setQuarterlyLoading(true);
+      setQuarterlyError(null);
+      try {
+        const res = await fetch("/api/analytics/quarterly", { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to load");
+        const data = await res.json();
+        setQuarterly(data);
+      } catch {
+        setQuarterlyError(t("dashboard.quarterlyError"));
+      } finally {
+        setQuarterlyLoading(false);
+      }
+    }
+
     (async () => {
-      await fetchSummary();
+      await Promise.all([fetchSummary(), fetchQuarterly()]);
       setLoading(false);
     })();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -352,6 +374,142 @@ export default function HomePage() {
               />
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Quarterly Overview Section */}
+      <section aria-labelledby="quarterly-overview" className="max-w-4xl">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="quarterly-overview" className="text-lg font-medium mb-1">
+            {t("dashboard.quarterlyOverview")}
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.quarterlySubtitle")}</p>
+          
+          {quarterlyLoading ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
+          ) : quarterlyError ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{quarterlyError}</p>
+          ) : quarterly && quarterly.quarters.length > 0 ? (
+            <>
+              {/* Bar Chart */}
+              <div className="h-64 mb-6">
+                <Bar
+                  data={{
+                    labels: quarterly.quarters.map(q => {
+                      const date = new Date(q.year, q.month - 1, 1);
+                      return date.toLocaleDateString(dateLocale, { month: "short", year: "numeric" });
+                    }),
+                    datasets: [
+                      {
+                        label: t("dashboard.quarterlyIncome"),
+                        data: quarterly.quarters.map(q => q.incomeCents / 100),
+                        backgroundColor: "#16A34A",
+                        borderRadius: 4
+                      },
+                      {
+                        label: t("dashboard.quarterlyOutcome"),
+                        data: quarterly.quarters.map(q => q.outcomeCents / 100),
+                        backgroundColor: "#DC2626",
+                        borderRadius: 4
+                      },
+                      {
+                        label: t("dashboard.quarterlySavings"),
+                        data: quarterly.quarters.map(q => q.savingsCents / 100),
+                        backgroundColor: "#3B82F6",
+                        borderRadius: 4
+                      }
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: "bottom",
+                        labels: { boxWidth: isMobile ? 12 : 18, font: { size: isMobile ? 10 : 12 } }
+                      },
+                      datalabels: {
+                        display: false
+                      }
+                    },
+                    scales: {
+                      x: { grid: { display: false } },
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: (value) => `${Number(value).toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
+                        },
+                        grid: { color: "rgba(203,213,225,0.4)" }
+                      }
+                    }
+                  }}
+                />
+              </div>
+              
+              {/* Summary Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-neutral-700">
+                      <th className="py-2 text-left font-medium text-gray-500 dark:text-neutral-400"></th>
+                      {quarterly.quarters.map(q => (
+                        <th key={`${q.year}-${q.month}`} className="py-2 text-right font-medium text-gray-500 dark:text-neutral-400">
+                          {new Date(q.year, q.month - 1, 1).toLocaleDateString(dateLocale, { month: "short" })}
+                        </th>
+                      ))}
+                      <th className="py-2 text-right font-semibold text-gray-700 dark:text-neutral-200">{t("dashboard.quarterlyTotal")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-100 dark:border-neutral-800">
+                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlyIncome")}</td>
+                      {quarterly.quarters.map(q => (
+                        <td key={`inc-${q.year}-${q.month}`} className="py-2 text-right text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(q.incomeCents / 100)}
+                        </td>
+                      ))}
+                      <td className="py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(quarterly.totals.incomeCents / 100)}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-100 dark:border-neutral-800">
+                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlyOutcome")}</td>
+                      {quarterly.quarters.map(q => (
+                        <td key={`out-${q.year}-${q.month}`} className="py-2 text-right text-red-600 dark:text-red-400">
+                          {formatCurrency(q.outcomeCents / 100)}
+                        </td>
+                      ))}
+                      <td className="py-2 text-right font-semibold text-red-600 dark:text-red-400">
+                        {formatCurrency(quarterly.totals.outcomeCents / 100)}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-100 dark:border-neutral-800">
+                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlySavings")}</td>
+                      {quarterly.quarters.map(q => (
+                        <td key={`sav-${q.year}-${q.month}`} className="py-2 text-right text-blue-600 dark:text-blue-400">
+                          {formatCurrency(q.savingsCents / 100)}
+                        </td>
+                      ))}
+                      <td className="py-2 text-right font-semibold text-blue-600 dark:text-blue-400">
+                        {formatCurrency(quarterly.totals.savingsCents / 100)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 text-gray-700 dark:text-neutral-300">{t("dashboard.quarterlyBalance")}</td>
+                      {quarterly.quarters.map(q => (
+                        <td key={`bal-${q.year}-${q.month}`} className={`py-2 text-right ${q.balanceCents >= 0 ? "text-gray-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400"}`}>
+                          {formatCurrency(q.balanceCents / 100)}
+                        </td>
+                      ))}
+                      <td className="py-2 text-right font-semibold text-gray-700 dark:text-neutral-200">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
+          )}
         </div>
       </section>
 
