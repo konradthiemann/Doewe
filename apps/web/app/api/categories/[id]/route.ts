@@ -5,6 +5,13 @@ import { z } from "zod";
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 
+// Protected category names that cannot be modified or deleted
+const PROTECTED_CATEGORY_NAMES = ["savings", "sparen"];
+
+function isProtectedCategory(name: string): boolean {
+  return PROTECTED_CATEGORY_NAMES.includes(name.toLowerCase().trim());
+}
+
 const UpdateInput = z
   .object({
     name: z.string().min(1).optional(),
@@ -29,6 +36,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const sourceCategory = await prisma.category.findFirst({ where: { id: params.id, userId: user.id } });
   if (!sourceCategory) return NextResponse.json({ error: "Category not found" }, { status: 404 });
+
+  // Protect Savings/Sparen category from modification
+  if (isProtectedCategory(sourceCategory.name)) {
+    return NextResponse.json({ error: "This category is protected and cannot be modified" }, { status: 403 });
+  }
 
   const json = await req.json();
   const parsed = UpdateInput.safeParse(json);
@@ -85,6 +97,11 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
   const sourceCategory = await prisma.category.findFirst({ where: { id: params.id, userId: user.id } });
   if (!sourceCategory) return NextResponse.json({ error: "Category not found" }, { status: 404 });
+
+  // Protect Savings/Sparen category from deletion
+  if (isProtectedCategory(sourceCategory.name)) {
+    return NextResponse.json({ error: "This category is protected and cannot be deleted" }, { status: 403 });
+  }
 
   const json = await req.json();
   const parsed = DeleteInput.safeParse(json);

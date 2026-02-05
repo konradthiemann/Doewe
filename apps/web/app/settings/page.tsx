@@ -7,6 +7,13 @@ import { useI18n } from "../../lib/i18n";
 
 type Category = { id: string; name: string; isIncome: boolean };
 
+// Protected category names that cannot be modified or deleted
+const PROTECTED_CATEGORY_NAMES = ["savings", "sparen"];
+
+function isProtectedCategory(name: string): boolean {
+  return PROTECTED_CATEGORY_NAMES.includes(name.toLowerCase().trim());
+}
+
 export default function SettingsPage() {
   const { data } = useSession();
   const { locale, setLocale, t } = useI18n();
@@ -217,12 +224,20 @@ export default function SettingsPage() {
                   }`}>
                     {category.isIncome ? t("settings.categories.badgeIncome") : t("settings.categories.badgeOutcome")}
                   </span>
+                  {isProtectedCategory(category.name) && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
+                      {t("settings.categories.badgeProtected")}
+                    </span>
+                  )}
                 </div>
                 {isBusy(category.id) && (
                   <span className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.working")}</span>
                 )}
               </div>
 
+              {isProtectedCategory(category.name) ? (
+                <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">{t("settings.categories.protectedHint")}</p>
+              ) : (
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-700 dark:text-neutral-200" htmlFor={`rename-${category.id}`}>
@@ -312,6 +327,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.deleteHint")}</p>
                 </div>
               </div>
+              )}
             </div>
           ))}
         </div>
