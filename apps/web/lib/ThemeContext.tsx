@@ -79,10 +79,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Default values for SSG/SSR when ThemeProvider is not yet mounted
+const defaultThemeContext: ThemeContextValue = {
+  theme: "system",
+  setTheme: () => {},
+  resolvedTheme: "dark"
+};
+
 export function useTheme() {
   const context = useContext(ThemeContext);
+  // Return default context during SSG/SSR to prevent build errors
   if (!context) {
-    throw new Error("useTheme must be used within a ThemeProvider");
+    return defaultThemeContext;
   }
   return context;
 }
