@@ -27,6 +27,7 @@ type RecurringTx = {
   categoryId?: string | null;
   frequency: string;
   intervalMonths?: number | null;
+  dayOfMonth?: number | null;
   nextOccurrence: string;
 };
 
@@ -1012,7 +1013,8 @@ function TransactionsPage() {
                 amountCents: editingRecurring.amountCents,
                 description: editingRecurring.description,
                 categoryId: editingRecurring.categoryId ?? null,
-                intervalMonths: editingRecurring.intervalMonths ?? 1
+                intervalMonths: editingRecurring.intervalMonths ?? 1,
+                dayOfMonth: editingRecurring.dayOfMonth ?? 1
               }}
               headingId={`edit-recurring-${editingRecurring.id}`}
               onSuccess={handleRecurringEditSuccess}

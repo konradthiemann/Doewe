@@ -61,6 +61,7 @@ model RecurringTransaction {
   // Allowed values: DAILY | WEEKLY | MONTHLY | YEARLY (validated in API)
   frequency      String
   intervalMonths Int       @default(1)
+  dayOfMonth     Int       @default(1) // Day of month (1-31) when transaction occurs
   nextOccurrence DateTime
   createdAt      DateTime  @default(now())
 

@@ -56,6 +56,7 @@ export default function TransactionForm({
   const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
   const [isRecurring, setIsRecurring] = useState(false);
   const [intervalMonths, setIntervalMonths] = useState(1);
+  const [dayOfMonth, setDayOfMonth] = useState(1);
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -183,6 +184,11 @@ export default function TransactionForm({
       return;
     }
 
+    if (isRecurring && (dayOfMonth < 1 || dayOfMonth > 31)) {
+      setRecurringError(t("transactionForm.errorDayOfMonth"));
+      return;
+    }
+
     setLoading(true);
 
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
@@ -203,7 +209,8 @@ export default function TransactionForm({
           categoryId: payload.categoryId,
           amountCents: payload.amountCents,
           description: payload.description,
-          intervalMonths
+          intervalMonths,
+          dayOfMonth
         });
       } else {
         const res = await fetch(endpoint, {
@@ -242,6 +249,7 @@ export default function TransactionForm({
     amountCents: number;
     description: string;
     intervalMonths: number;
+    dayOfMonth: number;
   }) {
     const res = await fetch("/api/recurring-transactions", {
       method: "POST",
@@ -558,25 +566,46 @@ export default function TransactionForm({
               </label>
             </div>
             {isRecurring && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium" htmlFor="tx-interval-months">
-                  {t("transactionForm.intervalLabel")} <span className="text-red-600">*</span>
-                </label>
-                <input
-                  id="tx-interval-months"
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={intervalMonths}
-                  onChange={(event) => setIntervalMonths(Number(event.target.value))}
-                  className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-                  aria-required="true"
-                  aria-invalid={!!recurringError}
-                  aria-describedby={recurringError ? "tx-recurring-error" : undefined}
-                />
-                <p className="text-xs text-gray-500 dark:text-neutral-400">
-                  {t("transactionForm.intervalHelper")}
-                </p>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium" htmlFor="tx-interval-months">
+                    {t("transactionForm.intervalLabel")} <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="tx-interval-months"
+                    type="number"
+                    min={1}
+                    max={24}
+                    value={intervalMonths}
+                    onChange={(event) => setIntervalMonths(Number(event.target.value))}
+                    className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                    aria-required="true"
+                    aria-invalid={!!recurringError}
+                    aria-describedby={recurringError ? "tx-recurring-error" : undefined}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                    {t("transactionForm.intervalHelper")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium" htmlFor="tx-day-of-month">
+                    {t("transactionForm.dayOfMonthLabel")} <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    id="tx-day-of-month"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={dayOfMonth}
+                    onChange={(event) => setDayOfMonth(Number(event.target.value))}
+                    className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                    aria-required="true"
+                    aria-invalid={!!recurringError}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                    {t("transactionForm.dayOfMonthHelper")}
+                  </p>
+                </div>
                 {recurringError && (
                   <p id="tx-recurring-error" role="alert" className="text-sm text-red-600">
                     {recurringError}
