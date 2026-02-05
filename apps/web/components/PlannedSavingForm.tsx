@@ -1,6 +1,6 @@
 "use client";
 
-import { parseCents } from "@doewe/shared";
+import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { appConfig } from "../lib/config";
@@ -11,10 +11,20 @@ type Account = {
   name: string;
 };
 
+type EditGoal = {
+  id: string;
+  accountId: string;
+  title: string;
+  month: number;
+  year: number;
+  amountCents: number;
+};
+
 type Props = {
   headingId?: string;
   onClose?: () => void;
   onSuccess?: (message?: string) => void;
+  editGoal?: EditGoal;
 };
 
 function nextMonthValue() {
@@ -23,14 +33,23 @@ function nextMonthValue() {
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Props) {
+function monthYearToValue(month: number, year: number) {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function centsToDisplayString(cents: number) {
+  return toDecimalString(fromCents(cents));
+}
+
+export default function PlannedSavingForm({ headingId, onClose, onSuccess, editGoal }: Props) {
+  const isEditMode = !!editGoal;
   const { locale, t } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [form, setForm] = useState(() => ({
-    title: "",
-    amount: "",
-    accountId: "",
-    targetMonth: nextMonthValue()
+    title: editGoal?.title ?? "",
+    amount: editGoal ? centsToDisplayString(editGoal.amountCents) : "",
+    accountId: editGoal?.accountId ?? "",
+    targetMonth: editGoal ? monthYearToValue(editGoal.month, editGoal.year) : nextMonthValue()
   }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,33 +130,42 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
         amountCents
       };
 
-      const res = await fetch("/api/saving-plan", {
-        method: "POST",
+      const url = isEditMode ? `/api/saving-plan/${editGoal.id}` : "/api/saving-plan";
+      const method = isEditMode ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
         const details = await res.json().catch(() => undefined);
+        const errorKey = isEditMode ? "savingPlan.form.errorUpdateFailed" : "savingPlan.form.errorSaveFailed";
         const message = details?.error
           ? JSON.stringify(details.error)
-          : t("savingPlan.form.errorSaveFailed", { status: res.status });
+          : t(errorKey, { status: res.status });
         setError(message);
         return;
       }
 
-      const message = t("savingPlan.form.added");
+      const message = isEditMode ? t("savingPlan.form.updated") : t("savingPlan.form.added");
       setInlineSuccess(message);
-      setForm((current) => ({ ...current, amount: "" }));
+      if (!isEditMode) {
+        setForm((current) => ({ ...current, amount: "" }));
+      }
       onSuccess?.(message);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : t("savingPlan.form.errorSave"));
+      const fallbackKey = isEditMode ? "savingPlan.form.errorUpdate" : "savingPlan.form.errorSave";
+      setError(submitError instanceof Error ? submitError.message : t(fallbackKey));
     } finally {
       setLoading(false);
     }
   }
 
-  const submitLabel = loading ? t("savingPlan.form.saving") : t("savingPlan.form.save");
+  const submitLabel = loading
+    ? (isEditMode ? t("savingPlan.form.updating") : t("savingPlan.form.saving"))
+    : (isEditMode ? t("savingPlan.form.update") : t("savingPlan.form.save"));
 
   return (
     <form
@@ -148,9 +176,11 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess }: Pro
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 id={headingId} className="text-lg font-semibold">
-            {t("savingPlan.form.title")}
+            {isEditMode ? t("savingPlan.form.editTitle") : t("savingPlan.form.title")}
           </h3>
-          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("savingPlan.form.subtitle")}</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400">
+            {isEditMode ? t("savingPlan.form.editSubtitle") : t("savingPlan.form.subtitle")}
+          </p>
         </div>
         {onClose && (
           <button
