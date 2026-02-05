@@ -11,9 +11,28 @@ export const metadata: Metadata = {
   description: "Family management: track finances, set goals, detect patterns."
 };
 
+// Inline script to prevent flash of wrong theme
+const themeScript = `
+(function() {
+  try {
+    var theme = localStorage.getItem('doewe-theme') || 'system';
+    var resolved = theme;
+    if (theme === 'system') {
+      resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.documentElement.classList.add(resolved);
+  } catch (e) {
+    document.documentElement.classList.add('dark');
+  }
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="de">
+    <html lang="de" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-screen antialiased flex flex-col">
         <a href="#maincontent" className="sr-only">
           Skip to main

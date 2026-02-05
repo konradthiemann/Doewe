@@ -1,10 +1,14 @@
 {
-  "/settings/page": "app/settings/page.js",
   "/saving-plan/page": "app/saving-plan/page.js",
+  "/settings/page": "app/settings/page.js",
   "/transactions/page": "app/transactions/page.js",
   "/page": "app/page.js",
-  "/api/transactions/route": "app/api/transactions/route.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
   "/api/recurring-transactions/route": "app/api/recurring-transactions/route.js",
   "/api/recurring-transactions/skips/route": "app/api/recurring-transactions/skips/route.js",
-  "/api/categories/route": "app/api/categories/route.js"
+  "/api/transactions/route": "app/api/transactions/route.js",
+  "/api/categories/route": "app/api/categories/route.js",
+  "/api/analytics/summary/route": "app/api/analytics/summary/route.js",
+  "/api/saving-plan/route": "app/api/saving-plan/route.js",
+  "/api/analytics/quarterly/route": "app/api/analytics/quarterly/route.js"
 }
