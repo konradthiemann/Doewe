@@ -10,8 +10,28 @@ const UpdateInput = z.object({
   categoryId: z.string().min(1).optional().nullable(),
   amountCents: z.number().int().optional(),
   description: z.string().min(1).optional(),
-  intervalMonths: z.number().int().min(1).max(24).optional()
+  intervalMonths: z.number().int().min(1).max(24).optional(),
+  dayOfMonth: z.number().int().min(1).max(31).optional()
 });
+
+function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
+  const today = now.getDate();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  if (dayOfMonth > today) {
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const clampedDay = Math.min(dayOfMonth, daysInMonth);
+    return new Date(currentYear, currentMonth, clampedDay, 0, 0, 0, 0);
+  }
+  
+  const nextMonth = currentMonth + 1;
+  const nextYear = nextMonth > 11 ? currentYear + 1 : currentYear;
+  const normalizedMonth = nextMonth % 12;
+  const daysInNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
+  const clampedDay = Math.min(dayOfMonth, daysInNextMonth);
+  return new Date(nextYear, normalizedMonth, clampedDay, 0, 0, 0, 0);
+}
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
@@ -45,12 +65,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
   }
 
+  // Recalculate nextOccurrence if dayOfMonth changes
+  const newDayOfMonth = data.dayOfMonth;
+  let nextOccurrence: Date | undefined;
+  if (newDayOfMonth !== undefined) {
+    nextOccurrence = nextOccurrenceDate(newDayOfMonth);
+  }
+
   const updateData = {
     accountId: data.accountId,
     categoryId: data.categoryId ?? undefined,
     amountCents: data.amountCents,
     description: data.description,
-    intervalMonths: data.intervalMonths
+    intervalMonths: data.intervalMonths,
+    dayOfMonth: newDayOfMonth,
+    nextOccurrence
   } as Prisma.RecurringTransactionUncheckedUpdateInput;
 
   const updated = await prisma.recurringTransaction.update({
