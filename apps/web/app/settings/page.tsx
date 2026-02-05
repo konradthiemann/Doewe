@@ -4,6 +4,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
+import { useTheme, type Theme } from "../../lib/ThemeContext";
 
 type Category = { id: string; name: string; isIncome: boolean };
 
@@ -17,6 +18,7 @@ function isProtectedCategory(name: string): boolean {
 export default function SettingsPage() {
   const { data } = useSession();
   const { locale, setLocale, t } = useI18n();
+  const { theme, setTheme } = useTheme();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [catLoading, setCatLoading] = useState(false);
@@ -204,6 +206,42 @@ export default function SettingsPage() {
             <option value="en">{t("settings.languageOptionEn")}</option>
           </select>
         </div>
+      </div>
+
+      {/* Theme Section */}
+      <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+        <h2 className="text-lg font-medium">{t("settings.themeTitle")}</h2>
+        <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.themeDescription")}</p>
+        <fieldset className="mt-3">
+          <legend className="sr-only">{t("settings.themeTitle")}</legend>
+          <div className="flex flex-wrap gap-3">
+            {(["light", "dark", "system"] as Theme[]).map((option) => (
+              <label
+                key={option}
+                className={`relative flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 shadow-sm transition-all ${
+                  theme === option
+                    ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500 dark:bg-indigo-950"
+                    : "border-gray-300 bg-white hover:border-gray-400 dark:border-neutral-600 dark:bg-neutral-800 dark:hover:border-neutral-500"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="theme"
+                  value={option}
+                  checked={theme === option}
+                  onChange={(e) => setTheme(e.target.value as Theme)}
+                  className="sr-only"
+                />
+                <span className="text-lg" aria-hidden="true">
+                  {option === "light" ? "☀️" : option === "dark" ? "🌙" : "💻"}
+                </span>
+                <span className={`text-sm font-medium ${theme === option ? "text-indigo-700 dark:text-indigo-300" : "text-gray-700 dark:text-neutral-200"}`}>
+                  {t(`settings.theme${option.charAt(0).toUpperCase() + option.slice(1)}`)}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white/95 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
