@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
 
+import SearchableSelect from "./SearchableSelect";
+
 type TransactionDetails = {
   id: string;
   accountId: string;
@@ -44,7 +46,7 @@ export default function TransactionForm({
     transaction ? (transaction.amountCents >= 0 ? "income" : "outcome") : "outcome"
   );
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean }>>([]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
@@ -68,14 +70,14 @@ export default function TransactionForm({
       try {
         const [accRes, catRes] = await Promise.all([
           fetch("/api/accounts", { cache: "no-store" }),
-          fetch("/api/categories", { cache: "no-store" })
+          fetch("/api/categories?sortByUsage=true", { cache: "no-store" })
         ]);
 
         if (!accRes.ok || !catRes.ok) {
           throw new Error(t("transactionForm.errorLoadRef"));
         }
 
-        const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string; isIncome: boolean }>]
+        const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>]
           = await Promise.all([accRes.json(), catRes.json()]);
 
         if (!active) return;
@@ -433,32 +435,30 @@ export default function TransactionForm({
           <label className="block text-sm font-medium mb-1" htmlFor="tx-category">
             {t("transactionForm.categoryLabel")}
           </label>
-          <select
+          <SearchableSelect
             id="tx-category"
             name="categoryId"
             value={form.categoryId}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "__new__") {
-                setShowNewCategory(true);
-                setForm((current) => ({ ...current, categoryId: "__new__" }));
-                return;
-              }
+            options={filteredCategories.map((category) => ({
+              id: category.id,
+              label: category.name,
+              usageCount: category.usageCount
+            }))}
+            placeholder={t("transactionForm.categoryNone")}
+            searchPlaceholder={t("transactionForm.categorySearchPlaceholder")}
+            noResultsText={t("transactionForm.categoryNoResults")}
+            addNewLabel={t("transactionForm.categoryAddNew")}
+            onChange={(value) => {
               setShowNewCategory(false);
               setNewCategoryError(null);
               setForm((current) => ({ ...current, categoryId: value }));
             }}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            onAddNew={() => {
+              setShowNewCategory(true);
+              setForm((current) => ({ ...current, categoryId: "__new__" }));
+            }}
             aria-describedby={newCategoryError ? "tx-category-error" : undefined}
-          >
-            <option value="">{t("transactionForm.categoryNone")}</option>
-            {filteredCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-            <option value="__new__">{t("transactionForm.categoryAddNew")}</option>
-          </select>
+          />
           {showNewCategory && (
             <div className="mt-2 space-y-2">
               <label className="block text-sm font-medium" htmlFor="tx-category-new">
