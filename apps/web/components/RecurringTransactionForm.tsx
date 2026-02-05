@@ -13,6 +13,7 @@ type RecurringDetails = {
   description: string;
   categoryId?: string | null;
   intervalMonths: number;
+  dayOfMonth?: number;
 };
 
 type Props = {
@@ -36,7 +37,8 @@ export default function RecurringTransactionForm({
     amount: toDecimalString(fromCents(Math.abs(recurring.amountCents))),
     accountId: recurring.accountId,
     categoryId: recurring.categoryId ?? "",
-    intervalMonths: recurring.intervalMonths || 1
+    intervalMonths: recurring.intervalMonths || 1,
+    dayOfMonth: recurring.dayOfMonth ?? 1
   }));
   const [txType, setTxType] = useState<"income" | "outcome">(
     recurring.amountCents >= 0 ? "income" : "outcome"
@@ -136,6 +138,11 @@ export default function RecurringTransactionForm({
       return;
     }
 
+    if (form.dayOfMonth < 1 || form.dayOfMonth > 31) {
+      setError(t("recurringForm.errorDayOfMonth"));
+      return;
+    }
+
     setLoading(true);
 
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
@@ -144,7 +151,8 @@ export default function RecurringTransactionForm({
       amountCents: signedCents,
       description: form.description,
       categoryId: form.categoryId || undefined,
-      intervalMonths: form.intervalMonths
+      intervalMonths: form.intervalMonths,
+      dayOfMonth: form.dayOfMonth
     };
 
     try {
@@ -359,6 +367,24 @@ export default function RecurringTransactionForm({
             aria-invalid={!!error && form.intervalMonths < 1}
           />
           <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.intervalHelper")}</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1" htmlFor="recurring-dayofmonth">
+            {t("recurringForm.dayOfMonthLabel")} <span className="text-red-600">*</span>
+          </label>
+          <input
+            id="recurring-dayofmonth"
+            type="number"
+            min={1}
+            max={31}
+            required
+            value={form.dayOfMonth}
+            onChange={(event) => setForm((current) => ({ ...current, dayOfMonth: Number(event.target.value) }))}
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            aria-invalid={!!error && (form.dayOfMonth < 1 || form.dayOfMonth > 31)}
+          />
+          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.dayOfMonthHelper")}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

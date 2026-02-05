@@ -10,11 +10,30 @@ const RecurringInput = z.object({
   categoryId: z.string().min(1).optional(),
   amountCents: z.number().int(),
   description: z.string().min(1),
-  intervalMonths: z.number().int().min(1).max(24).optional()
+  intervalMonths: z.number().int().min(1).max(24).optional(),
+  dayOfMonth: z.number().int().min(1).max(31).optional()
 });
 
-function firstOfNextMonth(now = new Date()) {
-  return new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
+  const today = now.getDate();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  // If dayOfMonth hasn't passed this month, use current month, otherwise next month
+  if (dayOfMonth > today) {
+    // Clamp to last day of current month if dayOfMonth exceeds days in month
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const clampedDay = Math.min(dayOfMonth, daysInMonth);
+    return new Date(currentYear, currentMonth, clampedDay, 0, 0, 0, 0);
+  }
+  
+  // Use next month
+  const nextMonth = currentMonth + 1;
+  const nextYear = nextMonth > 11 ? currentYear + 1 : currentYear;
+  const normalizedMonth = nextMonth % 12;
+  const daysInNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
+  const clampedDay = Math.min(dayOfMonth, daysInNextMonth);
+  return new Date(nextYear, normalizedMonth, clampedDay, 0, 0, 0, 0);
 }
 
 export async function GET() {
@@ -38,7 +57,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const data = parsed.data;
-  const nextDate = firstOfNextMonth();
 
   const account = await prisma.account.findFirst({ where: { id: data.accountId, userId: user.id } });
   if (!account) {
@@ -51,6 +69,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
   }
+  const day = data.dayOfMonth ?? 1;
+  const nextDate = nextOccurrenceDate(day);
+  
   const createData = {
     accountId: data.accountId,
     categoryId: data.categoryId,
@@ -58,6 +79,7 @@ export async function POST(req: Request) {
     description: data.description,
     frequency: "MONTHLY",
     intervalMonths: data.intervalMonths ?? 1,
+    dayOfMonth: day,
     nextOccurrence: nextDate
   } as Prisma.RecurringTransactionUncheckedCreateInput;
 
