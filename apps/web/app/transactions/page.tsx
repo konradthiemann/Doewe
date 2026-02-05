@@ -39,6 +39,7 @@ type RecurringSkip = {
 
 type ActiveTab = "transactions" | "recurring";
 type SortOption = "newest" | "oldest" | "amountDesc" | "amountAsc" | "description";
+type FilterType = "all" | "income" | "outcome";
 
 function TransactionsPage() {
   const { locale, t } = useI18n();
@@ -63,6 +64,7 @@ function TransactionsPage() {
   const [recurringQuery, setRecurringQuery] = useState("");
   const [showFilters, setShowFilters] = useState(true);
   const [sortOption, setSortOption] = useState<SortOption>("newest");
+  const [filterType, setFilterType] = useState<FilterType>("all");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const recurringSearchRef = useRef<HTMLInputElement | null>(null);
   const [creating, setCreating] = useState(false);
@@ -329,6 +331,14 @@ function TransactionsPage() {
     }
 
     return items.filter((t) => {
+      // Filter by type (income/outcome)
+      if (filterType === "income" && t.amountCents < 0) {
+        return false;
+      }
+      if (filterType === "outcome" && t.amountCents >= 0) {
+        return false;
+      }
+
       if (categoryFilter && t.categoryId !== categoryFilter) {
         return false;
       }
@@ -349,7 +359,7 @@ function TransactionsPage() {
 
       return [description, account, categoryName, amount, occurred].some((value) => value.includes(normalizedQuery));
     });
-  }, [categoryFilter, categoriesById, dateFrom, dateLocale, dateTo, items, normalizedQuery]);
+  }, [categoryFilter, categoriesById, dateFrom, dateLocale, dateTo, filterType, items, normalizedQuery]);
   const sortedItems = useMemo(() => {
     const copy = [...filteredItems];
     switch (sortOption) {
@@ -366,7 +376,7 @@ function TransactionsPage() {
         return copy.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
     }
   }, [filteredItems, sortOption]);
-  const hasFilters = Boolean(normalizedQuery || categoryFilter || dateFrom || dateTo);
+  const hasFilters = Boolean(normalizedQuery || categoryFilter || dateFrom || dateTo || filterType !== "all");
 
   const normalizedRecurringQuery = recurringQuery.trim().toLowerCase();
   const filteredRecurringItems = useMemo(() => {
@@ -590,7 +600,7 @@ function TransactionsPage() {
                 type="button"
                 onClick={() => setShowFilters(true)}
                 aria-label={t("transactions.filtersExpand")}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 shadow-sm transition-all duration-200 hover:bg-gray-50 hover:shadow-md focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
               >
                 <svg
                   aria-hidden="true"
@@ -605,62 +615,89 @@ function TransactionsPage() {
             </div>
           )}
 
-          {showFilters && (
-          <div className="rounded-lg border border-gray-200 bg-white/90 p-4 shadow-sm transition-all dark:border-neutral-700 dark:bg-neutral-900/90">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            className={`overflow-hidden transition-all duration-300 ease-in-out ${
+              showFilters ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+            }`}
+          >
+          <div className="rounded-xl border border-gray-200 bg-gradient-to-b from-white to-gray-50/50 p-5 shadow-sm dark:border-neutral-700 dark:from-neutral-900 dark:to-neutral-900/80">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">{t("transactions.filtersTitle")}</p>
                 <p className="text-xs text-gray-500 dark:text-neutral-400">{t("transactions.filtersHint")}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCategoryFilter("");
-                    setDateFrom("");
-                    setDateTo("");
-                    setQuery("");
-                  }}
-                  disabled={!hasFilters}
-                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-medium transition focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900 ${
-                    hasFilters
-                      ? "border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
-                      : "border border-gray-200 text-gray-400 opacity-70 dark:border-neutral-700 dark:text-neutral-600"
-                  }`}
-                  aria-disabled={!hasFilters}
+              <button
+                type="button"
+                onClick={() => setShowFilters(false)}
+                aria-label={t("transactions.filtersClose")}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
                 >
-                  {t("transactions.filtersClear")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowFilters(false)}
-                  aria-label={t("transactions.filtersCollapse")}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-600 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:focus-visible:ring-offset-neutral-900"
-                >
-                  <svg
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path d="M6 8H18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    <path d="M9 12H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    <path d="M11 16H13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="filter-category" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+
+            {/* Transaction Type Filter */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setFilterType("all")}
+                className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
+                  filterType === "all"
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                }`}
+              >
+                {t("transactions.filterTypeAll")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("income")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
+                  filterType === "income"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                }`}
+              >
+                <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 19V5M5 12L12 5L19 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t("transactions.filterTypeIncome")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterType("outcome")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
+                  filterType === "outcome"
+                    ? "bg-red-600 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                }`}
+              >
+                <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 5V19M5 12L12 19L19 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t("transactions.filterTypeOutcome")}
+              </button>
+            </div>
+
+            {/* Filter Controls Grid */}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="filter-category" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
                   {t("transactions.filterCategoryLabel")}
                 </label>
                 <select
                   id="filter-category"
                   value={categoryFilter}
                   onChange={(event) => setCategoryFilter(event.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 >
                   <option value="">{t("transactions.filterCategoryAll")}</option>
                   {categories.map((category) => (
@@ -670,8 +707,8 @@ function TransactionsPage() {
                   ))}
                 </select>
               </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="filter-from" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="filter-from" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
                   {t("transactions.filterDateFrom")}
                 </label>
                 <input
@@ -679,11 +716,11 @@ function TransactionsPage() {
                   type="date"
                   value={dateFrom}
                   onChange={(event) => setDateFrom(event.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="filter-to" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="filter-to" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
                   {t("transactions.filterDateTo")}
                 </label>
                 <input
@@ -691,18 +728,18 @@ function TransactionsPage() {
                   type="date"
                   value={dateTo}
                   onChange={(event) => setDateTo(event.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="sort-transactions" className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="sort-transactions" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
                   {t("transactions.sortLabel")}
                 </label>
                 <select
                   id="sort-transactions"
                   value={sortOption}
                   onChange={(event) => setSortOption(event.target.value as SortOption)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 >
                   <option value="newest">{t("transactions.sortNewest")}</option>
                   <option value="oldest">{t("transactions.sortOldest")}</option>
@@ -712,8 +749,30 @@ function TransactionsPage() {
                 </select>
               </div>
             </div>
+
+            {/* Clear Filters */}
+            {hasFilters && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter("");
+                    setDateFrom("");
+                    setDateTo("");
+                    setQuery("");
+                    setFilterType("all");
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                >
+                  <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {t("transactions.filtersClear")}
+                </button>
+              </div>
+            )}
           </div>
-          )}
+          </div>
 
           {currentRecurring.length > 0 && (
             <details className="group rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
