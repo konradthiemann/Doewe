@@ -11,6 +11,28 @@ describe("money", () => {
     expect(parseCents("-5.05")).toBe(-505);
   });
 
+  it("parses both comma and dot decimal separators", () => {
+    // German format with comma
+    expect(parseCents("12,34")).toBe(1234);
+    expect(parseCents("0,99")).toBe(99);
+    expect(parseCents("100,00")).toBe(10000);
+    expect(parseCents("-50,25")).toBe(-5025);
+    
+    // English format with dot
+    expect(parseCents("12.34")).toBe(1234);
+    expect(parseCents("0.99")).toBe(99);
+    expect(parseCents("100.00")).toBe(10000);
+    expect(parseCents("-50.25")).toBe(-5025);
+    
+    // Single decimal place
+    expect(parseCents("5,5")).toBe(550);
+    expect(parseCents("5.5")).toBe(550);
+    
+    // Whitespace trimming
+    expect(parseCents("  12,34  ")).toBe(1234);
+    expect(parseCents("  12.34  ")).toBe(1234);
+  });
+
   it("formats cents to decimal string", () => {
     expect(toDecimalString(fromCents(0))).toBe("0.00");
     expect(toDecimalString(fromCents(7))).toBe("0.07");
@@ -29,6 +51,11 @@ describe("money", () => {
   it("rejects invalid parse inputs", () => {
     expect(() => parseCents("")).toThrow();
     expect(() => parseCents("abc")).toThrow();
-    expect(() => parseCents("1.234")).toThrow();
+    expect(() => parseCents("1.234")).toThrow(); // more than 2 decimal places
+    expect(() => parseCents("1,234")).toThrow(); // more than 2 decimal places
+    expect(() => parseCents("12,34,56")).toThrow(); // multiple separators
+    expect(() => parseCents("12.34.56")).toThrow(); // multiple separators
+    expect(() => parseCents("1.234,56")).toThrow(); // mixed separators (thousand + decimal)
+    expect(() => parseCents("12a34")).toThrow(); // letters in number
   });
 });
