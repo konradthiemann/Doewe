@@ -1,6 +1,16 @@
 # ToDos
 
-## !Der Übertrag auf den nächsten Monat funktioniert nicht. 
+## ✅ Allgemeine Bedingungen für jede Task
+- [ ] **Tests müssen grün sein** (`npm test` erfolgreich)
+- [ ] **Lint & Typecheck grün** (`npm run lint && npm run typecheck`)
+- [ ] **Lokal getestet** (App startet und Feature funktioniert)
+- [ ] **Auf develop gemerged und validiert** bevor nächste Task beginnt
+
+---
+
+## ✅ !Der Übertrag auf den nächsten Monat funktioniert nicht. 
+**Status: ABGESCHLOSSEN** ✅
+
 - Der aktuelle finanzielle Stand muss natürlich unabhängig vom Monat angezeigt werden. Also als allgemeinen Wert.
 - Wie viel Geld vom letzten Monat in den aktuellen Monat übernommen wurde soll als Information auf dem Dashboard zu sehen sein.
 

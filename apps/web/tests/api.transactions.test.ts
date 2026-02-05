@@ -1,45 +1,66 @@
-import { execSync } from "node:child_process";
-import path from "node:path";
-
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-// Point Prisma to the test database (Postgres in CI, or fall back to local default)
-const appDir = path.resolve(__dirname, "..");
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/doewe?schema=public";
-}
+// Use the same DATABASE_URL as the main app (set by pretest or .env)
+// pretest already runs: prisma generate && prisma db push && db:seed
 
-const TEST_USER_ID = "test-user";
+const TEST_USER_ID = "test-user-tx";
 process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
 
-// Prepare the test database schema
-beforeAll(() => {
-  execSync("npx prisma generate", { cwd: appDir, stdio: "inherit", env: process.env });
-  execSync("npx prisma db push --force-reset", { cwd: appDir, stdio: "inherit", env: process.env });
+let prisma: import("@prisma/client").PrismaClient;
+let testUserId: string;
+let testAccountId: string;
+let testCategoryId: string;
+
+beforeAll(async () => {
+  const { PrismaClient } = await import("@prisma/client");
+  prisma = new PrismaClient();
+  
+  // Create isolated test user, account, and category
+  const user = await prisma.user.upsert({
+    where: { email: "tx-test@example.com" },
+    update: {},
+    create: { id: TEST_USER_ID, email: "tx-test@example.com", password: "hashed" }
+  });
+  testUserId = user.id;
+  
+  const account = await prisma.account.upsert({
+    where: { id: "acc_tx_test" },
+    update: { userId: user.id },
+    create: { id: "acc_tx_test", name: "TX Test Account", userId: user.id }
+  });
+  testAccountId = account.id;
+  
+  const category = await prisma.category.upsert({
+    where: { userId_name: { userId: user.id, name: "TX Test Category" } },
+    update: {},
+    create: { name: "TX Test Category", userId: user.id }
+  });
+  testCategoryId = category.id;
+  
+  // Clean up any existing transactions for this test account
+  await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
 });
 
-afterAll(() => {
-  // nothing for now; could delete test db file if desired
+afterAll(async () => {
+  // Cleanup test data
+  if (prisma) {
+    await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
+    await prisma.category.deleteMany({ where: { id: testCategoryId } });
+    await prisma.account.deleteMany({ where: { id: testAccountId } });
+    await prisma.user.deleteMany({ where: { id: testUserId } });
+    await prisma.$disconnect();
+  }
 });
 
 describe("/api/transactions", () => {
   it("creates, updates, and lists transactions", async () => {
-    // Seed minimal account & category directly via PrismaClient
-    const { PrismaClient } = await import("@prisma/client");
-    const prisma = new PrismaClient();
-    const user = await prisma.user.create({
-      data: { id: TEST_USER_ID, email: "test@example.com", password: "hashed" }
-    });
-    const account = await prisma.account.create({ data: { name: "Test Account", userId: user.id } });
-    const category = await prisma.category.create({ data: { name: "Test Category", userId: user.id } });
-
-    // Import route after env + schema are ready
+    // Import route
     const routes = await import("../app/api/transactions/route");
     const detailRoutes = await import("../app/api/transactions/[id]/route");
 
     const body = {
-      accountId: account.id,
-      categoryId: category.id,
+      accountId: testAccountId,
+      categoryId: testCategoryId,
       amountCents: 2500,
       description: "Test Tx",
       occurredAt: new Date().toISOString()
@@ -56,8 +77,8 @@ describe("/api/transactions", () => {
     expect(created.amountCents).toBe(2500);
 
     const patchBody = {
-      accountId: account.id,
-      categoryId: category.id,
+      accountId: testAccountId,
+      categoryId: testCategoryId,
       amountCents: -1500,
       description: "Updated Tx",
       occurredAt: created.occurredAt
@@ -94,7 +115,5 @@ describe("/api/transactions", () => {
     expect(listAfterDeleteRes.status).toBe(200);
     const listAfterDelete: Array<{ id: string }> = await listAfterDeleteRes.json();
     expect(listAfterDelete.some((t) => t.id === created.id)).toBe(false);
-
-    await prisma.$disconnect();
   }, 20000);
 });
