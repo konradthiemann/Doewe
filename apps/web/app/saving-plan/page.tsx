@@ -45,7 +45,11 @@ function SavingPlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [editGoal, setEditGoal] = useState<SavingGoal | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<SavingGoal | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const deleteDialogRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
@@ -108,24 +112,50 @@ function SavingPlanPage() {
     setDialogOpen(shouldOpen);
     if (shouldOpen) {
       setFeedback(null);
+      setEditGoal(null);
     }
   }, [searchParams]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
-    if (dialogOpen) {
+    if (dialogOpen || deleteConfirm) {
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = previousOverflow;
       };
     }
     document.body.style.overflow = previousOverflow;
-  }, [dialogOpen]);
+  }, [dialogOpen, deleteConfirm]);
 
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
+    setEditGoal(null);
     router.replace("/saving-plan", { scroll: false });
   }, [router]);
+
+  const openEditDialog = useCallback((goal: SavingGoal) => {
+    setEditGoal(goal);
+    setDialogOpen(true);
+    setFeedback(null);
+  }, []);
+
+  const handleDelete = useCallback(async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/saving-plan/${deleteConfirm.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        throw new Error(t("savingPlan.errorDeleteFailed", { status: res.status }));
+      }
+      await fetchPlan();
+      setFeedback(t("savingPlan.feedbackDeleted"));
+      setDeleteConfirm(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : t("savingPlan.errorDelete"));
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleteConfirm, fetchPlan, t]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -288,6 +318,22 @@ function SavingPlanPage() {
                           {t("savingPlan.timelineUpcoming", { amount: formatCurrency(goal.cumulativeTargetCents - goal.amountCents) })}
                         </p>
                       )}
+                      <div className="mt-3 flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openEditDialog(goal)}
+                          className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                        >
+                          {t("savingPlan.edit")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirm(goal)}
+                          className="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:border-red-500/40 dark:bg-neutral-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                        >
+                          {t("savingPlan.delete")}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </li>
@@ -304,11 +350,63 @@ function SavingPlanPage() {
             ref={dialogRef}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="new-saving-plan-heading"
+            aria-labelledby="saving-plan-dialog-heading"
             className="relative z-10 mx-4 flex w-full max-w-xl justify-center focus:outline-none"
             tabIndex={-1}
           >
-            <PlannedSavingForm headingId="new-saving-plan-heading" onClose={closeDialog} onSuccess={handleSuccess} />
+            <PlannedSavingForm
+              headingId="saving-plan-dialog-heading"
+              onClose={closeDialog}
+              onSuccess={handleSuccess}
+              editGoal={editGoal ? {
+                id: editGoal.id,
+                accountId: editGoal.accountId,
+                title: editGoal.title,
+                month: editGoal.month,
+                year: editGoal.year,
+                amountCents: editGoal.amountCents
+              } : undefined}
+            />
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={() => setDeleteConfirm(null)} />
+          <div
+            ref={deleteDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-heading"
+            aria-describedby="delete-confirm-message"
+            className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg focus:outline-none dark:bg-neutral-800"
+            tabIndex={-1}
+          >
+            <h2 id="delete-confirm-heading" className="text-lg font-semibold text-gray-900 dark:text-neutral-100">
+              {t("savingPlan.confirmDeleteTitle")}
+            </h2>
+            <p id="delete-confirm-message" className="mt-2 text-sm text-gray-600 dark:text-neutral-400">
+              {t("savingPlan.confirmDeleteMessage", { title: deleteConfirm.title })}
+            </p>
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleting}
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+              >
+                {t("savingPlan.confirmDeleteCancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="inline-flex items-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
+              >
+                {deleting ? t("savingPlan.deleting") : t("savingPlan.confirmDeleteConfirm")}
+              </button>
+            </div>
           </div>
         </div>
       )}
