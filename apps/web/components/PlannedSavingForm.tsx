@@ -268,7 +268,11 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
             aria-invalid={!!error && form.amount.trim() === ""}
             placeholder={t("savingPlan.form.amountPlaceholder")}
+            aria-describedby="saving-amount-hint"
           />
+          <p id="saving-amount-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
+            {t("savingPlan.form.amountHint")}
+          </p>
         </div>
       </div>
 
