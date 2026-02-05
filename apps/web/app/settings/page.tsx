@@ -7,6 +7,13 @@ import { useI18n } from "../../lib/i18n";
 
 type Category = { id: string; name: string; isIncome: boolean };
 
+// Protected category names that cannot be modified or deleted
+const PROTECTED_CATEGORY_NAMES = ["savings", "sparen"];
+
+function isProtectedCategory(name: string): boolean {
+  return PROTECTED_CATEGORY_NAMES.includes(name.toLowerCase().trim());
+}
+
 export default function SettingsPage() {
   const { data } = useSession();
   const { locale, setLocale, t } = useI18n();
@@ -20,6 +27,20 @@ export default function SettingsPage() {
   const [fallbackTarget, setFallbackTarget] = useState<Record<string, string>>({});
   const [fallbackName, setFallbackName] = useState<Record<string, string>>({});
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [categoriesSectionOpen, setCategoriesSectionOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+  const toggleCategoryExpanded = useCallback((id: string) => {
+    setExpandedCategories((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   const setBusy = useCallback((id: string, busy: boolean) => {
     setBusyIds((current) => {
@@ -185,20 +206,43 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm space-y-4 dark:border-neutral-700 dark:bg-neutral-900/95">
-        <div className="flex items-start justify-between gap-3">
+      <div className="rounded-xl border border-gray-200 bg-white/95 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+        <button
+          type="button"
+          onClick={() => setCategoriesSectionOpen((prev) => !prev)}
+          aria-expanded={categoriesSectionOpen}
+          aria-controls="categories-section-content"
+          className="flex w-full items-center justify-between p-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-xl"
+        >
           <div>
             <h2 className="text-lg font-medium">{t("settings.categories.title")}</h2>
             <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.categories.subtitle")}</p>
           </div>
-          <button
-            type="button"
-            onClick={refreshCategories}
-            className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+          <svg
+            className={`h-5 w-5 text-gray-500 transition-transform duration-200 dark:text-neutral-400 ${categoriesSectionOpen ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
           >
-            {catLoading ? t("settings.categories.loading") : t("settings.categories.refresh")}
-          </button>
-        </div>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div
+          id="categories-section-content"
+          className={`space-y-4 overflow-hidden transition-all duration-200 ${categoriesSectionOpen ? "p-4 pt-0" : "max-h-0 p-0"}`}
+          hidden={!categoriesSectionOpen}
+        >
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={refreshCategories}
+              className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+            >
+              {catLoading ? t("settings.categories.loading") : t("settings.categories.refresh")}
+            </button>
+          </div>
 
         {catError && <p className="text-sm text-red-600" role="alert">{catError}</p>}
         {catMessage && <p className="text-sm text-green-700" role="status">{catMessage}</p>}
@@ -207,22 +251,53 @@ export default function SettingsPage() {
         {noCategories && <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.categories.listEmpty")}</p>}
 
         <div className="space-y-3">
-          {categories.map((category) => (
-            <div key={category.id} className="rounded-lg border border-gray-200 bg-white/80 p-3 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/80">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+          {categories.map((category) => {
+            const isExpanded = expandedCategories.has(category.id);
+            const isProtected = isProtectedCategory(category.name);
+            return (
+            <div key={category.id} className="rounded-lg border border-gray-200 bg-white/80 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/80">
+              <button
+                type="button"
+                onClick={() => toggleCategoryExpanded(category.id)}
+                aria-expanded={isExpanded}
+                aria-controls={`category-content-${category.id}`}
+                className="flex w-full items-center justify-between p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-lg"
+              >
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">{category.name}</p>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                     category.isIncome ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
                   }`}>
                     {category.isIncome ? t("settings.categories.badgeIncome") : t("settings.categories.badgeOutcome")}
                   </span>
+                  {isProtected && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
+                      {t("settings.categories.badgeProtected")}
+                    </span>
+                  )}
+                  {isBusy(category.id) && (
+                    <span className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.working")}</span>
+                  )}
                 </div>
-                {isBusy(category.id) && (
-                  <span className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.working")}</span>
-                )}
-              </div>
+                <svg
+                  className={`h-4 w-4 text-gray-500 transition-transform duration-200 dark:text-neutral-400 ${isExpanded ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
+              <div
+                id={`category-content-${category.id}`}
+                className={`overflow-hidden transition-all duration-200 ${isExpanded ? "p-3 pt-0" : "max-h-0"}`}
+                hidden={!isExpanded}
+              >
+                {isProtected ? (
+                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("settings.categories.protectedHint")}</p>
+                ) : (
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-700 dark:text-neutral-200" htmlFor={`rename-${category.id}`}>
@@ -312,8 +387,12 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.deleteHint")}</p>
                 </div>
               </div>
+              )}
+              </div>
             </div>
-          ))}
+          );
+          })}
+        </div>
         </div>
       </div>
     </main>

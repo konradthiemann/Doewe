@@ -4,6 +4,13 @@ import { z } from "zod";
 import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 
+// Protected category names that cannot be created by users
+const PROTECTED_CATEGORY_NAMES = ["savings", "sparen"];
+
+function isProtectedCategoryName(name: string): boolean {
+  return PROTECTED_CATEGORY_NAMES.includes(name.toLowerCase().trim());
+}
+
 const CategoryInput = z.object({
   name: z.string().min(1, "Name is required"),
   isIncome: z.boolean().optional().default(false)
@@ -74,6 +81,11 @@ export async function POST(req: Request) {
   const parsed = CategoryInput.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  // Prevent creating categories with protected names
+  if (isProtectedCategoryName(parsed.data.name)) {
+    return NextResponse.json({ error: "This category name is reserved" }, { status: 403 });
   }
   
   try {
