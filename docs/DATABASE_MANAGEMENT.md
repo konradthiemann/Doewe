@@ -131,9 +131,19 @@ Erforderliche Secrets für Production-Migrationen:
 
 | Secret | Beschreibung |
 |--------|--------------|
-| `DATABASE_URL` | PostgreSQL Connection String für Production |
+| `DATABASE_URL` | **PUBLIC** PostgreSQL Connection String für Production |
 
-Format: `postgresql://user:password@host:5432/database?schema=public`
+**⚠️ WICHTIG für Railway/Supabase/etc.:**
+- Verwende die **PUBLIC/EXTERNAL** Database URL, nicht die interne!
+- Interne URLs (z.B. `postgres.railway.internal`) funktionieren nur innerhalb des Hosting-Netzwerks
+- GitHub Actions benötigt die öffentliche URL
+
+**Railway Beispiel:**
+- ❌ Falsch: `postgresql://...@postgres.railway.internal:5432/railway`
+- ✅ Richtig: `postgresql://...@roundhouse.proxy.rlwy.net:12345/railway`
+
+In Railway findest du die öffentliche URL unter:
+- Project → PostgreSQL → Connect → `DATABASE_PUBLIC_URL`
 
 ---
 
