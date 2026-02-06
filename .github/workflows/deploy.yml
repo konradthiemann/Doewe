@@ -1,0 +1,42 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel migrations in progress
+
+jobs:
+  migrate:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      
+      - run: npm ci
+      
+      - name: Generate Prisma Client
+        run: npm --workspace @doewe/web run prisma:generate
+      
+      - name: Run Migrations on Production
+        run: npm --workspace @doewe/web run prisma:migrate:deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+  # Add your deployment steps here (e.g., Vercel, Railway, etc.)
+  # The deployment should happen AFTER migrations complete
+  # deploy:
+  #   name: Deploy Application
+  #   runs-on: ubuntu-latest
+  #   needs: [migrate]
+  #   steps:
+  #     - ... your deployment steps

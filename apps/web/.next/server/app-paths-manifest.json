@@ -1,24 +1,6 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/api/accounts/route": "app/api/accounts/route.js",
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
-  "/api/auth/register/route": "app/api/auth/register/route.js",
-  "/api/budgets/route": "app/api/budgets/route.js",
-  "/api/categories/[id]/route": "app/api/categories/[id]/route.js",
-  "/api/categories/route": "app/api/categories/route.js",
-  "/api/recurring-transactions/route": "app/api/recurring-transactions/route.js",
-  "/api/recurring-transactions/[id]/route": "app/api/recurring-transactions/[id]/route.js",
-  "/api/recurring-transactions/skips/route": "app/api/recurring-transactions/skips/route.js",
-  "/api/saving-plan/route": "app/api/saving-plan/route.js",
-  "/api/saving-plan/[id]/route": "app/api/saving-plan/[id]/route.js",
-  "/api/transactions/route": "app/api/transactions/route.js",
-  "/budgets/page": "app/budgets/page.js",
-  "/api/transactions/[id]/route": "app/api/transactions/[id]/route.js",
-  "/page": "app/page.js",
-  "/saving-plan/page": "app/saving-plan/page.js",
   "/settings/page": "app/settings/page.js",
+  "/saving-plan/page": "app/saving-plan/page.js",
   "/transactions/page": "app/transactions/page.js",
-  "/login/page": "app/login/page.js",
-  "/api/analytics/quarterly/route": "app/api/analytics/quarterly/route.js",
-  "/api/analytics/summary/route": "app/api/analytics/summary/route.js"
+  "/page": "app/page.js"
 }
