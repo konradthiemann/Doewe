@@ -84,11 +84,11 @@ export async function GET() {
 
   // Planned savings (Budget with categoryId null) for current month only
   const { month, year } = getMonthYear(now);
-  const plannedBudget = await prisma.budget.findFirst({
+  const plannedBudgetAgg = await prisma.budget.aggregate({
     where: { accountId, categoryId: null, month, year },
-    select: { amountCents: true }
+    _sum: { amountCents: true }
   });
-  const plannedSavings = plannedBudget ? plannedBudget.amountCents / 100 : 0;
+  const plannedSavings = (plannedBudgetAgg._sum.amountCents ?? 0) / 100;
 
   // === NEW: Fetch recurring transactions for current month ===
   const recurringTransactions = await prisma.recurringTransaction.findMany({
@@ -223,6 +223,11 @@ export async function GET() {
     savingsDaily[i] = adjustedSavings;
   }
 
+  // Projected totals including recurring transactions
+  const projectedIncomeTotal = incomeTotal + recurringIncomeTotal;
+  const projectedOutcomeTotal = outcomeTotalExclSavings + recurringOutcomeTotal;
+  const projectedRemaining = projectedIncomeTotal - projectedOutcomeTotal - monthlySavingsActual;
+
   // Merge recurring transactions into category breakdown
   for (const [catId, amount] of Object.entries(recurringByCategory)) {
     byCategory[catId] = (byCategory[catId] || 0) + amount;
@@ -252,6 +257,9 @@ export async function GET() {
     monthlySavingsActual,
     remaining,
     plannedSavings,
+    projectedIncomeTotal,
+    projectedOutcomeTotal,
+    projectedRemaining,
     outgoingByCategory: finalOutgoingByCategory,
     recurringTransactions: activeRecurringThisMonth.map((r) => ({
       id: r.id,
