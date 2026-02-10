@@ -82,21 +82,6 @@ export async function GET() {
     }
   }
 
-  // Resolve category names
-  const catIds = Object.keys(byCategory).filter((id) => id !== "uncategorized");
-  const categories = await prisma.category.findMany({
-    where: { id: { in: catIds }, userId: user.id },
-    select: { id: true, name: true }
-  });
-  const nameMap: Record<string, string> = {};
-  for (const c of categories) nameMap[c.id] = c.name;
-
-  const outgoingByCategory = Object.entries(byCategory).map(([id, amount]) => ({
-    id,
-    name: id === "uncategorized" ? "Uncategorized" : nameMap[id] ?? id,
-    amount
-  }));
-
   // Planned savings (Budget with categoryId null) for current month only
   const { month, year } = getMonthYear(now);
   const plannedBudget = await prisma.budget.findFirst({
@@ -105,12 +90,78 @@ export async function GET() {
   });
   const plannedSavings = plannedBudget ? plannedBudget.amountCents / 100 : 0;
 
+  // === NEW: Fetch recurring transactions for current month ===
+  const recurringTransactions = await prisma.recurringTransaction.findMany({
+    where: { accountId },
+    select: {
+      id: true,
+      amountCents: true,
+      description: true,
+      categoryId: true,
+      intervalMonths: true,
+      dayOfMonth: true,
+      nextOccurrence: true
+    }
+  });
+
+  // Filter recurring transactions that occur in current month
+  const recurringThisMonth = recurringTransactions.filter((rec) => {
+    const nextDate = new Date(rec.nextOccurrence);
+    const nextYear = nextDate.getFullYear();
+    const nextMonth = nextDate.getMonth() + 1;
+    
+    // Check if this recurring transaction occurs in current month
+    if (nextYear === year && nextMonth === month) {
+      return true;
+    }
+    
+    // Check if transaction repeats and would occur in current month
+    const interval = rec.intervalMonths || 1;
+    const monthsSinceNext = (year - nextYear) * 12 + (month - nextMonth);
+    return monthsSinceNext >= 0 && monthsSinceNext % interval === 0;
+  });
+
+  // Check for skips
+  const skips = await prisma.recurringTransactionSkip.findMany({
+    where: {
+      recurringId: { in: recurringThisMonth.map((r) => r.id) },
+      year,
+      month
+    },
+    select: { recurringId: true }
+  });
+  const skippedIds = new Set(skips.map((s) => s.recurringId));
+
+  // Filter out skipped transactions
+  const activeRecurringThisMonth = recurringThisMonth.filter((r) => !skippedIds.has(r.id));
+
+  // Calculate recurring transaction totals
+  let recurringIncomeTotal = 0;
+  let recurringOutcomeTotal = 0;
+  const recurringByCategory: Record<string, number> = {};
+
+  for (const rec of activeRecurringThisMonth) {
+    const amt = rec.amountCents / 100;
+    if (amt >= 0) {
+      recurringIncomeTotal += amt;
+    } else {
+      const abs = -amt;
+      recurringOutcomeTotal += abs;
+      if (rec.categoryId && rec.categoryId !== savingsCatId) {
+        const key = rec.categoryId;
+        recurringByCategory[key] = (recurringByCategory[key] || 0) + abs;
+      }
+    }
+  }
+
   // Remaining cash after non-savings outgoings and savings transfers
   const remaining = incomeTotal - outcomeTotalExclSavings - monthlySavingsActual;
 
   // Build daily cumulative lines (income, outcome excl savings, global savings adjusted)
   const daysInMonth = new Date(year, month, 0).getDate();
   const byDay = Array.from({ length: daysInMonth }, () => ({ inc: 0, out: 0, sav: 0 }));
+  
+  // Add actual transactions
   for (const t of txs) {
     const day = t.occurredAt.getDate();
     const idx = day - 1;
@@ -121,6 +172,20 @@ export async function GET() {
       byDay[idx].sav += -amt; // savings are positive for accumulation
     } else {
       byDay[idx].out += -amt; // outgoings are positive for charting
+    }
+  }
+
+  // Add recurring transactions to their scheduled day
+  for (const rec of activeRecurringThisMonth) {
+    const day = Math.min(rec.dayOfMonth || 1, daysInMonth);
+    const idx = day - 1;
+    const amt = rec.amountCents / 100;
+    if (amt >= 0) {
+      byDay[idx].inc += amt;
+    } else if (savingsCatId && rec.categoryId === savingsCatId) {
+      byDay[idx].sav += -amt;
+    } else {
+      byDay[idx].out += -amt;
     }
   }
 
@@ -158,6 +223,26 @@ export async function GET() {
     savingsDaily[i] = adjustedSavings;
   }
 
+  // Merge recurring transactions into category breakdown
+  for (const [catId, amount] of Object.entries(recurringByCategory)) {
+    byCategory[catId] = (byCategory[catId] || 0) + amount;
+  }
+
+  // Recalculate outgoingByCategory with recurring included
+  const updatedCatIds = Object.keys(byCategory).filter((id) => id !== "uncategorized");
+  const updatedCategories = await prisma.category.findMany({
+    where: { id: { in: updatedCatIds }, userId: user.id },
+    select: { id: true, name: true }
+  });
+  const updatedNameMap: Record<string, string> = {};
+  for (const c of updatedCategories) updatedNameMap[c.id] = c.name;
+
+  const finalOutgoingByCategory = Object.entries(byCategory).map(([id, amount]) => ({
+    id,
+    name: id === "uncategorized" ? "Uncategorized" : updatedNameMap[id] ?? id,
+    amount
+  }));
+
   return NextResponse.json({
     totalBalance,
     carryoverFromLastMonth,
@@ -167,7 +252,16 @@ export async function GET() {
     monthlySavingsActual,
     remaining,
     plannedSavings,
-    outgoingByCategory,
+    outgoingByCategory: finalOutgoingByCategory,
+    recurringTransactions: activeRecurringThisMonth.map((r) => ({
+      id: r.id,
+      description: r.description,
+      amountCents: r.amountCents,
+      categoryId: r.categoryId,
+      dayOfMonth: r.dayOfMonth
+    })),
+    recurringIncomeTotal,
+    recurringOutcomeTotal,
     daily: {
       labels: Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`),
       income: incomeDaily,
