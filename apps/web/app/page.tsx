@@ -41,7 +41,28 @@ export default function HomePage() {
     plannedSavings: number;
     monthlySavingsActual: number;
     outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
-  }>({ totalBalance: 0, carryoverFromLastMonth: 0, incomeTotal: 0, outcomeTotal: 0, remaining: 0, plannedSavings: 0, monthlySavingsActual: 0, outgoingByCategory: [] });
+    recurringTransactions?: Array<{
+      id: string;
+      description: string;
+      amountCents: number;
+      categoryId: string | null;
+      dayOfMonth: number | null;
+    }>;
+    recurringIncomeTotal?: number;
+    recurringOutcomeTotal?: number;
+  }>({
+    totalBalance: 0,
+    carryoverFromLastMonth: 0,
+    incomeTotal: 0,
+    outcomeTotal: 0,
+    remaining: 0,
+    plannedSavings: 0,
+    monthlySavingsActual: 0,
+    outgoingByCategory: [],
+    recurringTransactions: [],
+    recurringIncomeTotal: 0,
+    recurringOutcomeTotal: 0
+  });
   
   const [quarterly, setQuarterly] = useState<{
     quarters: Array<{ month: number; year: number; incomeCents: number; outcomeCents: number; savingsCents: number; balanceCents: number }>;
@@ -268,6 +289,10 @@ export default function HomePage() {
   const formatCurrency = (value: number) =>
     `${value.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
+  const recurringTransactions = summary.recurringTransactions || [];
+  const recurringIncomeTotal = summary.recurringIncomeTotal || 0;
+  const recurringOutcomeTotal = summary.recurringOutcomeTotal || 0;
+
   return (
     <main id="maincontent" className="p-6 space-y-8">
       <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -337,6 +362,63 @@ export default function HomePage() {
             </figure>
           ) : (
             <p className="text-sm text-gray-500">{t("dashboard.addIncomeTransactions")}</p>
+          )}
+        </div>
+      </section>
+
+      {/* Recurring Transactions Section */}
+      <section aria-labelledby="recurring-overview" className="max-w-3xl">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="recurring-overview" className="text-lg font-medium mb-1">
+            {t("dashboard.recurringOverview")}
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">
+            {t("dashboard.recurringSubtitle")}
+          </p>
+
+          {loading ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
+          ) : recurringTransactions.length > 0 ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringIncome")}</p>
+                  <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                    {formatCurrency(recurringIncomeTotal)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringOutcome")}</p>
+                  <p className="text-2xl font-semibold text-red-600 dark:text-red-400">
+                    {formatCurrency(recurringOutcomeTotal)}
+                  </p>
+                </div>
+              </div>
+
+              <ul className="space-y-2">
+                {recurringTransactions.map((rec) => (
+                  <li key={rec.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 truncate">
+                        {rec.description}
+                      </p>
+                      {rec.dayOfMonth && (
+                        <p className="text-xs text-gray-500 dark:text-neutral-400">
+                          {t("dashboard.recurringDay", { day: rec.dayOfMonth })}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`text-sm font-semibold ml-3 ${
+                      rec.amountCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+                    }`}>
+                      {formatCurrency(rec.amountCents / 100)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.noRecurring")}</p>
           )}
         </div>
       </section>
