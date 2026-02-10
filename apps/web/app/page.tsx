@@ -50,6 +50,9 @@ export default function HomePage() {
     }>;
     recurringIncomeTotal?: number;
     recurringOutcomeTotal?: number;
+    projectedIncomeTotal?: number;
+    projectedOutcomeTotal?: number;
+    projectedRemaining?: number;
   }>({
     totalBalance: 0,
     carryoverFromLastMonth: 0,
@@ -61,7 +64,10 @@ export default function HomePage() {
     outgoingByCategory: [],
     recurringTransactions: [],
     recurringIncomeTotal: 0,
-    recurringOutcomeTotal: 0
+    recurringOutcomeTotal: 0,
+    projectedIncomeTotal: 0,
+    projectedOutcomeTotal: 0,
+    projectedRemaining: 0
   });
   
   const [quarterly, setQuarterly] = useState<{
@@ -119,21 +125,17 @@ export default function HomePage() {
     [summary.outgoingByCategory]
   );
 
-  // Totals and remaining for current month
-  const remaining = Math.round(summary.remaining * 100) / 100;
-  const totalIncome = Math.max(0, summary.incomeTotal || 0);
-  const totalOutcome = Math.max(0, summary.outcomeTotal || 0);
+  // Projected totals for current month (including recurring transactions)
+  const projectedIncome = Math.max(0, summary.projectedIncomeTotal ?? (summary.incomeTotal + (summary.recurringIncomeTotal || 0)));
+  const projectedOutcome = Math.max(0, summary.projectedOutcomeTotal ?? (summary.outcomeTotal + (summary.recurringOutcomeTotal || 0)));
   const totalSavingsTransfer = Math.max(0, summary.monthlySavingsActual || 0);
-  const spentActual = Math.max(0, totalOutcome + totalSavingsTransfer);
-  const leftActual = Math.max(0, summary.remaining || 0);
-  const clampedRemaining = Math.max(0, Math.min(totalIncome, leftActual));
-  const spentForChart = totalIncome > 0 ? Math.min(spentActual, totalIncome) : 0;
-  const leftForChart = totalIncome > 0 ? Math.max(0, totalIncome - spentForChart) : 0;
-  const overspent = totalIncome > 0 ? Math.max(0, spentActual - totalIncome) : spentActual;
-  const spentPercent = totalIncome > 0 ? Math.round((spentActual / totalIncome) * 100) : 0;
-  const leftPercent = totalIncome > 0 ? Math.max(0, Math.round((clampedRemaining / totalIncome) * 100)) : 0;
-  const overspentPercent = totalIncome > 0 ? Math.max(0, Math.round((overspent / totalIncome) * 100)) : 0;
-  const hasIncomeData = totalIncome > 0;
+  const projectedSpent = projectedOutcome + totalSavingsTransfer;
+  const projectedLeft = Math.max(0, projectedIncome - projectedSpent);
+  const spentPercent = projectedIncome > 0 ? Math.min(100, Math.round((projectedSpent / projectedIncome) * 100)) : 0;
+  const leftPercent = projectedIncome > 0 ? Math.max(0, 100 - spentPercent) : 0;
+  const overspent = projectedIncome > 0 ? Math.max(0, projectedSpent - projectedIncome) : projectedSpent;
+  const overspentPercent = projectedIncome > 0 ? Math.max(0, Math.round((overspent / projectedIncome) * 100)) : 0;
+  const hasIncomeData = projectedIncome > 0;
 
   // Warm palette (reds/oranges/yellows) for outgoings only – avoids greens/blues/purples
   const warmPalette = [
@@ -154,34 +156,10 @@ export default function HomePage() {
   const step = 5; // co-prime with warmPalette.length for better spread
   const outColors = outgoingLabels.map((_, i) => warmPalette[(i * step) % warmPalette.length]);
 
-  // Additional slices: Remaining (left), Actual savings (blue), Remaining to save (greyish blue)
-  const remainingSlice = Math.max(0, remaining);
-  const remainingColorPie = "#6BAA75"; // greyish green for money left
-  const actualSavingsSlice = Math.max(0, Math.min(summary.monthlySavingsActual || 0, Number.POSITIVE_INFINITY));
-  const remainingToSaveSlice = Math.max(0, summary.plannedSavings - (summary.monthlySavingsActual || 0));
-  const actualSavingsColor = "#3B82F6"; // blue-500
-  const remainingToSaveColor = "#64748B"; // slate-500 (greyish blue)
-
-  const doughnutLabels = [
-    ...outgoingLabels,
-    ...(remainingSlice > 0 ? [t("dashboard.doughnutRemainingLeft")] : []),
-    ...(actualSavingsSlice > 0 ? [t("dashboard.doughnutActualSavings")] : []),
-    ...(remainingToSaveSlice > 0 ? [t("dashboard.doughnutRemainingToSave")] : [])
-  ];
-
-  const doughnutValues = [
-    ...outgoingValues,
-    ...(remainingSlice > 0 ? [remainingSlice] : []),
-    ...(actualSavingsSlice > 0 ? [actualSavingsSlice] : []),
-    ...(remainingToSaveSlice > 0 ? [remainingToSaveSlice] : [])
-  ];
-
-  const doughnutColors = [
-    ...outColors,
-    ...(remainingSlice > 0 ? [remainingColorPie] : []),
-    ...(actualSavingsSlice > 0 ? [actualSavingsColor] : []),
-    ...(remainingToSaveSlice > 0 ? [remainingToSaveColor] : [])
-  ];
+  // Doughnut chart shows only outcome categories
+  const doughnutLabels = outgoingLabels;
+  const doughnutValues = outgoingValues;
+  const doughnutColors = outColors;
 
   const doughnutData = {
     labels: doughnutLabels,
@@ -200,7 +178,7 @@ export default function HomePage() {
   const actualSavings = summary.monthlySavingsActual || 0;
   const plannedColor = "#6366F1"; // indigo
   const actualColor = "#16A34A"; // green
-  const savingsProgress = Math.min(100, Math.round((actualSavings / plannedSavings) * 100));
+  const savingsProgress = plannedSavings > 0 ? Math.min(100, Math.round((actualSavings / plannedSavings) * 100)) : 0;
 
   const doughnutOptions: ChartOptions<"doughnut"> = {
     plugins: {
@@ -226,66 +204,6 @@ export default function HomePage() {
     }
   };
 
-  const incomeUsageData = {
-    labels: [t("dashboard.currentMonthIncome")],
-    datasets: [
-      {
-        label: t("dashboard.spent"),
-        data: [hasIncomeData ? spentForChart : 0],
-        backgroundColor: "#DC2626",
-        borderRadius: 12
-      },
-      {
-        label: t("dashboard.left"),
-        data: [hasIncomeData ? leftForChart : 0],
-        backgroundColor: "#16A34A",
-        borderRadius: 12
-      }
-    ]
-  };
-
-  const incomeUsageOptions: ChartOptions<"bar"> = {
-    indexAxis: "y",
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "bottom",
-        labels: {
-          boxWidth: isMobile ? 12 : 18,
-          font: { size: isMobile ? 10 : 12 }
-        }
-      },
-      title: {
-        display: true,
-        text: t("dashboard.incomeUsageTitle")
-      },
-      datalabels: {
-        color: "#111827",
-        formatter: (value: number) => {
-          if (!value) return "";
-          return `${value.toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`;
-        },
-        font: { size: isMobile ? 10 : 12, weight: "bold" as const }
-      }
-    },
-    scales: {
-      x: {
-        stacked: true,
-        beginAtZero: true,
-        ticks: {
-          callback: (value) => `${Number(value).toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
-        },
-        suggestedMax: hasIncomeData ? Math.max(totalIncome, spentForChart) : undefined,
-        grid: { color: "rgba(203,213,225,0.4)" }
-      },
-      y: {
-        stacked: true,
-        grid: { display: false }
-      }
-    }
-  };
-
   const formatCurrency = (value: number) =>
     `${value.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
@@ -295,6 +213,31 @@ export default function HomePage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
+      {/* Account Balance & Carryover Section */}
+      <section aria-labelledby="balance-overview" className="max-w-3xl">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="balance-overview" className="text-lg font-medium mb-4">
+            {t("dashboard.balanceOverview")}
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalance")}</p>
+              <p className={`text-2xl font-semibold ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                {formatCurrency(summary.totalBalance)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalanceHint")}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverFromLastMonth")}</p>
+              <p className={`text-2xl font-semibold ${summary.carryoverFromLastMonth >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+                {formatCurrency(summary.carryoverFromLastMonth)}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverHint")}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
@@ -310,30 +253,49 @@ export default function HomePage() {
         </div>
 
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
-          <h2 id="income-usage-heading" className="text-lg font-medium mb-3">
+          <h2 id="income-usage-heading" className="text-lg font-medium mb-1">
             {t("dashboard.monthlyIncomeUsage")}
           </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">{t("dashboard.incomeUsageSubtitle")}</p>
           {loading ? (
             <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
           ) : hasIncomeData ? (
             <figure aria-labelledby="income-usage-heading income-usage-summary" className="space-y-4">
-              <div className="h-40">
-                <Bar data={incomeUsageData} options={incomeUsageOptions} />
+              {/* Progress bar: green background (income = 100%), red fill (outcome %) */}
+              <div className="space-y-2">
+                <div className="relative w-full h-8 rounded-full overflow-hidden bg-emerald-500 dark:bg-emerald-600">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-l-full bg-red-500 dark:bg-red-600 transition-all duration-500"
+                    style={{ width: `${Math.min(100, spentPercent)}%` }}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={spentPercent}
+                    aria-label={t("dashboard.incomeUsageTitle")}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow">
+                    {spentPercent}%
+                  </div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-600 dark:text-neutral-400">
+                  <span>{t("dashboard.spent")}: {formatCurrency(projectedSpent)}</span>
+                  <span>{t("dashboard.left")}: {formatCurrency(projectedLeft)}</span>
+                </div>
               </div>
               <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
                 <dl className="grid gap-3 sm:grid-cols-3" aria-label={t("dashboard.incomeReportBreakdown")}>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.spent")}</dt>
-                    <dd className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(spentActual)}</dd>
+                    <dd className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(projectedSpent)}</dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
                       {t("dashboard.spentOfIncome", { percent: spentPercent })}
                     </p>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.left")}</dt>
-                    <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(leftActual)}</dd>
+                    <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(projectedLeft)}</dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
-                      {leftActual > 0
+                      {projectedLeft > 0
                         ? t("dashboard.leftAvailable", { percent: leftPercent })
                         : t("dashboard.fullyAllocated")}
                     </p>
@@ -352,10 +314,10 @@ export default function HomePage() {
                 </dl>
                 <p>
                   {t("dashboard.spentSummary", {
-                    spent: formatCurrency(spentActual),
-                    income: formatCurrency(totalIncome)
+                    spent: formatCurrency(projectedSpent),
+                    income: formatCurrency(projectedIncome)
                   })}
-                  {leftActual > 0 && ` ${t("dashboard.leftSummary", { left: formatCurrency(leftActual) })}`}
+                  {projectedLeft > 0 && ` ${t("dashboard.leftSummary", { left: formatCurrency(projectedLeft) })}`}
                   {overspent > 0 && ` ${t("dashboard.overspentSummary", { overspent: formatCurrency(overspent) })}`}
                 </p>
               </figcaption>
@@ -368,14 +330,21 @@ export default function HomePage() {
 
       {/* Recurring Transactions Section */}
       <section aria-labelledby="recurring-overview" className="max-w-3xl">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
-          <h2 id="recurring-overview" className="text-lg font-medium mb-1">
-            {t("dashboard.recurringOverview")}
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">
-            {t("dashboard.recurringSubtitle")}
-          </p>
-
+        <details className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
+          <summary className="flex items-center justify-between cursor-pointer p-5 select-none list-none [&::-webkit-details-marker]:hidden">
+            <div>
+              <h2 id="recurring-overview" className="text-lg font-medium mb-1">
+                {t("dashboard.recurringOverview")}
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">
+                {t("dashboard.recurringSubtitle")}
+              </p>
+            </div>
+            <svg className="w-5 h-5 text-gray-500 dark:text-neutral-400 transition-transform group-open:rotate-180 shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </summary>
+          <div className="px-5 pb-5">
           {loading ? (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
           ) : recurringTransactions.length > 0 ? (
@@ -420,7 +389,8 @@ export default function HomePage() {
           ) : (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.noRecurring")}</p>
           )}
-        </div>
+          </div>
+        </details>
       </section>
 
       <section aria-labelledby="savings-overview" className="max-w-3xl">
@@ -594,31 +564,6 @@ export default function HomePage() {
           ) : (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
           )}
-        </div>
-      </section>
-
-      {/* Account Balance & Carryover Section */}
-      <section aria-labelledby="balance-overview" className="max-w-3xl">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
-          <h2 id="balance-overview" className="text-lg font-medium mb-4">
-            {t("dashboard.balanceOverview")}
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalance")}</p>
-              <p className={`text-2xl font-semibold ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                {formatCurrency(summary.totalBalance)}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalanceHint")}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverFromLastMonth")}</p>
-              <p className={`text-2xl font-semibold ${summary.carryoverFromLastMonth >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
-                {formatCurrency(summary.carryoverFromLastMonth)}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverHint")}</p>
-            </div>
-          </div>
         </div>
       </section>
 

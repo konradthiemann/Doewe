@@ -107,6 +107,7 @@ export const en: Record<string, string> = {
   "dashboard.outgoingsByCategory": "Outgoings by category (pie)",
   "dashboard.noOutgoings": "No outgoings this month.",
   "dashboard.monthlyIncomeUsage": "Monthly income usage",
+  "dashboard.incomeUsageSubtitle": "Including recurring transactions",
   "dashboard.incomeUsageTitle": "Current month income usage",
   "dashboard.incomeReportBreakdown": "Income report breakdown",
   "dashboard.spent": "Spent",
