@@ -129,7 +129,7 @@ export async function GET() {
   const remainingToSave = Math.max(totalTargetCents - availableCents, 0);
 
   if (remainingToSave > 0 && goals.length > 0) {
-    let usedAvailable = availableCents;
+    const usedAvailable = availableCents;
 
     for (const goal of goals) {
       cumulativeAmount += goal.amountCents;
