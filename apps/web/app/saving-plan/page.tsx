@@ -24,6 +24,7 @@ type SavingPlanResponse = {
   totals: {
     availableCents: number;
     totalTargetCents: number;
+    suggestedMonthlyCents: number;
   };
 };
 
@@ -203,7 +204,7 @@ function SavingPlanPage() {
         <h2 id="saving-plan-summary" className="text-lg font-medium">
           {t("savingPlan.summaryTitle")}
         </h2>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryAvailable")}</p>
             <p className="text-xl font-semibold">{formatCurrency(availableCents)}</p>
@@ -213,6 +214,11 @@ function SavingPlanPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryPlannedTotal")}</p>
             <p className="text-xl font-semibold">{formatCurrency(plan?.totals.totalTargetCents ?? 0)}</p>
             <p className="text-xs text-slate-600 dark:text-neutral-400">{t("savingPlan.summaryPlannedHelp")}</p>
+          </div>
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-900/20 dark:text-indigo-200">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">{t("savingPlan.summarySuggestedMonthly")}</p>
+            <p className="text-xl font-semibold">{formatCurrency(plan?.totals.suggestedMonthlyCents ?? 0)}</p>
+            <p className="text-xs text-indigo-700 dark:text-indigo-300">{t("savingPlan.summarySuggestedMonthlyHelp")}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryRemainingAfter")}</p>
