@@ -165,6 +165,8 @@ export const de: Record<string, string> = {
   "savingPlan.summaryAvailableHelp": "Derzeit für Ziele reserviertes Geld.",
   "savingPlan.summaryPlannedTotal": "Geplante Summe",
   "savingPlan.summaryPlannedHelp": "Summe aller geplanten Sparziele.",
+  "savingPlan.summarySuggestedMonthly": "Geplantes Sparen",
+  "savingPlan.summarySuggestedMonthlyHelp": "Gleichmäßiger Monatsbetrag, um alle Ziele rechtzeitig zu erreichen.",
   "savingPlan.summaryRemainingAfter": "Übrig nach Zielen",
   "savingPlan.summaryRemainingHelpPositive": "Zusätzliches Sparen, sobald alle Ziele erreicht sind.",
   "savingPlan.summaryRemainingHelpNegative": "Zusätzliches Sparen erscheint, sobald die Ziele erreicht sind.",

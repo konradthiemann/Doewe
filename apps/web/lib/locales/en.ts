@@ -165,6 +165,8 @@ export const en: Record<string, string> = {
   "savingPlan.summaryAvailableHelp": "Money currently set aside for goals.",
   "savingPlan.summaryPlannedTotal": "Planned total",
   "savingPlan.summaryPlannedHelp": "Sum of all planned savings goals.",
+  "savingPlan.summarySuggestedMonthly": "Planned savings",
+  "savingPlan.summarySuggestedMonthlyHelp": "Equal monthly amount to reach every goal on time.",
   "savingPlan.summaryRemainingAfter": "Remaining after goals",
   "savingPlan.summaryRemainingHelpPositive": "Extra savings once all goals are covered.",
   "savingPlan.summaryRemainingHelpNegative": "Extra savings will appear once goals are met.",
