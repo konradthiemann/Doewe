@@ -45,11 +45,15 @@ export async function GET() {
   }
   const carryoverFromLastMonth = carryoverCents / 100;
 
-  // Resolve special category for savings (if present)
-  const savingsCategory = await prisma.category.findFirst({
-    where: { name: "Savings", userId: user.id },
-    select: { id: true }
+  // Resolve special category for savings (if present) – match both EN "Savings" and DE "Sparen"
+  const SAVINGS_NAMES = ["savings", "sparen"];
+  const allUserCategories = await prisma.category.findMany({
+    where: { userId: user.id },
+    select: { id: true, name: true }
   });
+  const savingsCategory = allUserCategories.find((c) =>
+    SAVINGS_NAMES.includes(c.name.toLowerCase().trim())
+  );
   const savingsCatId = savingsCategory?.id ?? null;
 
   // Get all transactions for the month for the account
