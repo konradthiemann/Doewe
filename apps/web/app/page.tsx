@@ -41,6 +41,7 @@ export default function HomePage() {
     plannedSavings: number;
     monthlySavingsActual: number;
     outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
+    categoryBudgets?: Array<{ categoryId: string; name: string; budget: number; spent: number; diff: number }>;
     recurringTransactions?: Array<{
       id: string;
       description: string;
@@ -62,6 +63,7 @@ export default function HomePage() {
     plannedSavings: 0,
     monthlySavingsActual: 0,
     outgoingByCategory: [],
+    categoryBudgets: [],
     recurringTransactions: [],
     recurringIncomeTotal: 0,
     recurringOutcomeTotal: 0,
@@ -69,13 +71,18 @@ export default function HomePage() {
     projectedOutcomeTotal: 0,
     projectedRemaining: 0
   });
-  
+
   const [quarterly, setQuarterly] = useState<{
     quarters: Array<{ month: number; year: number; incomeCents: number; outcomeCents: number; savingsCents: number; balanceCents: number }>;
     totals: { incomeCents: number; outcomeCents: number; savingsCents: number };
   } | null>(null);
   const [quarterlyLoading, setQuarterlyLoading] = useState(true);
   const [quarterlyError, setQuarterlyError] = useState<string | null>(null);
+
+  const [savingPlan, setSavingPlan] = useState<{
+    totals: { availableCents: number; totalTargetCents: number; suggestedMonthlyCents: number };
+    nextDeadline: { month: number; year: number } | null;
+  } | null>(null);
 
   useEffect(() => {
     async function fetchSummary() {
@@ -99,8 +106,31 @@ export default function HomePage() {
       }
     }
 
+    async function fetchSavingPlan() {
+      try {
+        const res = await fetch("/api/saving-plan", { cache: "no-store" });
+        if (!res.ok) return;
+        const data: {
+          goals: Array<{ month: number; year: number }>;
+          totals: { availableCents: number; totalTargetCents: number; suggestedMonthlyCents: number };
+        } = await res.json();
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        const upcoming = (data.goals || [])
+          .filter((g) => g.year > currentYear || (g.year === currentYear && g.month >= currentMonth))
+          .sort((a, b) => (a.year - b.year) * 12 + (a.month - b.month));
+        setSavingPlan({
+          totals: data.totals,
+          nextDeadline: upcoming[0] ? { month: upcoming[0].month, year: upcoming[0].year } : null
+        });
+      } catch {
+        // silent: saving plan is enhancement data, summary is the fallback
+      }
+    }
+
     (async () => {
-      await Promise.all([fetchSummary(), fetchQuarterly()]);
+      await Promise.all([fetchSummary(), fetchQuarterly(), fetchSavingPlan()]);
       setLoading(false);
     })();
   }, [t]);
@@ -126,16 +156,59 @@ export default function HomePage() {
   );
 
   // Projected totals for current month (including recurring transactions)
+  const carryover = summary.carryoverFromLastMonth || 0;
   const projectedIncome = Math.max(0, summary.projectedIncomeTotal ?? (summary.incomeTotal + (summary.recurringIncomeTotal || 0)));
   const projectedOutcome = Math.max(0, summary.projectedOutcomeTotal ?? (summary.outcomeTotal + (summary.recurringOutcomeTotal || 0)));
   const totalSavingsTransfer = Math.max(0, summary.monthlySavingsActual || 0);
   const projectedSpent = projectedOutcome + totalSavingsTransfer;
-  const projectedLeft = Math.max(0, projectedIncome - projectedSpent);
-  const spentPercent = projectedIncome > 0 ? Math.min(100, Math.round((projectedSpent / projectedIncome) * 100)) : 0;
-  const leftPercent = projectedIncome > 0 ? Math.max(0, 100 - spentPercent) : 0;
-  const overspent = projectedIncome > 0 ? Math.max(0, projectedSpent - projectedIncome) : projectedSpent;
-  const overspentPercent = projectedIncome > 0 ? Math.max(0, Math.round((overspent / projectedIncome) * 100)) : 0;
-  const hasIncomeData = projectedIncome > 0;
+  // Available budget = carryover from previous month + income of current month (incl. recurring).
+  // Carryover is intentionally NOT floored at 0 so a negative carryover reduces the budget honestly.
+  const availableBudget = carryover + projectedIncome;
+  const projectedLeft = availableBudget - projectedSpent;
+  const spentPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
+  const leftPercent = availableBudget > 0 ? Math.max(0, 100 - spentPercent) : 0;
+  const overspent = Math.max(0, projectedSpent - availableBudget);
+  const overspentPercent = availableBudget > 0 ? Math.max(0, Math.round((overspent / availableBudget) * 100)) : 0;
+  const hasIncomeData = projectedIncome > 0 || carryover !== 0;
+  const budgetUnderwater = availableBudget <= 0;
+
+  // Core KPIs derived from the summary numbers above.
+  // Savings rate: how much of projected income is transferred to savings this month.
+  const savingsRate = projectedIncome > 0
+    ? Math.max(0, Math.round((totalSavingsTransfer / projectedIncome) * 100))
+    : 0;
+  // Fixed-cost ratio: recurring expenses as share of projected income (proxy for financial obligation load).
+  const recurringOutcome = summary.recurringOutcomeTotal || 0;
+  const fixedCostRatio = projectedIncome > 0
+    ? Math.max(0, Math.round((recurringOutcome / projectedIncome) * 100))
+    : 0;
+
+  // Saving-plan recommendation: suggested monthly savings vs. actual.
+  const suggestedMonthly = savingPlan ? savingPlan.totals.suggestedMonthlyCents / 100 : 0;
+  const savingShortfall = Math.max(0, suggestedMonthly - totalSavingsTransfer);
+  const savingOnTrack = suggestedMonthly > 0 ? totalSavingsTransfer >= suggestedMonthly : totalSavingsTransfer > 0;
+
+  // Category budgets: budgets set at category level vs. actual spent (incl. recurring).
+  const categoryBudgets = summary.categoryBudgets || [];
+  const overBudgetCategories = categoryBudgets.filter((c) => c.diff > 0);
+
+  // MoM deltas from the quarterly series. The last entry is the current month.
+  const momDeltas = useMemo(() => {
+    if (!quarterly || quarterly.quarters.length < 2) return null;
+    const arr = quarterly.quarters;
+    const cur = arr[arr.length - 1];
+    const prev = arr[arr.length - 2];
+    const diff = (a: number, b: number) => {
+      const absDiff = (a - b) / 100;
+      const pct = b !== 0 ? Math.round(((a - b) / Math.abs(b)) * 100) : null;
+      return { absDiff, pct };
+    };
+    return {
+      income: diff(cur.incomeCents, prev.incomeCents),
+      outcome: diff(cur.outcomeCents, prev.outcomeCents),
+      savings: diff(cur.savingsCents, prev.savingsCents)
+    };
+  }, [quarterly]);
 
   // Warm palette (reds/oranges/yellows) for outgoings only – avoids greens/blues/purples
   const warmPalette = [
@@ -214,12 +287,12 @@ export default function HomePage() {
   return (
     <main id="maincontent" className="p-6 space-y-8">
       {/* Account Balance & Carryover Section */}
-      <section aria-labelledby="balance-overview" className="max-w-3xl">
+      <section aria-labelledby="balance-overview" className="max-w-5xl">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="balance-overview" className="text-lg font-medium mb-4">
             {t("dashboard.balanceOverview")}
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalance")}</p>
               <p className={`text-2xl font-semibold ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
@@ -229,10 +302,24 @@ export default function HomePage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverFromLastMonth")}</p>
-              <p className={`text-2xl font-semibold ${summary.carryoverFromLastMonth >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
-                {formatCurrency(summary.carryoverFromLastMonth)}
+              <p className={`text-2xl font-semibold ${carryover >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+                {formatCurrency(carryover)}
               </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverHint")}</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">
+                {carryover < 0 ? t("dashboard.carryoverNegativeHint") : t("dashboard.carryoverHint")}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.savingsRate")}</p>
+              <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{savingsRate}%</p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.savingsRateHint")}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatio")}</p>
+              <p className={`text-2xl font-semibold ${fixedCostRatio >= 70 ? "text-red-600 dark:text-red-400" : fixedCostRatio >= 50 ? "text-amber-600 dark:text-amber-400" : "text-gray-700 dark:text-neutral-200"}`}>
+                {fixedCostRatio}%
+              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatioHint")}</p>
             </div>
           </div>
         </div>
@@ -257,6 +344,11 @@ export default function HomePage() {
             {t("dashboard.monthlyIncomeUsage")}
           </h2>
           <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">{t("dashboard.incomeUsageSubtitle")}</p>
+          {budgetUnderwater && !loading && (
+            <div className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300" role="alert">
+              {t("dashboard.budgetUnderwaterWarning")}
+            </div>
+          )}
           {loading ? (
             <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
           ) : hasIncomeData ? (
@@ -281,23 +373,46 @@ export default function HomePage() {
                   <span>{t("dashboard.spent")}: {formatCurrency(projectedSpent)}</span>
                   <span>{t("dashboard.left")}: {formatCurrency(projectedLeft)}</span>
                 </div>
+                <div className="text-xs text-gray-500 dark:text-neutral-400">
+                  {t("dashboard.budgetBreakdown", {
+                    carryover: formatCurrency(carryover),
+                    income: formatCurrency(projectedIncome),
+                    budget: formatCurrency(availableBudget)
+                  })}
+                </div>
               </div>
               <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
                 <dl className="grid gap-3 sm:grid-cols-3" aria-label={t("dashboard.incomeReportBreakdown")}>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.spent")}</dt>
-                    <dd className="text-lg font-semibold text-red-600 dark:text-red-400">{formatCurrency(projectedSpent)}</dd>
+                    <dd
+                      className="text-lg font-semibold text-red-600 dark:text-red-400"
+                      title={t("dashboard.spentBreakdownTooltip", {
+                        outcome: formatCurrency(projectedOutcome),
+                        savings: formatCurrency(totalSavingsTransfer)
+                      })}
+                    >
+                      {formatCurrency(projectedSpent)}
+                    </dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
-                      {t("dashboard.spentOfIncome", { percent: spentPercent })}
+                      {t("dashboard.spentOfBudget", { percent: spentPercent })}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-neutral-500 mt-0.5">
+                      {t("dashboard.spentBreakdownTooltip", {
+                        outcome: formatCurrency(projectedOutcome),
+                        savings: formatCurrency(totalSavingsTransfer)
+                      })}
                     </p>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.left")}</dt>
-                    <dd className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(projectedLeft)}</dd>
+                    <dd className={`text-lg font-semibold ${projectedLeft >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{formatCurrency(projectedLeft)}</dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
                       {projectedLeft > 0
                         ? t("dashboard.leftAvailable", { percent: leftPercent })
-                        : t("dashboard.fullyAllocated")}
+                        : projectedLeft === 0
+                          ? t("dashboard.fullyAllocated")
+                          : t("dashboard.negativeLeft")}
                     </p>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
@@ -307,7 +422,7 @@ export default function HomePage() {
                     </dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
                       {overspent > 0
-                        ? t("dashboard.overspendAboveIncome", { percent: overspentPercent })
+                        ? t("dashboard.overspendAboveBudget", { percent: overspentPercent })
                         : t("dashboard.noOverspend")}
                     </p>
                   </div>
@@ -315,7 +430,7 @@ export default function HomePage() {
                 <p>
                   {t("dashboard.spentSummary", {
                     spent: formatCurrency(projectedSpent),
-                    income: formatCurrency(projectedIncome)
+                    budget: formatCurrency(availableBudget)
                   })}
                   {projectedLeft > 0 && ` ${t("dashboard.leftSummary", { left: formatCurrency(projectedLeft) })}`}
                   {overspent > 0 && ` ${t("dashboard.overspentSummary", { overspent: formatCurrency(overspent) })}`}
@@ -398,7 +513,7 @@ export default function HomePage() {
           <h2 id="savings-overview" className="text-lg font-medium mb-4">
             {t("dashboard.savingsOverview")}
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.plannedSavings")}</p>
               <p className="text-2xl font-semibold" style={{ color: plannedColor }}>{plannedSavings.toFixed(0)} €</p>
@@ -410,6 +525,13 @@ export default function HomePage() {
               <p className="text-xs text-gray-500 dark:text-neutral-400">
                 {t("dashboard.percentOfTarget", { percent: savingsProgress })}
               </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recommendedSavings")}</p>
+              <p className={`text-2xl font-semibold ${savingOnTrack ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                {suggestedMonthly.toFixed(0)} €
+              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.recommendedSavingsHint")}</p>
             </div>
           </div>
           <div className="mt-5">
@@ -426,6 +548,77 @@ export default function HomePage() {
               />
             </div>
           </div>
+          {savingPlan && suggestedMonthly > 0 && (
+            <div className={`mt-4 rounded-md border px-3 py-2 text-xs ${savingOnTrack
+              ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+              : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            }`}>
+              <p className="font-medium">
+                {savingOnTrack
+                  ? t("dashboard.savingOnTrack")
+                  : t("dashboard.savingShortfall", { shortfall: formatCurrency(savingShortfall) })}
+              </p>
+              {savingPlan.nextDeadline && (
+                <p className="mt-0.5 text-[11px] opacity-80">
+                  {t("dashboard.savingNextDeadline", {
+                    date: new Date(savingPlan.nextDeadline.year, savingPlan.nextDeadline.month - 1, 1)
+                      .toLocaleDateString(dateLocale, { month: "long", year: "numeric" })
+                  })}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Category Budgets Section (E) */}
+      <section aria-labelledby="category-budgets" className="max-w-3xl">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="category-budgets" className="text-lg font-medium mb-1">
+            {t("dashboard.categoryBudgetsTitle")}
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.categoryBudgetsSubtitle")}</p>
+          {loading ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
+          ) : categoryBudgets.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.categoryBudgetsEmpty")}</p>
+          ) : (
+            <>
+              {overBudgetCategories.length === 0 && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-3">{t("dashboard.categoryBudgetsAllOk")}</p>
+              )}
+              <ul className="space-y-2">
+                {categoryBudgets
+                  .slice()
+                  .sort((a, b) => b.diff - a.diff)
+                  .map((c) => {
+                    const pct = c.budget > 0 ? Math.min(200, Math.round((c.spent / c.budget) * 100)) : 0;
+                    const over = c.diff > 0;
+                    return (
+                      <li key={c.categoryId} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900 dark:text-neutral-100">{c.name}</span>
+                          <span className={`text-xs font-semibold tabular-nums ${over ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {formatCurrency(c.spent)} / {formatCurrency(c.budget)}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded bg-gray-200 dark:bg-neutral-900 overflow-hidden" aria-hidden="true">
+                          <div
+                            className={`h-2 rounded ${over ? "bg-red-500" : "bg-emerald-500"}`}
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                        <p className={`mt-1 text-[11px] ${over ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-neutral-400"}`}>
+                          {over
+                            ? t("dashboard.categoryBudgetOverBy", { amount: formatCurrency(c.diff) })
+                            : t("dashboard.categoryBudgetUnderBy", { amount: formatCurrency(-c.diff) })}
+                        </p>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </>
+          )}
         </div>
       </section>
 
@@ -498,6 +691,41 @@ export default function HomePage() {
                 />
               </div>
               
+              {/* MoM deltas (F): current month vs. previous month */}
+              {momDeltas && (
+                <div className="mb-4 grid gap-2 sm:grid-cols-3" aria-label={t("dashboard.momDelta")}>
+                  <p className="col-span-full text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
+                    {t("dashboard.momDelta")}
+                  </p>
+                  {([
+                    ["quarterlyIncome", momDeltas.income, "emerald"],
+                    ["quarterlyOutcome", momDeltas.outcome, "red"],
+                    ["quarterlySavings", momDeltas.savings, "blue"]
+                  ] as const).map(([labelKey, d, _color]) => {
+                    const positive = d.absDiff > 0;
+                    const neutral = d.absDiff === 0;
+                    // For income/savings: positive = good (green). For outcome: positive = bad (red).
+                    const goodDirection = labelKey === "quarterlyOutcome" ? !positive : positive;
+                    const colorClass = neutral
+                      ? "text-gray-500 dark:text-neutral-400"
+                      : goodDirection
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400";
+                    const sign = positive ? "+" : "";
+                    return (
+                      <div key={labelKey} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800">
+                        <p className="text-xs text-gray-500 dark:text-neutral-400">{t(`dashboard.${labelKey}`)}</p>
+                        <p className={`text-sm font-semibold tabular-nums ${colorClass}`}>
+                          {d.pct !== null
+                            ? t("dashboard.momDeltaAbs", { delta: `${sign}${formatCurrency(d.absDiff)}`, pct: `${sign}${d.pct}` })
+                            : t("dashboard.momDeltaAbsOnly", { delta: `${sign}${formatCurrency(d.absDiff)}` })}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Summary Table - Mobile optimized with horizontal scroll */}
               <div className="-mx-5 px-5 sm:mx-0 sm:px-0">
                 <div className="overflow-x-auto">
