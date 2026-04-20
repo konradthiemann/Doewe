@@ -161,12 +161,16 @@ export default function HomePage() {
   const projectedOutcome = Math.max(0, summary.projectedOutcomeTotal ?? (summary.outcomeTotal + (summary.recurringOutcomeTotal || 0)));
   const totalSavingsTransfer = Math.max(0, summary.monthlySavingsActual || 0);
   const projectedSpent = projectedOutcome + totalSavingsTransfer;
+  // Expenses-only and savings-only percentages for the segmented progress bar
+  const projectedExpenses = projectedOutcome;
   // Available budget = carryover from previous month + income of current month (incl. recurring).
   // Carryover is intentionally NOT floored at 0 so a negative carryover reduces the budget honestly.
   const availableBudget = carryover + projectedIncome;
   const projectedLeft = availableBudget - projectedSpent;
   const spentPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
-  const leftPercent = availableBudget > 0 ? Math.max(0, 100 - spentPercent) : 0;
+  const expensesPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedExpenses / availableBudget) * 100)) : 0;
+  const savedPercent = availableBudget > 0 ? Math.min(100 - expensesPercent, Math.round((totalSavingsTransfer / availableBudget) * 100)) : 0;
+  const leftPercent = availableBudget > 0 ? Math.max(0, 100 - expensesPercent - savedPercent) : 0;
   const overspent = Math.max(0, projectedSpent - availableBudget);
   const overspentPercent = availableBudget > 0 ? Math.max(0, Math.round((overspent / availableBudget) * 100)) : 0;
   const hasIncomeData = projectedIncome > 0 || carryover !== 0;
