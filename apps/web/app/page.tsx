@@ -161,12 +161,16 @@ export default function HomePage() {
   const projectedOutcome = Math.max(0, summary.projectedOutcomeTotal ?? (summary.outcomeTotal + (summary.recurringOutcomeTotal || 0)));
   const totalSavingsTransfer = Math.max(0, summary.monthlySavingsActual || 0);
   const projectedSpent = projectedOutcome + totalSavingsTransfer;
+  // Expenses-only and savings-only percentages for the segmented progress bar
+  const projectedExpenses = projectedOutcome;
   // Available budget = carryover from previous month + income of current month (incl. recurring).
   // Carryover is intentionally NOT floored at 0 so a negative carryover reduces the budget honestly.
   const availableBudget = carryover + projectedIncome;
   const projectedLeft = availableBudget - projectedSpent;
   const spentPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
-  const leftPercent = availableBudget > 0 ? Math.max(0, 100 - spentPercent) : 0;
+  const expensesPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedExpenses / availableBudget) * 100)) : 0;
+  const savedPercent = availableBudget > 0 ? Math.min(100 - expensesPercent, Math.round((totalSavingsTransfer / availableBudget) * 100)) : 0;
+  const leftPercent = availableBudget > 0 ? Math.max(0, 100 - expensesPercent - savedPercent) : 0;
   const overspent = Math.max(0, projectedSpent - availableBudget);
   const overspentPercent = availableBudget > 0 ? Math.max(0, Math.round((overspent / availableBudget) * 100)) : 0;
   const hasIncomeData = projectedIncome > 0 || carryover !== 0;
@@ -353,24 +357,36 @@ export default function HomePage() {
             <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
           ) : hasIncomeData ? (
             <figure aria-labelledby="income-usage-heading income-usage-summary" className="space-y-4">
-              {/* Progress bar: green background (income = 100%), red fill (outcome %) */}
+              {/* Progress bar: red (expenses) + blue (savings) + green (remaining) */}
               <div className="space-y-2">
                 <div className="relative w-full h-8 rounded-full overflow-hidden bg-emerald-500 dark:bg-emerald-600">
                   <div
                     className="absolute inset-y-0 left-0 rounded-l-full bg-red-500 dark:bg-red-600 transition-all duration-500"
-                    style={{ width: `${Math.min(100, spentPercent)}%` }}
+                    style={{ width: `${Math.min(100, expensesPercent)}%` }}
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={spentPercent}
-                    aria-label={t("dashboard.incomeUsageTitle")}
+                    aria-valuenow={expensesPercent}
+                    aria-label={t("dashboard.spent")}
                   />
+                  {totalSavingsTransfer > 0 && (
+                    <div
+                      className="absolute inset-y-0 bg-blue-500 dark:bg-blue-600 transition-all duration-500"
+                      style={{ left: `${Math.min(100, expensesPercent)}%`, width: `${Math.min(100 - expensesPercent, savedPercent)}%` }}
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={savedPercent}
+                      aria-label={t("dashboard.saved")}
+                    />
+                  )}
                   <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow">
-                    {spentPercent}%
+                    {expensesPercent + savedPercent}%
                   </div>
                 </div>
                 <div className="flex justify-between text-xs text-gray-600 dark:text-neutral-400">
-                  <span>{t("dashboard.spent")}: {formatCurrency(projectedSpent)}</span>
+                  <span>{t("dashboard.spent")}: {formatCurrency(projectedExpenses)}</span>
+                  {totalSavingsTransfer > 0 && <span className="text-blue-600 dark:text-blue-400">{t("dashboard.saved")}: {formatCurrency(totalSavingsTransfer)}</span>}
                   <span>{t("dashboard.left")}: {formatCurrency(projectedLeft)}</span>
                 </div>
                 <div className="text-xs text-gray-500 dark:text-neutral-400">
@@ -382,7 +398,7 @@ export default function HomePage() {
                 </div>
               </div>
               <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
-                <dl className="grid gap-3 sm:grid-cols-3" aria-label={t("dashboard.incomeReportBreakdown")}>
+                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t("dashboard.incomeReportBreakdown")}>
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.spent")}</dt>
                     <dd
@@ -432,6 +448,7 @@ export default function HomePage() {
                     spent: formatCurrency(projectedSpent),
                     budget: formatCurrency(availableBudget)
                   })}
+                  {totalSavingsTransfer > 0 && ` ${t("dashboard.savedSummary", { saved: formatCurrency(totalSavingsTransfer) })}`}
                   {projectedLeft > 0 && ` ${t("dashboard.leftSummary", { left: formatCurrency(projectedLeft) })}`}
                   {overspent > 0 && ` ${t("dashboard.overspentSummary", { overspent: formatCurrency(overspent) })}`}
                 </p>
