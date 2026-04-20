@@ -94,6 +94,12 @@ export async function GET() {
   });
   const plannedSavings = (plannedBudgetAgg._sum.amountCents ?? 0) / 100;
 
+  // Category-level budgets for current month (categoryId != null)
+  const categoryBudgetsRaw = await prisma.budget.findMany({
+    where: { accountId, categoryId: { not: null }, month, year },
+    select: { categoryId: true, amountCents: true }
+  });
+
   // === NEW: Fetch recurring transactions for current month ===
   const recurringTransactions = await prisma.recurringTransaction.findMany({
     where: { accountId },
@@ -237,8 +243,12 @@ export async function GET() {
     byCategory[catId] = (byCategory[catId] || 0) + amount;
   }
 
-  // Recalculate outgoingByCategory with recurring included
-  const updatedCatIds = Object.keys(byCategory).filter((id) => id !== "uncategorized");
+  // Recalculate outgoingByCategory with recurring included.
+  // Also include categories that have a budget but no spending yet, so their names resolve.
+  const updatedCatIds = Array.from(new Set([
+    ...Object.keys(byCategory).filter((id) => id !== "uncategorized"),
+    ...categoryBudgetsRaw.map((b) => b.categoryId).filter((id): id is string => id !== null)
+  ]));
   const updatedCategories = await prisma.category.findMany({
     where: { id: { in: updatedCatIds }, userId: user.id },
     select: { id: true, name: true }
@@ -251,6 +261,22 @@ export async function GET() {
     name: id === "uncategorized" ? "Uncategorized" : updatedNameMap[id] ?? id,
     amount
   }));
+
+  // Build categoryBudgets: budget vs. spent for each category that has a budget this month.
+  // Uses the merged `byCategory` (actual + recurring, excl. savings) as spent baseline.
+  const categoryBudgets = categoryBudgetsRaw
+    .filter((b): b is { categoryId: string; amountCents: number } => b.categoryId !== null)
+    .map((b) => {
+      const spent = byCategory[b.categoryId] ?? 0;
+      const budget = b.amountCents / 100;
+      return {
+        categoryId: b.categoryId,
+        name: updatedNameMap[b.categoryId] ?? b.categoryId,
+        budget,
+        spent,
+        diff: spent - budget
+      };
+    });
 
   return NextResponse.json({
     totalBalance,
@@ -265,6 +291,7 @@ export async function GET() {
     projectedOutcomeTotal,
     projectedRemaining,
     outgoingByCategory: finalOutgoingByCategory,
+    categoryBudgets,
     recurringTransactions: activeRecurringThisMonth.map((r) => ({
       id: r.id,
       description: r.description,
