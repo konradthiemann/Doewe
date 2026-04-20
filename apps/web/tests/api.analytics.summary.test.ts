@@ -256,4 +256,39 @@ describe("/api/analytics/summary", () => {
     expect(foodCategory).toBeDefined();
     expect(foodCategory.amount).toBe(350);
   }, 30000);
+
+  it("returns categoryBudgets array (empty when no category-level budgets exist)", async () => {
+    // The test setup only creates savings-only budgets (categoryId: null), so no category-level budgets.
+    // Shape must still be an array so the dashboard can safely iterate.
+    const routes = await import("../app/api/analytics/summary/route");
+    const res = await routes.GET();
+    const data = await res.json();
+    expect(Array.isArray(data.categoryBudgets)).toBe(true);
+    expect(data.categoryBudgets).toHaveLength(0);
+  }, 30000);
+
+  it("exposes all fields required to compute available-budget usage (carryover + income - spent)", async () => {
+    // The dashboard's "Monthly income usage" widget composes:
+    //   availableBudget = carryoverFromLastMonth + projectedIncomeTotal
+    //   projectedSpent  = projectedOutcomeTotal + monthlySavingsActual
+    //   projectedLeft   = availableBudget - projectedSpent
+    // This test guards the API contract the frontend relies on.
+    const routes = await import("../app/api/analytics/summary/route");
+    const res = await routes.GET();
+    const data = await res.json();
+
+    // Carryover: +1000 - 300 = 700
+    // projectedIncomeTotal: 500 + 400 = 900
+    // availableBudget: 700 + 900 = 1600
+    const availableBudget = data.carryoverFromLastMonth + data.projectedIncomeTotal;
+    expect(availableBudget).toBe(1600);
+
+    // projectedOutcomeTotal: 200 + 150 = 350, savings: 100
+    // projectedSpent: 350 + 100 = 450
+    const projectedSpent = data.projectedOutcomeTotal + data.monthlySavingsActual;
+    expect(projectedSpent).toBe(450);
+
+    // projectedLeft: 1600 - 450 = 1150
+    expect(availableBudget - projectedSpent).toBe(1150);
+  }, 30000);
 });

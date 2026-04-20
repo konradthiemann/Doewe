@@ -378,6 +378,23 @@ function TransactionsPage() {
   }, [filteredItems, sortOption]);
   const hasFilters = Boolean(normalizedQuery || categoryFilter || dateFrom || dateTo || filterType !== "all");
 
+  // Totals for the currently filtered list (income, outcome, net) — shown above the list
+  // to give immediate context to any search/filter (e.g. "Konni" inside Clothing category).
+  const filteredTotals = useMemo(() => {
+    let incomeCents = 0;
+    let outcomeCents = 0;
+    for (const t of filteredItems) {
+      if (t.amountCents >= 0) incomeCents += t.amountCents;
+      else outcomeCents += -t.amountCents;
+    }
+    return {
+      count: filteredItems.length,
+      incomeCents,
+      outcomeCents,
+      netCents: incomeCents - outcomeCents,
+    };
+  }, [filteredItems]);
+
   const normalizedRecurringQuery = recurringQuery.trim().toLowerCase();
   const filteredRecurringItems = useMemo(() => {
     if (!normalizedRecurringQuery) {
@@ -879,6 +896,43 @@ function TransactionsPage() {
               </ul>
             )}
           </details>
+
+          {filteredTotals.count > 0 && (
+            <div
+              className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800/70"
+              aria-live="polite"
+            >
+              <span className="text-gray-600 dark:text-neutral-300">
+                {hasFilters
+                  ? t("transactions.filteredTotalLabel", { count: filteredTotals.count })
+                  : t("transactions.allTotalLabel", { count: filteredTotals.count })}
+              </span>
+              <span className="flex flex-wrap items-center gap-2 font-semibold tabular-nums">
+                {filteredTotals.incomeCents > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-green-700 dark:bg-green-900/30 dark:text-green-200">
+                    +{toDecimalString(fromCents(filteredTotals.incomeCents))} €
+                  </span>
+                )}
+                {filteredTotals.outcomeCents > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                    -{toDecimalString(fromCents(filteredTotals.outcomeCents))} €
+                  </span>
+                )}
+                {filteredTotals.incomeCents > 0 && filteredTotals.outcomeCents > 0 && (
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 ${
+                      filteredTotals.netCents >= 0
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-100"
+                        : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-100"
+                    }`}
+                  >
+                    {t("transactions.netLabel")}: {filteredTotals.netCents >= 0 ? "+" : "-"}
+                    {toDecimalString(fromCents(Math.abs(filteredTotals.netCents)))} €
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
 
           <ul className="space-y-2">
             {sortedItems.map((tx) => (
