@@ -114,6 +114,7 @@ export const en: Record<string, string> = {
   "dashboard.incomeUsageTitle": "Current month available-budget usage",
   "dashboard.incomeReportBreakdown": "Available-budget breakdown",
   "dashboard.spent": "Spent",
+  "dashboard.saved": "Saved",
   "dashboard.left": "Left",
   "dashboard.overspend": "Overspend",
   "dashboard.spentOfBudget": "{percent}% of available budget.",
