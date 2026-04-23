@@ -62,7 +62,7 @@ function TransactionsPage() {
   const [dateTo, setDateTo] = useState("");
   const [query, setQuery] = useState("");
   const [recurringQuery, setRecurringQuery] = useState("");
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [sortOption, setSortOption] = useState<SortOption>("newest");
   const [filterType, setFilterType] = useState<FilterType>("all");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
