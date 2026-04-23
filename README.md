@@ -227,9 +227,9 @@ Guidelines:
 6. Open PR; CI must pass before merge.
 
 Reference Docs:
-- Next.js Best Practices: `.github/promps/nextjs.instructions.md`
-- Accessibility Guidelines: `.github/promps/a11y.instructions.md`
-- Copilot / Collaboration Principles: `.github/promps/github.instructions.md`
+- Next.js Best Practices: [.github/prompts/nextjs.instructions.md](.github/prompts/nextjs.instructions.md)
+- Accessibility Guidelines: [.github/prompts/a11y.instructions.md](.github/prompts/a11y.instructions.md)
+- Project Requirements: [docs/project-requirements-document.md](docs/project-requirements-document.md)
 
 ## License
 No license file present yet. Until a license is added, this code should be treated as "All rights reserved" by default. Recommended next step: add an MIT OR Apache-2.0 `LICENSE` file to clarify usage.

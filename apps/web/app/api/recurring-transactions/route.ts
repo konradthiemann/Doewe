@@ -1,3 +1,16 @@
+/**
+ * GET  /api/recurring-transactions  — Alle Daueraufträge des Nutzers (nach nextOccurrence sortiert)
+ * POST /api/recurring-transactions  — Neuen Dauerauftrag anlegen
+ *
+ * Daueraufträge sind Vorlagen für regelmäßige Transaktionen (z.B. Miete jeden 1. des Monats).
+ * Sie werden NICHT automatisch als echte Transaktionen angelegt — stattdessen werden sie
+ * im Analytics-Dashboard als "geplante" Beträge eingerechnet.
+ *
+ * `nextOccurrence` wird automatisch berechnet: ist `dayOfMonth` noch nicht vergangen,
+ * wird der aktuelle Monat gesetzt, sonst der nächste Monat.
+ *
+ * POST Body: { accountId, categoryId?, amountCents, description, intervalMonths? (1-24), dayOfMonth? (1-31) }
+ */
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -14,6 +27,13 @@ const RecurringInput = z.object({
   dayOfMonth: z.number().int().min(1).max(31).optional()
 });
 
+/**
+ * Berechnet das nächste Fälligkeitsdatum für einen Dauerauftrag.
+ *
+ * Logik: Ist `dayOfMonth` noch nicht vergangen → aktueller Monat.
+ * Sonst → nächster Monat. Datum wird auf den letzten Tag des Monats geclampt
+ * (z.B. dayOfMonth=31 im Februar → 28/29).
+ */
 function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
   const today = now.getDate();
   const currentMonth = now.getMonth();

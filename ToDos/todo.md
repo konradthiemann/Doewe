@@ -1,6 +1,7 @@
 # Todo:
-## Sparübersicht
 
-
-- the calculation for the "Geplantes Sparen" has to be the improved: The "goal" for this planned saving thing is to achieve all goals with a concistent equal saving as possible each month to reach each goal in time.
-- The category savings/Sparen (wich is a fixed category) has to be the connected value for the savings. I assume this is still the case on the "Sparplan" Page.
+[ ] Dateien Aufräumen: Was wird noch gebraucht? (monorepoTimeline.md? project-requirements-document.md? .github/? Ich benutze jetzt claude. )
+[ ] Gründliches Codereview machen. Inlinedokumentation Pflegen für junior software entwickler. Für lernzwecke.
+[ ] Höchstgradig professionelle Dokumentationen erstellen (im .md format). Einen Dokumentationsorder anlegen, Funktionsweisen als Ablaufdiagramm erstellen und erklären. Datenstrukturen erklären. README.md auf den aktuellen Stand bringen. Vor allem die Vorgehensweise mit der benutzung von agents.
+[ ] UI/UX optimieren. Zielgruppe - Paare/Familienmitglieder. Schnelle benutzung - einfaches eintragen von Transaktionen - planen von ausgaben um Ziele zu verfolgen und einzuhalten. Funktionsweise bleibt dabei bestehen. Es geht um das Erscheinungsbild der App und die Bedienbarkeit und Anordnung der Komponenten.
+[ ] Analyse der Datenerhebung, Berechnungen und Analysen. Was kann verbessert werden.
