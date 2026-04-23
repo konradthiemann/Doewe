@@ -38,16 +38,18 @@ model Category {
 }
 
 model Transaction {
-  id          String   @id @default(cuid())
-  accountId   String
-  categoryId  String?
-  amountCents Int
-  description String
-  occurredAt  DateTime
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  accountId     String
+  categoryId    String?
+  savingGoalId  String?
+  amountCents   Int
+  description   String
+  occurredAt    DateTime
+  createdAt     DateTime @default(now())
 
-  account  Account  @relation(fields: [accountId], references: [id])
-  category Category? @relation(fields: [categoryId], references: [id])
+  account     Account  @relation(fields: [accountId], references: [id])
+  category    Category? @relation(fields: [categoryId], references: [id])
+  savingGoal  Budget?   @relation(fields: [savingGoalId], references: [id], onDelete: SetNull)
 }
 
 // Note: SQLite does not support Prisma enums; use a string field with app-level validation.
@@ -93,8 +95,9 @@ model Budget {
   amountCents Int      // goal amount for the month
   createdAt   DateTime @default(now())
 
-  account  Account   @relation(fields: [accountId], references: [id])
-  category Category? @relation(fields: [categoryId], references: [id])
+  account      Account       @relation(fields: [accountId], references: [id])
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  transactions Transaction[]
 
   @@unique([accountId, categoryId, month, year])
 }

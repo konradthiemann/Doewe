@@ -42,11 +42,19 @@ export async function POST(req: Request) {
     }
   }
 
+  if (data.savingGoalId) {
+    const goal = await prisma.budget.findFirst({ where: { id: data.savingGoalId, account: { userId: user.id } } });
+    if (!goal) {
+      return NextResponse.json({ error: "Saving goal not found" }, { status: 404 });
+    }
+  }
+
   try {
     const created = await prisma.transaction.create({
       data: {
         accountId: data.accountId,
         categoryId: data.categoryId ?? null,
+        savingGoalId: data.savingGoalId ?? null,
         amountCents: data.amountCents,
         description: data.description,
         occurredAt

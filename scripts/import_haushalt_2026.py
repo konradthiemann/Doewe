@@ -226,34 +226,58 @@ def build_plan(wb_path: str) -> ImportPlan:
     plan = ImportPlan()
 
     # --- Income (Z. 2–5) ---
+    # Cell values are authoritative; comments provide detail.
+    # A reconciliation TX is added when parsed comments differ from cell value.
     for row, (label, cat, is_income, prefix) in INCOME_ROWS.items():
         plan.new_categories.add((cat, is_income))
         for month, col in MONTH_COLS.items():
             cell = ws[f"{col}{row}"]
             val = cell.value
             note = cell.comment.text if cell.comment else None
-            if note:
+            cell_cents = int(round(float(val) * 100)) if isinstance(val, (int, float)) and val else 0
+            if note and cell_cents:
+                before = len(plan.transactions)
                 _add_tx_from_note(plan, note, month, cat, is_income, label, prefix, f"{col}{row}")
-            elif isinstance(val, (int, float)) and val and val != 0:
-                # No note, but a value → book as lump sum
+                parsed_sum = sum(t.amount_cents for t in plan.transactions[before:])
+                if parsed_sum != cell_cents:
+                    diff = cell_cents - parsed_sum
+                    plan.transactions.append(PlannedTx(
+                        month=month, day=DEFAULT_DAY, category=cat, is_income=is_income,
+                        description=f"{label} (Anpassung)", amount_cents=diff,
+                    ))
+            elif cell_cents:
                 plan.transactions.append(PlannedTx(
                     month=month, day=DEFAULT_DAY, category=cat, is_income=is_income,
-                    description=label, amount_cents=int(round(float(val) * 100)),
+                    description=label, amount_cents=cell_cents,
                 ))
 
     # --- Alltagsausgaben (Z. 8–26) ---
+    # Same reconciliation: cell value is authoritative total per row/month.
     for row, (label, cat, is_income, prefix) in OUTCOME_ROWS.items():
         plan.new_categories.add((cat, is_income))
         for month, col in MONTH_COLS.items():
             cell = ws[f"{col}{row}"]
             val = cell.value
             note = cell.comment.text if cell.comment else None
-            if note:
+            cell_cents = int(round(float(val) * 100)) if isinstance(val, (int, float)) and val else 0
+            if note and cell_cents:
+                before = len(plan.transactions)
                 _add_tx_from_note(plan, note, month, cat, is_income, label, prefix, f"{col}{row}")
-            elif isinstance(val, (int, float)) and val and val != 0:
+                parsed_sum = sum(t.amount_cents for t in plan.transactions[before:])
+                expected = -cell_cents  # expenses are negative
+                if parsed_sum != expected:
+                    diff = expected - parsed_sum
+                    plan.transactions.append(PlannedTx(
+                        month=month, day=DEFAULT_DAY, category=cat, is_income=False,
+                        description=f"{label} (Anpassung)", amount_cents=diff,
+                    ))
+            elif note and not cell_cents:
+                # Comment exists but cell value is 0 → skip (cell is authoritative)
+                pass
+            elif cell_cents:
                 plan.transactions.append(PlannedTx(
                     month=month, day=DEFAULT_DAY, category=cat, is_income=False,
-                    description=label, amount_cents=-int(round(float(val) * 100)),
+                    description=label, amount_cents=-cell_cents,
                 ))
 
     # --- Jährliche Posten (Z. 29–36) → Fixed costs ---
@@ -301,7 +325,9 @@ def build_plan(wb_path: str) -> ImportPlan:
             continue
 
         if mode == "recurring":
-            # Use the latest month's value as recurring. Any month deviating goes as single TX.
+            # Use the latest month's value as recurring (for future projections).
+            # Also create single TX for EVERY month so the Transaction table has
+            # complete historical data (needed for correct carryover calculation).
             latest = numeric.get(max(numeric.keys())) if numeric else None
             if latest is None or latest <= 0:
                 # no meaningful latest value → skip
@@ -313,12 +339,10 @@ def build_plan(wb_path: str) -> ImportPlan:
             for m, v in numeric.items():
                 if v is None or v <= 0:
                     continue
-                if abs(v - latest) > 0.01:
-                    # deviating month → book the deviating amount as a single TX
-                    plan.transactions.append(PlannedTx(
-                        month=m, day=DEFAULT_DAY, category=FIXED_COST_CATEGORY, is_income=False,
-                        description=f"{label} (abweichend)", amount_cents=-int(round(v * 100)),
-                    ))
+                plan.transactions.append(PlannedTx(
+                    month=m, day=DEFAULT_DAY, category=FIXED_COST_CATEGORY, is_income=False,
+                    description=label, amount_cents=-int(round(v * 100)),
+                ))
 
     return plan
 
