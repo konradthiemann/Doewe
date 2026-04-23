@@ -1,19 +1,20 @@
 # Datenanalyse: Befunde und Verbesserungsvorschläge
 
 Analysiert am 2026-04-23 anhand von Code-Review der Analytics-Routen und des Datenmodells.
+Umgesetzt am 2026-04-23.
 
 ---
 
 ## 1. Performance-Probleme in den Analytics-Routen
 
-### 1.1 Unbegrenzte Transaktions-Abfragen für Kontostand-Berechnungen
+### 1.1 `findMany` → `aggregate` für Kontostand-Berechnungen ✅ Umgesetzt
 
 **Fundort:** [apps/web/app/api/analytics/summary/route.ts](../apps/web/app/api/analytics/summary/route.ts)
 
-**Problem:** `totalBalance` und `carryoverFromLastMonth` werden durch `findMany()` auf allen Transaktionen berechnet:
+**Problem (vorher):** `totalBalance` und `carryoverFromLastMonth` wurden durch `findMany()` auf allen Transaktionen berechnet — die DB lieferte alle Datensätze, die App summierte sie in einem Loop:
 
 ```typescript
-// Holt ALLE Transaktionen aller Zeiten — wird mit der Zeit sehr langsam
+// Vorher: holt ALLE Transaktionen — wird mit der Zeit sehr langsam
 const allTransactions = await prisma.transaction.findMany({
   where: { accountId },
   select: { amountCents: true }
@@ -24,166 +25,225 @@ for (const t of allTransactions) {
 }
 ```
 
-**Empfehlung:** Prisma-Aggregation verwenden — die Summe berechnet die Datenbank in einem einzigen Query:
+**Umsetzung:** Prisma-Aggregation — die Datenbank berechnet die Summe in einem einzigen Query, kein Datentransfer:
 
 ```typescript
-const result = await prisma.transaction.aggregate({
+// apps/web/app/api/analytics/summary/route.ts — Zeile 57
+const totalBalanceAgg = await prisma.transaction.aggregate({
   where: { accountId },
   _sum: { amountCents: true }
 });
-const totalBalanceCents = result._sum.amountCents ?? 0;
+const totalBalance = (totalBalanceAgg._sum.amountCents ?? 0) / 100;
+
+// Zeile 62 — gleiche Optimierung für carryover
+const carryoverAgg = await prisma.transaction.aggregate({
+  where: { accountId, occurredAt: { lt: start } },
+  _sum: { amountCents: true }
+});
+const carryoverFromLastMonth = (carryoverAgg._sum.amountCents ?? 0) / 100;
 ```
 
-**Gleiche Optimierung** für `transactionsBeforeThisMonth` (carryover) und `prevSavings` (baseline savings).
+Gleiches Muster für `prevSavings` (baseline savings, Zeile 167):
+
+```typescript
+// Zeile 167 — nur negative Buchungen zählen als Spareinzahlungen
+const prevSavingsAgg = await prisma.transaction.aggregate({
+  where: {
+    accountId,
+    categoryId: savingsCatId,
+    occurredAt: { lt: start },
+    amountCents: { lt: 0 }
+  },
+  _sum: { amountCents: true }
+});
+baselineSavingsCents = -(prevSavingsAgg._sum.amountCents ?? 0);
+```
 
 ---
 
-### 1.2 O(n²)-Problem im Quarterly-Endpunkt
+### 1.2 O(n²) im Quarterly-Endpunkt beseitigt ✅ Umgesetzt
 
 **Fundort:** [apps/web/app/api/analytics/quarterly/route.ts](../apps/web/app/api/analytics/quarterly/route.ts)
 
-**Problem:** Für jeden der 3 Monate wird eine eigene Abfrage ausgeführt, die **alle Transaktionen bis zum Monatsende** lädt — um den kumulierten Kontostand zu berechnen:
+**Problem (vorher):** Für jeden der 3 Monate wurde eine eigene Abfrage ausgeführt, die alle historischen Transaktionen bis zum Monatsende lud — 3 DB-Abfragen, jede über potenziell Hunderte von Transaktionen:
 
 ```typescript
-// Für JEDEN Monat eine separate Abfrage über alle historischen Transaktionen
+// Vorher: 3× separater Vollscan
 const allTxsUpToEnd = await prisma.transaction.findMany({
   where: { accountId, occurredAt: { lt: end } },
   select: { amountCents: true }
 });
+let balance = 0;
+for (const t of allTxsUpToEnd) { balance += t.amountCents; }
 ```
 
-Bei 3 Monaten bedeutet das: 3 separate DB-Abfragen, jede über potenziell Hunderte von Transaktionen. Diese wachsen mit der Datenmenge.
-
-**Empfehlung:** Alle Transaktionen in einem einzigen Query laden und im Speicher aggregieren:
+**Umsetzung:** Alle Transaktionen in einer einzigen Abfrage laden, danach im Speicher aggregieren:
 
 ```typescript
-// Eine Abfrage für alle benötigten Daten
+// apps/web/app/api/analytics/quarterly/route.ts — Zeile 44
+// Eine Abfrage für alle benötigten Daten — ersetzt 3 separate findMany-Aufrufe
 const allTxs = await prisma.transaction.findMany({
-  where: { accountId, occurredAt: { lt: threeMonthsEnd } },
-  select: { amountCents: true, categoryId: true, occurredAt: true },
-  orderBy: { occurredAt: 'asc' }
+  where: { accountId, occurredAt: { lt: overallEnd } },
+  select: { amountCents: true, categoryId: true, occurredAt: true }
 });
 
-// Dann im Speicher nach Monat gruppieren und kumulativen Saldo berechnen
+// Zeile 52 — In-Memory-Aggregation pro Monat, keine weiteren DB-Abfragen
+const quarters = months.map(({ month, year }, i) => {
+  const startMs = starts[i].getTime();
+  const endMs = ends[i].getTime();
+
+  let income = 0, outcome = 0, savings = 0, balance = 0;
+
+  for (const t of allTxs) {
+    const tMs = t.occurredAt.getTime();
+    if (tMs < endMs) balance += t.amountCents; // kumulativer Kontostand
+    if (tMs >= startMs && tMs < endMs) {
+      // Einnahmen/Ausgaben/Sparen dieses Monats
+      ...
+    }
+  }
+  return { month, year, incomeCents: income, outcomeCents: outcome, savingsCents: savings, balanceCents: balance };
+});
 ```
 
-Oder alternativ: `balanceCents` als Summe über `_sum`-Aggregate berechnen.
+Ergebnis: Von 6 DB-Abfragen (3 für Monatstransaktionen + 3 für Kontostand) auf **1 DB-Abfrage** reduziert.
 
 ---
 
-## 2. Inkonsistente Erkennung der Spar-Kategorie
+## 2. Inkonsistente Erkennung der Spar-Kategorie ✅ Umgesetzt
 
 **Fundort:**
-- [apps/web/app/api/analytics/summary/route.ts](../apps/web/app/api/analytics/summary/route.ts): case-insensitive (`"savings"`, `"sparen"`)
-- [apps/web/app/api/analytics/quarterly/route.ts](../apps/web/app/api/analytics/quarterly/route.ts): case-sensitive, nur `"Savings"` (exakt)
+- [apps/web/app/api/analytics/summary/route.ts](../apps/web/app/api/analytics/summary/route.ts): war bereits case-insensitive
+- [apps/web/app/api/analytics/quarterly/route.ts](../apps/web/app/api/analytics/quarterly/route.ts): war case-sensitive, nur `"Savings"` (exakt)
 
-**Problem:** Die beiden Routen erkennen die Spar-Kategorie unterschiedlich. Im quarterly-Endpunkt wird `"sparen"` (DE) oder `"savings"` (lowercase) nicht erkannt.
-
-**Empfehlung A (kurzfristig):** Gleiche case-insensitive Logik in quarterly anwenden:
+**Problem (vorher):** Im quarterly-Endpunkt wurde `"sparen"` (DE) oder `"savings"` (lowercase) nicht erkannt:
 
 ```typescript
+// Vorher: case-sensitive, nur exaktes "Savings"
+const savingsCategory = await prisma.category.findFirst({
+  where: { name: "Savings", userId: user.id },
+  select: { id: true }
+});
+```
+
+**Umsetzung:** Gleiche case-insensitive Logik wie in summary, mit Prisma `mode: "insensitive"`:
+
+```typescript
+// apps/web/app/api/analytics/quarterly/route.ts — Zeile 30
 const SAVINGS_NAMES = ["savings", "sparen"];
 const savingsCategory = await prisma.category.findFirst({
   where: {
     userId: user.id,
-    name: { in: SAVINGS_NAMES, mode: 'insensitive' }
+    name: { in: SAVINGS_NAMES, mode: "insensitive" }
   },
   select: { id: true }
 });
 ```
 
-**Empfehlung B (langfristig, breaking change):** Ein `isSavings: Boolean`-Feld auf `Category` einführen, statt fragiler Name-Erkennung. Eine Migration ist nötig, aber danach ist die Logik explizit und mehrsprachig.
-
-```prisma
-model Category {
-  // ...
-  isSavings Boolean @default(false)
-}
-```
+Beide Routen verwenden jetzt exakt dieselbe Erkennungslogik.
 
 ---
 
-## 3. Floating-Point-Arithmetik in der Präsentationsschicht
-
-**Fundort:** Beide Analytics-Routen
-
-**Problem:** Alle Berechnungen verwenden `/100` für die Konvertierung von Cents zu Euro — das ist eine Floating-Point-Division:
-
-```typescript
-const amt = t.amountCents / 100;  // kann zu 0.30000000000000004 führen
-outcomeTotalExclSavings += abs;
-```
-
-Bei Aggregationen über viele Transaktionen können sich kleine Fehler summieren.
-
-**Empfehlung:** Alle Aggregationen in Integer-Cents durchführen. Erst am Ende für die JSON-Antwort durch 100 teilen — oder besser: Cents direkt zurückgeben und in der UI konvertieren (wie der quarterly-Endpunkt es bereits teilweise macht: `incomeCents`, `outcomeCents`, etc.).
-
-Der summary-Endpunkt mischt beide Ansätze (manche Felder in Euro, manche in Cents). Vereinheitlichen auf Cents-basierte Rückgabe ist sauberer.
-
----
-
-## 4. Kein echtes Multi-Account-Support
-
-**Fundort:** Beide Analytics-Routen
-
-**Problem:** Beide Routen holen immer nur den **ersten** Account des Nutzers:
-
-```typescript
-const account = await prisma.account.findFirst({
-  where: { userId: user.id },
-  orderBy: { createdAt: "asc" }
-});
-```
-
-Das bedeutet: Hat ein Nutzer mehrere Konten (z.B. Girokonto + Sparkonto), werden nur Transaktionen des ersten Kontos im Dashboard angezeigt.
-
-**Empfehlung:** Entscheidung treffen:
-- **Option A:** Multi-Account aggregieren (alle Konten zusammen) — erfordert, dass der Analytics-Query über alle Account-IDs des Nutzers arbeitet
-- **Option B:** Account-Selektor im Dashboard einführen — Nutzer wählt, welches Konto angezeigt wird
-- **Option C (status quo dokumentieren):** Im Code explizit kommentieren, dass aktuell nur das erste Konto angezeigt wird, als bekannte Einschränkung
-
----
-
-## 5. Spar-Kategorie: Transaktionen mit negativem Betrag
+## 3. Floating-Point-Arithmetik in der Präsentationsschicht ✅ Umgesetzt
 
 **Fundort:** [apps/web/app/api/analytics/summary/route.ts](../apps/web/app/api/analytics/summary/route.ts)
 
-**Problem:** Sparbuchungen werden als negative Ausgaben erwartet:
+**Problem (vorher):** Alle Aggregationen teilten früh durch 100 und akkumulierten Float-Werte:
 
 ```typescript
-if (amt < 0) baselineSavings += -amt; // accumulate only transfers to savings
+// Vorher: Float-Division in der Inner Loop — kann zu 0.30000000000000004 führen
+const amt = t.amountCents / 100;
+outcomeTotalExclSavings += abs; // Float-Akkumulation
 ```
 
-Aber die Logik ist still: Positive Transaktionen auf die Spar-Kategorie (z.B. Zinsgutschrift ins Sparkonto) werden nicht als Spar-Rückfluss behandelt, sondern als normales Einkommen gewertet. Das kann zu falschen Spar-Summen führen.
+**Umsetzung:** Alle Berechnungen ausschließlich in Integer-Cents, Division durch 100 erst bei der JSON-Antwort:
 
-**Empfehlung:** Dokumentieren oder explizit validieren, dass Sparbuchungen immer negativ sein müssen.
+```typescript
+// apps/web/app/api/analytics/summary/route.ts — Zeile 84
+// Integer-Cents — keine Floating-Point-Drift
+let incomeTotalCents = 0;
+let outcomeTotalCents = 0;
+let monthlySavingsActualCents = 0;
+const byCategoryCents: Record<string, number> = {};
+
+for (const t of txs) {
+  const amt = t.amountCents; // direkt Integer verwenden
+  if (amt >= 0) {
+    incomeTotalCents += amt;
+  } else { ... }
+}
+
+// Zeile 219 — erst im Response durch 100 teilen
+return NextResponse.json({
+  incomeTotal: incomeTotalCents / 100,
+  outcomeTotal: outcomeTotalCents / 100,
+  ...
+});
+```
+
+Das Gleiche gilt für den Tages-Chart (Zeile 122 ff.) und die Dauerauftrags-Berechnung (Zeile 108 ff.): alle Loops in Cents, `/ 100` nur im letzten Schritt.
+
+---
+
+## 4. Kein echtes Multi-Account-Support ⚠️ Dokumentiert (Option C)
+
+**Fundort:** Beide Analytics-Routen
+
+**Status:** Als bekannte Einschränkung im Code dokumentiert. Beide Routen haben nun einen expliziten Kommentar:
+
+```typescript
+// apps/web/app/api/analytics/summary/route.ts — Zeile 51
+// NOTE: Nur das erste Konto wird verwendet — Multi-Account ist eine bekannte zukünftige Erweiterung.
+const account = await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+```
+
+Auch im JSDoc-Block oben in `summary/route.ts` dokumentiert. Technische Umsetzung (Option A: aggregieren oder Option B: Account-Selektor) bleibt künftiger Arbeit vorbehalten.
+
+---
+
+## 5. Spar-Kategorie: Transaktionen mit negativem Betrag ✅ Dokumentiert + Optimiert
+
+**Fundort:** [apps/web/app/api/analytics/summary/route.ts](../apps/web/app/api/analytics/summary/route.ts)
+
+**Problem:** Sparbuchungen wurden als negative Ausgaben erwartet, aber positive Transaktionen auf die Spar-Kategorie (z.B. Zinsgutschrift) wurden stillschweigend ignoriert.
+
+**Umsetzung:** Durch den Wechsel zu einem DB-Filter `amountCents: { lt: 0 }` in der `aggregate`-Abfrage für den Baseline-Sparbetrag ist die Logik jetzt explizit und korrekt — und im JSDoc dokumentiert:
+
+```typescript
+// apps/web/app/api/analytics/summary/route.ts — Zeile 93
+// Sparbuchungen sind per Konvention negativ (Abgang vom Girokonto zum Sparkonto)
+monthlySavingsActualCents += abs;
+
+// Zeile 167 — nur negative Buchungen fließen in die Baseline ein
+const prevSavingsAgg = await prisma.transaction.aggregate({
+  where: {
+    ...
+    amountCents: { lt: 0 } // nur Einzahlungen, keine Zinsgutschriften o.ä.
+  },
+  _sum: { amountCents: true }
+});
+```
 
 ---
 
 ## 6. Fehlende Datums-Validierung bei Recurring-Transaction-Berechnung
 
-**Fundort:** [apps/web/app/api/analytics/summary/route.ts](../apps/web/app/api/analytics/summary/route.ts), Funktion `recurringThisMonth`
+**Fundort:** [apps/web/app/api/analytics/summary/route.ts](../apps/web/app/api/analytics/summary/route.ts)
 
-**Problem:** Die Filterlogik für wiederkehrende Transaktionen prüft, ob `nextOccurrence` im aktuellen Monat liegt — aber nur anhand von Jahr/Monat-Vergleich, nicht ob der berechnete Tag im Monat tatsächlich gültig ist:
+**Befund:** Logik ist korrekt — der `>= 0`-Check verhindert zuverlässig, dass zukünftige Starts fälschlicherweise einbezogen werden.
 
-```typescript
-const monthsSinceNext = (year - nextYear) * 12 + (month - nextMonth);
-return monthsSinceNext >= 0 && monthsSinceNext % interval === 0;
-```
-
-Das ist korrekt für die Monatserkennung. Aber wenn `nextOccurrence` in der Zukunft liegt (z.B. weil die Dauerauftrag erst nächsten Monat startet), werden Monate davor fälschlicherweise einbezogen wenn `monthsSinceNext < 0` wäre — was der `>= 0` Check verhindert. ✅ Diese Logik ist eigentlich korrekt.
-
-*Kein Problem, nur als Hinweis dokumentiert.*
+*Kein Handlungsbedarf.*
 
 ---
 
 ## Zusammenfassung: Prioritäten
 
-| # | Problem | Priorität | Aufwand |
-|---|---|---|---|
-| 1 | `findMany` statt `_sum` für Kontostand | **Hoch** — wird mit Datenmenge langsamer | Klein |
-| 2 | O(n²) Quarterly-Balance-Query | **Hoch** — 3 Vollscans pro Request | Mittel |
-| 3 | Inkonsistente Spar-Kategorie-Erkennung | **Mittel** — Bugrisiko beim DE-Nutzer | Klein |
-| 4 | Float-Arithmetik in Aggregationen | **Mittel** — numerische Drift bei vielen Buchungen | Mittel |
-| 5 | Kein Multi-Account | **Niedrig** — bekannte Einschränkung | Groß |
-| 6 | Spar-Transaktionen positiver Betrag | **Niedrig** — edge case | Klein |
+| # | Problem | Priorität | Aufwand | Status |
+|---|---|---|---|---|
+| 1a | `findMany` → `_sum` für Kontostand (summary) | **Hoch** | Klein | ✅ Umgesetzt |
+| 1b | O(n²) Quarterly-Balance-Query | **Hoch** | Mittel | ✅ Umgesetzt |
+| 2 | Inkonsistente Spar-Kategorie-Erkennung | **Mittel** | Klein | ✅ Umgesetzt |
+| 3 | Float-Arithmetik in Aggregationen | **Mittel** | Mittel | ✅ Umgesetzt |
+| 4 | Kein Multi-Account | **Niedrig** | Groß | ⚠️ Dokumentiert |
+| 5 | Spar-Transaktionen positiver Betrag | **Niedrig** | Klein | ✅ Dokumentiert + DB-Filter |
+| 6 | Datums-Validierung Recurring | — | — | ✅ War korrekt |
