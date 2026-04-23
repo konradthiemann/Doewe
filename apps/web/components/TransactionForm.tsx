@@ -58,11 +58,31 @@ export default function TransactionForm({
   const [intervalMonths, setIntervalMonths] = useState(1);
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
+  const [selectedSavingGoalId, setSelectedSavingGoalId] = useState("");
+  const [savingGoals, setSavingGoals] = useState<Array<{ id: string; title: string; month: number; year: number }>>([]);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
   const newCategoryRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (mode !== "create") return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/saving-plan", { cache: "no-store" });
+        if (!res.ok) return;
+        const json: { goals: Array<{ id: string; title: string; month: number; year: number }> } = await res.json();
+        if (!active) return;
+        setSavingGoals(json.goals);
+      } catch {
+        // non-critical, ignore
+      }
+    })();
+    return () => { active = false; };
+  }, [mode]);
 
   useEffect(() => {
     let active = true;
@@ -199,7 +219,8 @@ export default function TransactionForm({
       amountCents: signedCents,
       description: form.description,
       occurredAt: mode === "edit" && transaction ? transaction.occurredAt : new Date().toISOString(),
-      categoryId: form.categoryId && form.categoryId !== "__new__" ? form.categoryId : undefined
+      categoryId: form.categoryId && form.categoryId !== "__new__" ? form.categoryId : undefined,
+      savingGoalId: isSavingGoal && selectedSavingGoalId ? selectedSavingGoalId : undefined
     };
 
     try {
@@ -570,6 +591,50 @@ export default function TransactionForm({
                 <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
               </label>
             </div>
+            <div className="flex items-center justify-between rounded-lg bg-emerald-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-emerald-900/20 dark:text-neutral-200">
+              <div>
+                <p className="font-medium">{t("transactionForm.savingGoalToggleTitle")}</p>
+                <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  {t("transactionForm.savingGoalToggleDescription")}
+                </p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={isSavingGoal}
+                  onChange={(event) => {
+                    setIsSavingGoal(event.target.checked);
+                    if (!event.target.checked) setSelectedSavingGoalId("");
+                  }}
+                  aria-checked={isSavingGoal}
+                />
+                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-emerald-600 dark:bg-neutral-700" />
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+              </label>
+            </div>
+            {isSavingGoal && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium" htmlFor="tx-saving-goal">
+                  {t("transactionForm.savingGoalLabel")} <span className="text-red-600">*</span>
+                </label>
+                <select
+                  id="tx-saving-goal"
+                  value={selectedSavingGoalId}
+                  onChange={(event) => setSelectedSavingGoalId(event.target.value)}
+                  className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-emerald-500 focus:ring-emerald-500"
+                >
+                  <option value="" disabled>
+                    {t("transactionForm.savingGoalPlaceholder")}
+                  </option>
+                  {savingGoals.map((goal) => (
+                    <option key={goal.id} value={goal.id}>
+                      {goal.title} ({goal.year}-{String(goal.month).padStart(2, "0")})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {isRecurring && (
               <div className="space-y-4">
                 <div className="space-y-2">

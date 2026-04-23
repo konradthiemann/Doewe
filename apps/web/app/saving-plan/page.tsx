@@ -16,6 +16,7 @@ type SavingGoal = {
   month: number;
   year: number;
   amountCents: number;
+  transactionSpentCents: number;
   createdAt: string;
 };
 
@@ -314,6 +315,23 @@ function SavingPlanPage() {
                           style={{ width: `${percentClamped}%` }}
                         />
                       </div>
+                      {goal.transactionSpentCents > 0 && (() => {
+                        const spentPercent = Math.min(Math.round((goal.transactionSpentCents / goal.amountCents) * 100), 100);
+                        return (
+                          <div className="mt-2">
+                            <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
+                              <span>{t("savingPlan.timelineSpentPercent", { percent: spentPercent })}</span>
+                              <span>{t("savingPlan.timelineSpent", { amount: formatCurrency(goal.transactionSpentCents) })}</span>
+                            </div>
+                            <div className="mt-1 h-2 w-full rounded-full bg-amber-100 dark:bg-amber-900/30" aria-hidden="true">
+                              <div
+                                className="h-2 rounded-full bg-amber-500 transition-all dark:bg-amber-400"
+                                style={{ width: `${spentPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {goal.status === "current" && (
                         <p className="mt-2 text-xs font-medium text-indigo-600 dark:text-indigo-300">
                           {t("savingPlan.timelineCurrent")}

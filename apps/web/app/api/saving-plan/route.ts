@@ -86,7 +86,10 @@ export async function GET() {
     prisma.budget.findMany({
       where: { accountId },
       orderBy: [{ year: "asc" }, { month: "asc" }, { createdAt: "asc" }],
-      include: { category: { select: { name: true } } }
+      include: {
+        category: { select: { name: true } },
+        transactions: { select: { amountCents: true } }
+      }
     }),
     resolveSavingsBalanceCents(accountId, user.id)
   ]);
@@ -105,6 +108,7 @@ export async function GET() {
     month: goal.month,
     year: goal.year,
     amountCents: goal.amountCents,
+    transactionSpentCents: goal.transactions.reduce((sum, tx) => sum + Math.abs(tx.amountCents), 0),
     createdAt: goal.createdAt
   }));
 
