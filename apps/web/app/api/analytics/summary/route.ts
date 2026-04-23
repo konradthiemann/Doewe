@@ -19,6 +19,10 @@
  *
  * Wichtig: Sparbudgets werden SEPARAT von normalen Ausgaben behandelt.
  * Eine Kategorie gilt als "Sparen" wenn ihr Name (lowercase) "savings" oder "sparen" enthält.
+ * Sparbuchungen müssen einen negativen amountCents haben (Abgang vom Konto).
+ *
+ * Bekannte Einschränkung: Nur das erste Konto des Nutzers wird ausgewertet.
+ * Multi-Account-Aggregation ist eine geplante zukünftige Erweiterung.
  */
 import { NextResponse } from "next/server";
 
@@ -36,6 +40,7 @@ export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // NOTE: Nur das erste Konto wird verwendet — Multi-Account ist eine bekannte zukünftige Erweiterung.
   const account = await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
   if (!account) {
     return NextResponse.json({ error: "No account found for user" }, { status: 404 });
@@ -46,29 +51,21 @@ export async function GET() {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  // === NEW: Calculate total balance (all transactions ever) ===
-  const allTransactions = await prisma.transaction.findMany({
+  // Gesamtkontostand: DB berechnet die Summe direkt — kein Transfer aller Datensätze nötig
+  const totalBalanceAgg = await prisma.transaction.aggregate({
     where: { accountId },
-    select: { amountCents: true }
+    _sum: { amountCents: true }
   });
-  let totalBalanceCents = 0;
-  for (const t of allTransactions) {
-    totalBalanceCents += t.amountCents;
-  }
-  const totalBalance = totalBalanceCents / 100;
+  const totalBalance = (totalBalanceAgg._sum.amountCents ?? 0) / 100;
 
-  // === NEW: Calculate carryover from last month (balance at end of previous month) ===
-  const transactionsBeforeThisMonth = await prisma.transaction.findMany({
+  // Carryover: Kontostand am Ende des Vormonats — gleiche Optimierung
+  const carryoverAgg = await prisma.transaction.aggregate({
     where: { accountId, occurredAt: { lt: start } },
-    select: { amountCents: true }
+    _sum: { amountCents: true }
   });
-  let carryoverCents = 0;
-  for (const t of transactionsBeforeThisMonth) {
-    carryoverCents += t.amountCents;
-  }
-  const carryoverFromLastMonth = carryoverCents / 100;
+  const carryoverFromLastMonth = (carryoverAgg._sum.amountCents ?? 0) / 100;
 
-  // Resolve special category for savings (if present) – match both EN "Savings" and DE "Sparen"
+  // Spar-Kategorie auflösen — case-insensitive, EN + DE
   const SAVINGS_NAMES = ["savings", "sparen"];
   const allUserCategories = await prisma.category.findMany({
     where: { userId: user.id },
@@ -79,7 +76,7 @@ export async function GET() {
   );
   const savingsCatId = savingsCategory?.id ?? null;
 
-  // Get all transactions for the month for the account
+  // Alle Transaktionen des aktuellen Monats
   const txs = await prisma.transaction.findMany({
     where: {
       accountId,
@@ -88,28 +85,30 @@ export async function GET() {
     select: { amountCents: true, categoryId: true, occurredAt: true }
   });
 
-  // Sum income/outcome and bucket outcomes by categoryId
-  let incomeTotal = 0;
-  let outcomeTotalExclSavings = 0;
-  let monthlySavingsActual = 0; // only savings transfers in the current month
-  const byCategory: Record<string, number> = {};
+  // Alle Monats-Aggregationen in Integer-Cents — Floating-Point-Drift wird so verhindert
+  let incomeTotalCents = 0;
+  let outcomeTotalCents = 0;
+  let monthlySavingsActualCents = 0;
+  const byCategoryCents: Record<string, number> = {};
+
   for (const t of txs) {
-    const amt = t.amountCents / 100;
-    if (amt >= 0) incomeTotal += amt;
-    else {
+    const amt = t.amountCents;
+    if (amt >= 0) {
+      incomeTotalCents += amt;
+    } else {
       const abs = -amt;
-      // Savings transactions are tracked separately and excluded from category breakdown
       if (t.categoryId && savingsCatId && t.categoryId === savingsCatId) {
-        monthlySavingsActual += abs;
+        // Sparbuchungen sind per Konvention negativ (Abgang vom Girokonto zum Sparkonto)
+        monthlySavingsActualCents += abs;
       } else {
-        outcomeTotalExclSavings += abs;
+        outcomeTotalCents += abs;
         const key = t.categoryId ?? "uncategorized";
-        byCategory[key] = (byCategory[key] ?? 0) + abs;
+        byCategoryCents[key] = (byCategoryCents[key] ?? 0) + abs;
       }
     }
   }
 
-  // Planned savings (Budget with categoryId null) for current month only
+  // Geplante Ersparnis (Budget ohne Kategorie) für den aktuellen Monat
   const { month, year } = getMonthYear(now);
   const plannedBudgetAgg = await prisma.budget.aggregate({
     where: { accountId, categoryId: null, month, year },
@@ -117,13 +116,13 @@ export async function GET() {
   });
   const plannedSavings = (plannedBudgetAgg._sum.amountCents ?? 0) / 100;
 
-  // Category-level budgets for current month (categoryId != null)
+  // Kategoriebudgets für den aktuellen Monat
   const categoryBudgetsRaw = await prisma.budget.findMany({
     where: { accountId, categoryId: { not: null }, month, year },
     select: { categoryId: true, amountCents: true }
   });
 
-  // === NEW: Fetch recurring transactions for current month ===
+  // Daueraufträge für den aktuellen Monat
   const recurringTransactions = await prisma.recurringTransaction.findMany({
     where: { accountId },
     select: {
@@ -137,24 +136,16 @@ export async function GET() {
     }
   });
 
-  // Filter recurring transactions that occur in current month
   const recurringThisMonth = recurringTransactions.filter((rec) => {
     const nextDate = new Date(rec.nextOccurrence);
     const nextYear = nextDate.getFullYear();
     const nextMonth = nextDate.getMonth() + 1;
-    
-    // Check if this recurring transaction occurs in current month
-    if (nextYear === year && nextMonth === month) {
-      return true;
-    }
-    
-    // Check if transaction repeats and would occur in current month
+    if (nextYear === year && nextMonth === month) return true;
     const interval = rec.intervalMonths || 1;
     const monthsSinceNext = (year - nextYear) * 12 + (month - nextMonth);
     return monthsSinceNext >= 0 && monthsSinceNext % interval === 0;
   });
 
-  // Check for skips
   const skips = await prisma.recurringTransactionSkip.findMany({
     where: {
       recurringId: { in: recurringThisMonth.map((r) => r.id) },
@@ -164,55 +155,49 @@ export async function GET() {
     select: { recurringId: true }
   });
   const skippedIds = new Set(skips.map((s) => s.recurringId));
-
-  // Filter out skipped transactions
   const activeRecurringThisMonth = recurringThisMonth.filter((r) => !skippedIds.has(r.id));
 
-  // Calculate recurring transaction totals
-  let recurringIncomeTotal = 0;
-  let recurringOutcomeTotal = 0;
-  const recurringByCategory: Record<string, number> = {};
+  // Dauerauftrag-Summen — ebenfalls in Cents
+  let recurringIncomeTotalCents = 0;
+  let recurringOutcomeTotalCents = 0;
+  const recurringByCategoryCents: Record<string, number> = {};
 
   for (const rec of activeRecurringThisMonth) {
-    const amt = rec.amountCents / 100;
+    const amt = rec.amountCents;
     if (amt >= 0) {
-      recurringIncomeTotal += amt;
+      recurringIncomeTotalCents += amt;
     } else {
       const abs = -amt;
-      recurringOutcomeTotal += abs;
+      recurringOutcomeTotalCents += abs;
       if (rec.categoryId && rec.categoryId !== savingsCatId) {
-        const key = rec.categoryId;
-        recurringByCategory[key] = (recurringByCategory[key] || 0) + abs;
+        recurringByCategoryCents[rec.categoryId] = (recurringByCategoryCents[rec.categoryId] || 0) + abs;
       }
     }
   }
 
-  // Remaining cash after non-savings outgoings and savings transfers
-  const remaining = incomeTotal - outcomeTotalExclSavings - monthlySavingsActual;
+  const remainingCents = incomeTotalCents - outcomeTotalCents - monthlySavingsActualCents;
 
-  // Build daily cumulative lines (income, outcome excl savings, global savings adjusted)
+  // Tages-Chart: kumulierte Werte in Cents aufaddieren, erst bei Ausgabe durch 100 teilen
   const daysInMonth = new Date(year, month, 0).getDate();
   const byDay = Array.from({ length: daysInMonth }, () => ({ inc: 0, out: 0, sav: 0 }));
-  
-  // Add actual transactions
+
   for (const t of txs) {
     const day = t.occurredAt.getDate();
     const idx = day - 1;
-    const amt = t.amountCents / 100;
+    const amt = t.amountCents;
     if (amt >= 0) {
       byDay[idx].inc += amt;
     } else if (savingsCatId && t.categoryId === savingsCatId) {
-      byDay[idx].sav += -amt; // savings are positive for accumulation
+      byDay[idx].sav += -amt;
     } else {
-      byDay[idx].out += -amt; // outgoings are positive for charting
+      byDay[idx].out += -amt;
     }
   }
 
-  // Add recurring transactions to their scheduled day
   for (const rec of activeRecurringThisMonth) {
     const day = Math.min(rec.dayOfMonth || 1, daysInMonth);
     const idx = day - 1;
-    const amt = rec.amountCents / 100;
+    const amt = rec.amountCents;
     if (amt >= 0) {
       byDay[idx].inc += amt;
     } else if (savingsCatId && rec.categoryId === savingsCatId) {
@@ -222,21 +207,20 @@ export async function GET() {
     }
   }
 
-  // Baseline global savings: sum of all savings transactions before current month
-  let baselineSavings = 0;
+  // Baseline-Sparbetrag (alle Sparbuchungen vor diesem Monat) — nur negative Buchungen zählen,
+  // DB-Aggregation statt findMany + Loop
+  let baselineSavingsCents = 0;
   if (savingsCatId) {
-    const prevSavings = await prisma.transaction.findMany({
+    const prevSavingsAgg = await prisma.transaction.aggregate({
       where: {
         accountId,
         categoryId: savingsCatId,
-        occurredAt: { lt: start }
+        occurredAt: { lt: start },
+        amountCents: { lt: 0 }
       },
-      select: { amountCents: true }
+      _sum: { amountCents: true }
     });
-    for (const t of prevSavings) {
-      const amt = t.amountCents / 100;
-      if (amt < 0) baselineSavings += -amt; // accumulate only transfers to savings
-    }
+    baselineSavingsCents = -(prevSavingsAgg._sum.amountCents ?? 0);
   }
 
   const incomeDaily: number[] = new Array(daysInMonth).fill(0);
@@ -244,32 +228,30 @@ export async function GET() {
   const savingsDaily: number[] = new Array(daysInMonth).fill(0);
   let incRun = 0;
   let outRun = 0;
-  let savRun = baselineSavings;
+  let savRun = baselineSavingsCents;
   for (let i = 0; i < daysInMonth; i++) {
     incRun += byDay[i].inc;
     outRun += byDay[i].out;
-    savRun += byDay[i].sav; // add savings transfers
+    savRun += byDay[i].sav;
     const deficit = Math.max(0, outRun - incRun);
     const adjustedSavings = Math.max(0, savRun - deficit);
-    incomeDaily[i] = incRun;
-    outcomeDaily[i] = outRun;
-    savingsDaily[i] = adjustedSavings;
+    incomeDaily[i] = incRun / 100;
+    outcomeDaily[i] = outRun / 100;
+    savingsDaily[i] = adjustedSavings / 100;
   }
 
-  // Projected totals including recurring transactions
-  const projectedIncomeTotal = incomeTotal + recurringIncomeTotal;
-  const projectedOutcomeTotal = outcomeTotalExclSavings + recurringOutcomeTotal;
-  const projectedRemaining = projectedIncomeTotal - projectedOutcomeTotal - monthlySavingsActual;
+  const projectedIncomeTotalCents = incomeTotalCents + recurringIncomeTotalCents;
+  const projectedOutcomeTotalCents = outcomeTotalCents + recurringOutcomeTotalCents;
+  const projectedRemainingCents = projectedIncomeTotalCents - projectedOutcomeTotalCents - monthlySavingsActualCents;
 
-  // Merge recurring transactions into category breakdown
-  for (const [catId, amount] of Object.entries(recurringByCategory)) {
-    byCategory[catId] = (byCategory[catId] || 0) + amount;
+  // Daueraufträge in Kategorie-Aufteilung einrechnen (beide in Cents)
+  for (const [catId, amountCents] of Object.entries(recurringByCategoryCents)) {
+    byCategoryCents[catId] = (byCategoryCents[catId] || 0) + amountCents;
   }
 
-  // Recalculate outgoingByCategory with recurring included.
-  // Also include categories that have a budget but no spending yet, so their names resolve.
+  // Kategorienamen auflösen für alle Kategorien mit Ausgaben oder Budget
   const updatedCatIds = Array.from(new Set([
-    ...Object.keys(byCategory).filter((id) => id !== "uncategorized"),
+    ...Object.keys(byCategoryCents).filter((id) => id !== "uncategorized"),
     ...categoryBudgetsRaw.map((b) => b.categoryId).filter((id): id is string => id !== null)
   ]));
   const updatedCategories = await prisma.category.findMany({
@@ -279,40 +261,39 @@ export async function GET() {
   const updatedNameMap: Record<string, string> = {};
   for (const c of updatedCategories) updatedNameMap[c.id] = c.name;
 
-  const finalOutgoingByCategory = Object.entries(byCategory).map(([id, amount]) => ({
+  // Erst hier — am Ende — von Cents in Euro konvertieren
+  const finalOutgoingByCategory = Object.entries(byCategoryCents).map(([id, amountCents]) => ({
     id,
     name: id === "uncategorized" ? "Uncategorized" : updatedNameMap[id] ?? id,
-    amount
+    amount: amountCents / 100
   }));
 
-  // Build categoryBudgets: budget vs. spent for each category that has a budget this month.
-  // Uses the merged `byCategory` (actual + recurring, excl. savings) as spent baseline.
   const categoryBudgets = categoryBudgetsRaw
     .filter((b): b is { categoryId: string; amountCents: number } => b.categoryId !== null)
     .map((b) => {
-      const spent = byCategory[b.categoryId] ?? 0;
-      const budget = b.amountCents / 100;
+      const spentCents = byCategoryCents[b.categoryId] ?? 0;
+      const budgetCents = b.amountCents;
       return {
         categoryId: b.categoryId,
         name: updatedNameMap[b.categoryId] ?? b.categoryId,
-        budget,
-        spent,
-        diff: spent - budget
+        budget: budgetCents / 100,
+        spent: spentCents / 100,
+        diff: (spentCents - budgetCents) / 100
       };
     });
 
   return NextResponse.json({
     totalBalance,
     carryoverFromLastMonth,
-    incomeTotal,
-    outcomeTotal: outcomeTotalExclSavings,
-    outcomeTotalExclSavings,
-    monthlySavingsActual,
-    remaining,
+    incomeTotal: incomeTotalCents / 100,
+    outcomeTotal: outcomeTotalCents / 100,
+    outcomeTotalExclSavings: outcomeTotalCents / 100,
+    monthlySavingsActual: monthlySavingsActualCents / 100,
+    remaining: remainingCents / 100,
     plannedSavings,
-    projectedIncomeTotal,
-    projectedOutcomeTotal,
-    projectedRemaining,
+    projectedIncomeTotal: projectedIncomeTotalCents / 100,
+    projectedOutcomeTotal: projectedOutcomeTotalCents / 100,
+    projectedRemaining: projectedRemainingCents / 100,
     outgoingByCategory: finalOutgoingByCategory,
     categoryBudgets,
     recurringTransactions: activeRecurringThisMonth.map((r) => ({
@@ -322,8 +303,8 @@ export async function GET() {
       categoryId: r.categoryId,
       dayOfMonth: r.dayOfMonth
     })),
-    recurringIncomeTotal,
-    recurringOutcomeTotal,
+    recurringIncomeTotal: recurringIncomeTotalCents / 100,
+    recurringOutcomeTotal: recurringOutcomeTotalCents / 100,
     daily: {
       labels: Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`),
       income: incomeDaily,
