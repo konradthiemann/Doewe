@@ -329,6 +329,57 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Category Budgets — nach oben gezogen: wichtigste Info für tägliche Haushaltsplanung */}
+      <section aria-labelledby="category-budgets" className="max-w-3xl">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="category-budgets" className="text-lg font-medium mb-1">
+            {t("dashboard.categoryBudgetsTitle")}
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.categoryBudgetsSubtitle")}</p>
+          {loading ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
+          ) : categoryBudgets.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.categoryBudgetsEmpty")}</p>
+          ) : (
+            <>
+              {overBudgetCategories.length === 0 && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-3">{t("dashboard.categoryBudgetsAllOk")}</p>
+              )}
+              <ul className="space-y-2">
+                {categoryBudgets
+                  .slice()
+                  .sort((a, b) => b.diff - a.diff)
+                  .map((c) => {
+                    const pct = c.budget > 0 ? Math.min(200, Math.round((c.spent / c.budget) * 100)) : 0;
+                    const over = c.diff > 0;
+                    return (
+                      <li key={c.categoryId} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900 dark:text-neutral-100">{c.name}</span>
+                          <span className={`text-xs font-semibold tabular-nums ${over ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {formatCurrency(c.spent)} / {formatCurrency(c.budget)}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded bg-gray-200 dark:bg-neutral-900 overflow-hidden" aria-hidden="true">
+                          <div
+                            className={`h-2 rounded ${over ? "bg-red-500" : "bg-emerald-500"}`}
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                        <p className={`mt-1 text-[11px] ${over ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-neutral-400"}`}>
+                          {over
+                            ? t("dashboard.categoryBudgetOverBy", { amount: formatCurrency(c.diff) })
+                            : t("dashboard.categoryBudgetUnderBy", { amount: formatCurrency(-c.diff) })}
+                        </p>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </>
+          )}
+        </div>
+      </section>
+
       <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
@@ -584,57 +635,6 @@ export default function HomePage() {
                 </p>
               )}
             </div>
-          )}
-        </div>
-      </section>
-
-      {/* Category Budgets Section (E) */}
-      <section aria-labelledby="category-budgets" className="max-w-3xl">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
-          <h2 id="category-budgets" className="text-lg font-medium mb-1">
-            {t("dashboard.categoryBudgetsTitle")}
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.categoryBudgetsSubtitle")}</p>
-          {loading ? (
-            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
-          ) : categoryBudgets.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.categoryBudgetsEmpty")}</p>
-          ) : (
-            <>
-              {overBudgetCategories.length === 0 && (
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-3">{t("dashboard.categoryBudgetsAllOk")}</p>
-              )}
-              <ul className="space-y-2">
-                {categoryBudgets
-                  .slice()
-                  .sort((a, b) => b.diff - a.diff)
-                  .map((c) => {
-                    const pct = c.budget > 0 ? Math.min(200, Math.round((c.spent / c.budget) * 100)) : 0;
-                    const over = c.diff > 0;
-                    return (
-                      <li key={c.categoryId} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-900 dark:text-neutral-100">{c.name}</span>
-                          <span className={`text-xs font-semibold tabular-nums ${over ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                            {formatCurrency(c.spent)} / {formatCurrency(c.budget)}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full rounded bg-gray-200 dark:bg-neutral-900 overflow-hidden" aria-hidden="true">
-                          <div
-                            className={`h-2 rounded ${over ? "bg-red-500" : "bg-emerald-500"}`}
-                            style={{ width: `${Math.min(100, pct)}%` }}
-                          />
-                        </div>
-                        <p className={`mt-1 text-[11px] ${over ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-neutral-400"}`}>
-                          {over
-                            ? t("dashboard.categoryBudgetOverBy", { amount: formatCurrency(c.diff) })
-                            : t("dashboard.categoryBudgetUnderBy", { amount: formatCurrency(-c.diff) })}
-                        </p>
-                      </li>
-                    );
-                  })}
-              </ul>
-            </>
           )}
         </div>
       </section>

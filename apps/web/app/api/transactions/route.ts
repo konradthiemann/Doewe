@@ -1,3 +1,18 @@
+/**
+ * GET  /api/transactions  — Alle Transaktionen des eingeloggten Nutzers (neueste zuerst)
+ * POST /api/transactions  — Neue Transaktion anlegen
+ *
+ * Authentifizierung: Pflicht. Gibt 401 zurück wenn nicht eingeloggt.
+ * Autorisierung: Nur Transaktionen des eigenen Accounts (via accountId → userId).
+ *
+ * POST Body (JSON):
+ *   accountId    string   — Pflicht, muss dem Nutzer gehören
+ *   amountCents  number   — Ganzzahl, positiv = Einnahme, negativ = Ausgabe
+ *   description  string   — Pflicht, nicht leer
+ *   occurredAt   string   — ISO-Datum-String
+ *   categoryId?  string   — Optional, muss dem Nutzer gehören
+ *   savingGoalId? string  — Optional, verknüpft mit einem Budget-Ziel
+ */
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 

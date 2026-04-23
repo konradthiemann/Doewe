@@ -1,3 +1,13 @@
+/**
+ * GET  /api/budgets  — Alle Budgets des Nutzers (neueste Monate zuerst)
+ * POST /api/budgets  — Neues Budget anlegen
+ *
+ * Ein Budget definiert einen Ziel-Betrag für eine Kategorie in einem bestimmten Monat.
+ * Budget ohne categoryId (categoryId = null) ist das "Spar-Budget" für den Monat.
+ * Unique-Constraint: (accountId, categoryId, month, year) — kein doppeltes Budget.
+ *
+ * POST Body: { accountId, categoryId?, month (1-12), year, amountCents }
+ */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 

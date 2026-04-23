@@ -1,10 +1,33 @@
+/**
+ * GET /api/analytics/summary
+ *
+ * Das Herzstück des Dashboards. Liefert alle Finanzdaten für den aktuellen Monat:
+ *
+ * - `totalBalance`          — Gesamtkontostand (alle Transaktionen aller Zeiten)
+ * - `carryoverFromLastMonth`— Kontostand am Ende des Vormonats
+ * - `incomeTotal`           — Summe aller tatsächlichen Einnahmen diesen Monat
+ * - `outcomeTotal`          — Summe aller Ausgaben (ohne Sparbuchungen) diesen Monat
+ * - `monthlySavingsActual`  — Tatsächliche Sparbuchungen diesen Monat
+ * - `plannedSavings`        — Budget-Ziel ohne Kategorie (= Sparziel) für diesen Monat
+ * - `projectedIncomeTotal`  — Hochrechnung inkl. noch nicht gebuchter Daueraufträge
+ * - `projectedOutcomeTotal` — Hochrechnung Ausgaben inkl. Daueraufträge
+ * - `projectedRemaining`    — Voraussichtlich verbleibendes Geld
+ * - `outgoingByCategory`    — Ausgaben aufgeteilt nach Kategorien (inkl. Daueraufträge)
+ * - `categoryBudgets`       — Budget vs. Ist pro Kategorie
+ * - `recurringTransactions` — Aktive Daueraufträge für diesen Monat (nicht geskippt)
+ * - `daily`                 — Tagesweise kumulierte Linien für das Chart (income, outcome, savings)
+ *
+ * Wichtig: Sparbudgets werden SEPARAT von normalen Ausgaben behandelt.
+ * Eine Kategorie gilt als "Sparen" wenn ihr Name (lowercase) "savings" oder "sparen" enthält.
+ */
 import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic"; // avoid build-time prerender, always run at request time
+export const dynamic = "force-dynamic"; // Kein Build-Time-Prerendering — Daten sind nutzer- und zeitabhängig
 
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 
+/** Gibt Monat (1-12) und Jahr des übergebenen Datums zurück. Standard: heute. */
 function getMonthYear(date = new Date()) {
   return { month: date.getMonth() + 1, year: date.getFullYear() };
 }
