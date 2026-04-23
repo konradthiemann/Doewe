@@ -191,6 +191,93 @@ Planned / extensible areas:
 - Prefer small, incremental PRs; keep quality gates green locally before pushing.
 - Branching: flexible (CI runs on all branches); recommend feature branches named `feat/<short-name>` or `chore/<short-name>`.
 
+## Claude AI Agents
+
+This project ships a suite of specialised Claude Code sub-agents in [.claude/agents/](.claude/agents/). They are invoked from within a Claude Code session with `@agent-name` and each one has deep knowledge of the Doewe stack.
+
+### Agent overview
+
+| Agent | File | When to use |
+|---|---|---|
+| `orchestrator` | [orchestrator.md](.claude/agents/orchestrator.md) | Starting point for any multi-layer feature (DB + API + UI + tests) |
+| `planner` | [planner.md](.claude/agents/planner.md) | Design an implementation plan before any code is written |
+| `implementer` | [implementer.md](.claude/agents/implementer.md) | Write or refactor production code (routes, components, migrations) |
+| `reviewer` | [reviewer.md](.claude/agents/reviewer.md) | Review a diff or PR for correctness, TypeScript quality, test coverage |
+| `security` | [security.md](.claude/agents/security.md) | Audit API routes, auth flows, and data handling for vulnerabilities |
+| `ui-ux` | [ui-ux.md](.claude/agents/ui-ux.md) | Review or build UI components with accessibility + Tailwind compliance |
+| `data-analyst` | [data-analyst.md](.claude/agents/data-analyst.md) | Design schema changes, optimise Prisma queries, reason about domain logic |
+| `docs` | [docs.md](.claude/agents/docs.md) | Write, update, or audit documentation (inline TSDoc, README, CHANGELOG) |
+| `agent-quality` | [agent-quality.md](.claude/agents/agent-quality.md) | Audit and improve the agent files themselves when the project evolves |
+
+### How to invoke agents
+
+In any Claude Code session, prefix your request with the agent name:
+
+```
+@orchestrator Neues Feature: Benutzer soll Budget-Alerts per E-Mail erhalten wenn die Ausgaben 80% des Budgets überschreiten.
+
+@planner Plane die Implementierung eines CSV-Exports für Transaktionen.
+
+@implementer Implementiere GET /api/accounts basierend auf dem folgenden Plan: [...]
+
+@reviewer Bitte review den folgenden Diff: [diff einfügen]
+
+@security Prüfe alle Routen in apps/web/app/api/ auf fehlende Auth-Guards.
+
+@data-analyst Ich möchte den SavingPlan um ein deadline-Feld erweitern. Welche Schema-Änderungen brauche ich?
+
+@ui-ux Review die TransactionForm-Komponente auf Accessibility-Probleme.
+
+@docs Aktualisiere die README nach dem neuen Recurring-Transactions-Feature.
+
+@agent-quality Prüfe alle Agent-Dateien — wir haben letzte Woche auf Next.js 15 migriert.
+```
+
+### Recommended workflows
+
+**Neues Feature (End-to-End)**
+```
+1. @orchestrator  →  Dekomposition in Sub-Tasks
+2. @planner       →  Detaillierter Implementierungsplan mit Reihenfolge
+3. @data-analyst  →  Schema-Review (falls DB betroffen)
+4. @implementer   →  Code schreiben layer by layer
+5. @reviewer      →  Code-Review vor dem Commit
+6. @security      →  Security-Check der neuen API-Routen
+7. @ui-ux         →  Accessibility-Review der neuen Komponenten
+8. @docs          →  Dokumentation aktualisieren
+```
+
+**Quick Bug Fix**
+```
+1. @implementer   →  Fix direkt beschreiben lassen
+2. @reviewer      →  Kurz-Review des Fixes
+```
+
+**PR-Review**
+```
+1. @reviewer      →  Allgemeine Code-Qualität
+2. @security      →  Sicherheits-Check (bei API-Änderungen)
+```
+
+**Schema-Migration**
+```
+1. @data-analyst  →  Migration planen + Risiken bewerten
+2. @implementer   →  Migration schreiben
+3. @docs          →  CHANGELOG + README aktualisieren
+```
+
+**Projekt wächst / Stack-Update**
+```
+1. @agent-quality →  Agent-Dateien auf Aktualität prüfen und verbessern
+```
+
+### Tips for efficient use
+
+- **Kontext mitgeben:** Je konkreter der Prompt, desto besser das Ergebnis. Dateinamen, Zeilennummern, und bestehende Code-Snippets helfen enorm.
+- **Orchestrator zuerst:** Bei Features die mehr als eine Datei betreffen, lohnt es sich immer zuerst den Orchestrator zu fragen — er verhindert vergessene Layers (z.B. fehlender Auth-Check, fehlender Test).
+- **Agent Quality nach Stack-Updates:** Wenn Dependencies, Konventionen oder Dateistrukturen sich ändern, den `agent-quality`-Agent laufen lassen damit die anderen Agents nicht mit veralteten Annahmen arbeiten.
+- **Agents kombinieren:** Du kannst in einer Session mehrere Agents hintereinander nutzen — z.B. erst `@planner` für den Plan, dann `@implementer` mit dem Plan als Input.
+
 ## Coding Standards
 - TypeScript strict everywhere; domain types first.
 - Tailwind for styling (avoid inline styles by merge-time).
