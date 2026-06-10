@@ -1,10 +1,16 @@
 "use client";
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 
+import { cn } from "../lib/cn";
 import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
+import { recurringTransactionFormSchema, type RecurringTransactionFormValues } from "../lib/schemas/forms";
+
+import { Button } from "./ui/Button";
 
 type RecurringDetails = {
   id: string;
@@ -29,29 +35,41 @@ export default function RecurringTransactionForm({
   headingId,
   onSuccess,
   onClose,
-  onDelete
+  onDelete,
 }: Props) {
   const { t } = useI18n();
-  const [form, setForm] = useState(() => ({
-    description: recurring.description,
-    amount: toDecimalString(fromCents(Math.abs(recurring.amountCents))),
-    accountId: recurring.accountId,
-    categoryId: recurring.categoryId ?? "",
-    intervalMonths: recurring.intervalMonths || 1,
-    dayOfMonth: recurring.dayOfMonth ?? 1
-  }));
   const [txType, setTxType] = useState<"income" | "outcome">(
     recurring.amountCents >= 0 ? "income" : "outcome"
   );
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean }>>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<RecurringTransactionFormValues>({
+    resolver: zodResolver(recurringTransactionFormSchema),
+    defaultValues: {
+      description: recurring.description,
+      amount: toDecimalString(fromCents(Math.abs(recurring.amountCents))),
+      accountId: recurring.accountId,
+      categoryId: recurring.categoryId ?? "",
+      intervalMonths: recurring.intervalMonths || 1,
+      dayOfMonth: recurring.dayOfMonth ?? 1,
+    },
+  });
+
+  const categoryId = watch("categoryId");
 
   useEffect(() => {
     let active = true;
@@ -60,15 +78,17 @@ export default function RecurringTransactionForm({
       try {
         const [accRes, catRes] = await Promise.all([
           fetch("/api/accounts", { cache: "no-store" }),
-          fetch("/api/categories", { cache: "no-store" })
+          fetch("/api/categories", { cache: "no-store" }),
         ]);
 
         if (!accRes.ok || !catRes.ok) {
           throw new Error(t("recurringForm.errorLoadRef"));
         }
 
-        const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string; isIncome: boolean }>]
-          = await Promise.all([accRes.json(), catRes.json()]);
+        const [acc, cat]: [
+          Array<{ id: string; name: string }>,
+          Array<{ id: string; name: string; isIncome: boolean }>
+        ] = await Promise.all([accRes.json(), catRes.json()]);
 
         if (!active) return;
 
@@ -76,7 +96,7 @@ export default function RecurringTransactionForm({
         setCategories(cat);
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : t("recurringForm.errorLoadRefFallback"));
+        setLoadError(err instanceof Error ? err.message : t("recurringForm.errorLoadRefFallback"));
       }
     })();
 
@@ -101,69 +121,45 @@ export default function RecurringTransactionForm({
   }, [categories, recurring.categoryId, txType]);
 
   useEffect(() => {
-    if (form.categoryId === "" || categories.length === 0) {
-      return;
+    if (!categoryId || categories.length === 0) return;
+
+    const allowed = categories.filter((c) => (txType === "income" ? c.isIncome : !c.isIncome));
+    if (!allowed.some((c) => c.id === categoryId)) {
+      setValue("categoryId", allowed[0]?.id ?? "");
     }
+  }, [categories, categoryId, txType, setValue]);
 
-    setForm((current) => {
-      const allowed = categories.filter((category) => (txType === "income" ? category.isIncome : !category.isIncome));
-      if (allowed.some((category) => category.id === current.categoryId)) {
-        return current;
-      }
-
-      const fallback = allowed[0]?.id ?? "";
-      if (fallback === current.categoryId) {
-        return current;
-      }
-
-      return { ...current, categoryId: fallback };
-    });
-  }, [categories, form.categoryId, txType]);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
+  async function onSubmit(values: RecurringTransactionFormValues) {
+    setSubmitError(null);
     setInlineSuccess(null);
 
     let rawCents: number;
     try {
-      rawCents = parseCents(form.amount);
+      rawCents = parseCents(values.amount);
     } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : t("recurringForm.errorInvalidAmount"));
+      setSubmitError(parseError instanceof Error ? parseError.message : t("recurringForm.errorInvalidAmount"));
       return;
     }
-
-    if (form.intervalMonths < 1) {
-      setError(t("recurringForm.errorInterval"));
-      return;
-    }
-
-    if (form.dayOfMonth < 1 || form.dayOfMonth > 31) {
-      setError(t("recurringForm.errorDayOfMonth"));
-      return;
-    }
-
-    setLoading(true);
 
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
     const payload = {
-      accountId: form.accountId,
+      accountId: values.accountId,
       amountCents: signedCents,
-      description: form.description,
-      categoryId: form.categoryId || undefined,
-      intervalMonths: form.intervalMonths,
-      dayOfMonth: form.dayOfMonth
+      description: values.description,
+      categoryId: values.categoryId || undefined,
+      intervalMonths: values.intervalMonths,
+      dayOfMonth: values.dayOfMonth,
     };
 
     try {
       const res = await fetch(`/api/recurring-transactions/${recurring.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        setError(t("recurringForm.errorSaveFailed", { status: res.status }));
+        setSubmitError(t("recurringForm.errorSaveFailed", { status: res.status }));
         return;
       }
 
@@ -171,9 +167,7 @@ export default function RecurringTransactionForm({
       setInlineSuccess(message);
       onSuccess?.(message);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("recurringForm.errorSave"));
-    } finally {
-      setLoading(false);
+      setSubmitError(err instanceof Error ? err.message : t("recurringForm.errorSave"));
     }
   }
 
@@ -199,7 +193,7 @@ export default function RecurringTransactionForm({
     }
   }
 
-  const submitLabel = loading ? t("recurringForm.saving") : t("recurringForm.save");
+  const submitLabel = isSubmitting ? t("recurringForm.saving") : t("recurringForm.save");
 
   return (
     <div className="relative mx-auto w-full max-w-lg sm:max-w-xl">
@@ -208,9 +202,9 @@ export default function RecurringTransactionForm({
         className="pointer-events-none absolute -inset-1 rounded-xl blur-sm transition-opacity duration-700 bg-gradient-to-r from-indigo-500/20 via-purple-400/20 to-indigo-400/20 opacity-100"
       />
       <form
-        onSubmit={handleSubmit}
+        onSubmit={handleSubmit(onSubmit)}
         className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-xl border border-white/40 bg-white/95 p-4 text-left shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-neutral-800/95 sm:p-6"
-        aria-describedby={error ? "form-error" : undefined}
+        aria-describedby={submitError ?? loadError ? "form-error" : undefined}
       >
         <div className="flex items-center justify-between">
           <h3 id={headingId} className="text-base font-semibold">
@@ -235,11 +229,12 @@ export default function RecurringTransactionForm({
         >
           <button
             type="button"
-            className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
+            className={cn(
+              "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "income"
                 ? "text-white focus-visible:ring-green-500"
                 : "text-green-700 dark:text-green-300 focus-visible:ring-green-500"
-            }`}
+            )}
             aria-pressed={txType === "income"}
             onClick={() => setTxType("income")}
           >
@@ -254,11 +249,12 @@ export default function RecurringTransactionForm({
           </button>
           <button
             type="button"
-            className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
+            className={cn(
+              "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "outcome"
                 ? "text-white focus-visible:ring-red-500"
                 : "text-red-700 dark:text-red-300 focus-visible:ring-red-500"
-            }`}
+            )}
             aria-pressed={txType === "outcome"}
             onClick={() => setTxType("outcome")}
           >
@@ -279,13 +275,10 @@ export default function RecurringTransactionForm({
               {t("recurringForm.accountLabel")} <span className="text-red-600">*</span>
             </label>
             <select
+              {...register("accountId")}
               id="recurring-account"
-              name="accountId"
-              required
-              value={form.accountId}
-              onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
+              aria-invalid={!!errors.accountId}
               className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-              aria-invalid={!!error && !form.accountId}
             >
               <option value="" disabled>
                 {t("recurringForm.accountPlaceholder")}
@@ -296,6 +289,9 @@ export default function RecurringTransactionForm({
                 </option>
               ))}
             </select>
+            {errors.accountId && (
+              <p role="alert" className="mt-1 text-xs text-red-600">{errors.accountId.message}</p>
+            )}
           </div>
         )}
 
@@ -304,15 +300,18 @@ export default function RecurringTransactionForm({
             {t("recurringForm.descriptionLabel")} <span className="text-red-600">*</span>
           </label>
           <input
+            {...register("description")}
+            ref={(el) => {
+              register("description").ref(el);
+              (descriptionRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+            }}
             id="recurring-description"
-            name="description"
-            required
-            value={form.description}
-            onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-            ref={descriptionRef}
+            aria-invalid={!!errors.description}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && form.description.trim() === ""}
           />
+          {errors.description && (
+            <p role="alert" className="mt-1 text-xs text-red-600">{errors.description.message}</p>
+          )}
         </div>
 
         <div>
@@ -320,20 +319,20 @@ export default function RecurringTransactionForm({
             {t("recurringForm.amountLabel")} <span className="text-red-600">*</span>
           </label>
           <input
+            {...register("amount")}
             id="recurring-amount"
-            name="amount"
             inputMode="decimal"
-            required
-            value={form.amount}
-            onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
             placeholder={t("recurringForm.amountPlaceholder")}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && form.amount.trim() === ""}
+            aria-invalid={!!errors.amount}
             aria-describedby="recurring-amount-hint"
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
           />
           <p id="recurring-amount-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
             {t("recurringForm.amountHint")}
           </p>
+          {errors.amount && (
+            <p role="alert" className="mt-1 text-xs text-red-600">{errors.amount.message}</p>
+          )}
         </div>
 
         <div>
@@ -341,10 +340,8 @@ export default function RecurringTransactionForm({
             {t("recurringForm.categoryLabel")}
           </label>
           <select
+            {...register("categoryId")}
             id="recurring-category"
-            name="categoryId"
-            value={form.categoryId}
-            onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value }))}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
           >
             <option value="">{t("recurringForm.categoryNone")}</option>
@@ -361,17 +358,18 @@ export default function RecurringTransactionForm({
             {t("recurringForm.intervalLabel")} <span className="text-red-600">*</span>
           </label>
           <input
+            {...register("intervalMonths", { valueAsNumber: true })}
             id="recurring-interval"
             type="number"
             min={1}
             max={24}
-            required
-            value={form.intervalMonths}
-            onChange={(event) => setForm((current) => ({ ...current, intervalMonths: Number(event.target.value) }))}
+            aria-invalid={!!errors.intervalMonths}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && form.intervalMonths < 1}
           />
           <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.intervalHelper")}</p>
+          {errors.intervalMonths && (
+            <p role="alert" className="mt-1 text-xs text-red-600">{errors.intervalMonths.message}</p>
+          )}
         </div>
 
         <div>
@@ -379,41 +377,34 @@ export default function RecurringTransactionForm({
             {t("recurringForm.dayOfMonthLabel")} <span className="text-red-600">*</span>
           </label>
           <input
+            {...register("dayOfMonth", { valueAsNumber: true })}
             id="recurring-dayofmonth"
             type="number"
             min={1}
             max={31}
-            required
-            value={form.dayOfMonth}
-            onChange={(event) => setForm((current) => ({ ...current, dayOfMonth: Number(event.target.value) }))}
+            aria-invalid={!!errors.dayOfMonth}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && (form.dayOfMonth < 1 || form.dayOfMonth > 31)}
           />
           <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.dayOfMonthHelper")}</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex flex-1 items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-          >
-            {submitLabel}
-          </button>
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
-            >
-              {t("recurringForm.cancel")}
-            </button>
+          {errors.dayOfMonth && (
+            <p role="alert" className="mt-1 text-xs text-red-600">{errors.dayOfMonth.message}</p>
           )}
         </div>
 
-        {error && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" disabled={isSubmitting} className="flex-1">
+            {submitLabel}
+          </Button>
+          {onClose && (
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
+              {t("recurringForm.cancel")}
+            </Button>
+          )}
+        </div>
+
+        {(submitError ?? loadError) && (
           <p id="form-error" role="alert" className="text-sm text-red-600">
-            {error}
+            {submitError ?? loadError}
           </p>
         )}
 
@@ -436,24 +427,26 @@ export default function RecurringTransactionForm({
             <div className="space-y-2">
               <p className="text-sm text-red-600">{t("recurringForm.deletePrompt")}</p>
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
                   type="button"
+                  variant="danger"
+                  size="sm"
                   onClick={handleDelete}
                   disabled={deleteLoading}
-                  className="inline-flex items-center justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
                 >
                   {deleteLoading ? t("recurringForm.deleteLoading") : t("recurringForm.deleteConfirm")}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => {
                     setDeleteConfirm(false);
                     setDeleteError(null);
                   }}
-                  className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
                 >
                   {t("recurringForm.cancel")}
-                </button>
+                </Button>
               </div>
               {deleteError && (
                 <p role="alert" className="text-sm text-red-600">

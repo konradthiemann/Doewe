@@ -175,16 +175,6 @@ export default function SettingsPage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-6">
-      {/* Page Header */}
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-100">
-          {t("page.settings")}
-        </h1>
-        <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">
-          {t("page.settingsSubtitle")}
-        </p>
-      </header>
-
       <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
         <h2 className="text-lg font-medium">{t("settings.accountTitle")}</h2>
         <p className="text-sm text-gray-600 dark:text-neutral-300">

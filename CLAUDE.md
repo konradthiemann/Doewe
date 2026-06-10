@@ -80,3 +80,12 @@ Vor jeder Empfehlung gilt:
 3. Korrekturen offen kommunizieren
 
 Details zu Konventionen: `.claude/rules/`
+
+## Feature-Abschluss-Checkliste
+Bevor ein Feature als fertig gilt, müssen **alle drei Checks grün** sein:
+```bash
+npm run lint       # 0 errors (warnings ggf. beheben)
+npm run typecheck  # 0 errors
+npm run test       # alle Tests bestanden
+```
+Kein Feature-Branch ist abgeschlossen ohne grüne Pipeline.

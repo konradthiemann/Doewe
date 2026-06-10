@@ -1,11 +1,28 @@
 "use client";
 
 import { fromCents, toDecimalString } from "@doewe/shared";
-import { useRouter, useSearchParams } from "next/navigation";
+import {
+  addMonths,
+  format,
+  getMonth,
+  getYear,
+  isAfter,
+  isBefore,
+  parseISO,
+  startOfDay,
+} from "date-fns";
+import { de, enUS } from "date-fns/locale";
+import {
+  parseAsBoolean,
+  parseAsString,
+  parseAsStringEnum,
+  useQueryState,
+} from "nuqs";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
+import { Dialog } from "../../components/ui/Dialog";
 import { useI18n } from "../../lib/i18n";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -49,32 +66,38 @@ function TransactionsPage() {
   const [recurringItems, setRecurringItems] = useState<RecurringTx[]>([]);
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTx | null>(null);
-  const editDialogRef = useRef<HTMLDivElement>(null);
-  const createDialogRef = useRef<HTMLDivElement>(null);
-  const recurringDialogRef = useRef<HTMLDivElement>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; variant: "success" | "error" } | null>(null);
   const feedbackDismissRef = useRef<HTMLButtonElement | null>(null);
   const [categoriesById, setCategoriesById] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [query, setQuery] = useState("");
   const [recurringQuery, setRecurringQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [sortOption, setSortOption] = useState<SortOption>("newest");
-  const [filterType, setFilterType] = useState<FilterType>("all");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const recurringSearchRef = useRef<HTMLInputElement | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("transactions");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [skipsCurrent, setSkipsCurrent] = useState<Set<string>>(new Set());
   const [skipsNext, setSkipsNext] = useState<Set<string>>(new Set());
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const dateLocale = locale === "de" ? "de-DE" : "en-US";
+
+  // URL-persisted filter/view state (nuqs) — survives reload and is shareable
+  const [query, setQuery] = useQueryState("q", parseAsString.withDefault(""));
+  const [filterType, setFilterType] = useQueryState(
+    "filter",
+    parseAsStringEnum<FilterType>(["all", "income", "outcome"]).withDefault("all")
+  );
+  const [sortOption, setSortOption] = useQueryState(
+    "sort",
+    parseAsStringEnum<SortOption>(["newest", "oldest", "amountDesc", "amountAsc", "description"]).withDefault("newest")
+  );
+  const [activeTab, setActiveTab] = useQueryState(
+    "tab",
+    parseAsStringEnum<ActiveTab>(["transactions", "recurring"]).withDefault("transactions")
+  );
+  const [categoryFilter, setCategoryFilter] = useQueryState("category", parseAsString.withDefault(""));
+  const [dateFrom, setDateFrom] = useQueryState("from", parseAsString.withDefault(""));
+  const [dateTo, setDateTo] = useQueryState("to", parseAsString.withDefault(""));
+  const [creating, setCreating] = useQueryState("new", parseAsBoolean.withDefault(false));
+  const dfLocale = locale === "de" ? de : enUS;
 
   const tabs: Array<{ id: ActiveTab; label: string }> = useMemo(() => (
     [
@@ -93,7 +116,7 @@ function TransactionsPage() {
       ? (currentIndex + 1) % tabs.length
       : (currentIndex - 1 + tabs.length) % tabs.length;
     const nextTab = tabs[nextIndex];
-    setActiveTab(nextTab.id);
+    void setActiveTab(nextTab.id);
     tabRefs.current[nextIndex]?.focus();
   };
 
@@ -122,17 +145,17 @@ function TransactionsPage() {
   }, [t]);
 
   const now = useMemo(() => new Date(), []);
-  const currentYear = useMemo(() => now.getFullYear(), [now]);
-  const currentMonth = useMemo(() => now.getMonth() + 1, [now]);
-  const nextDate = useMemo(() => new Date(currentYear, currentMonth, 1), [currentYear, currentMonth]);
-  const nextYear = useMemo(() => nextDate.getFullYear(), [nextDate]);
-  const nextMonth = useMemo(() => nextDate.getMonth() + 1, [nextDate]);
+  const currentYear = useMemo(() => getYear(now), [now]);
+  const currentMonth = useMemo(() => getMonth(now) + 1, [now]);
+  const nextDate = useMemo(() => addMonths(now, 1), [now]);
+  const nextYear = useMemo(() => getYear(nextDate), [nextDate]);
+  const nextMonth = useMemo(() => getMonth(nextDate) + 1, [nextDate]);
 
   const monthIndex = useCallback((year: number, month: number) => year * 12 + (month - 1), []);
 
   const occursInMonth = useCallback((recurring: RecurringTx, year: number, month: number) => {
-    const base = new Date(recurring.nextOccurrence);
-    const baseIndex = monthIndex(base.getFullYear(), base.getMonth() + 1);
+    const base = parseISO(recurring.nextOccurrence);
+    const baseIndex = monthIndex(getYear(base), getMonth(base) + 1);
     const targetIndex = monthIndex(year, month);
     const interval = recurring.intervalMonths ?? 1;
     const diff = targetIndex - baseIndex;
@@ -147,12 +170,11 @@ function TransactionsPage() {
   }, []);
 
   const closeCreateDialog = useCallback(() => {
-    setCreating(false);
-    router.replace("/transactions", { scroll: false });
+    void setCreating(null);
     window.setTimeout(() => {
       searchInputRef.current?.focus({ preventScroll: true });
     }, 0);
-  }, [router]);
+  }, [setCreating]);
 
   const closeRecurringDialog = useCallback(() => {
     setEditingRecurring(null);
@@ -161,79 +183,7 @@ function TransactionsPage() {
     }, 0);
   }, []);
 
-  useEffect(() => {
-    if (!editingTx) {
-      return;
-    }
-
-    const node = editDialogRef.current;
-    node?.focus({ preventScroll: true });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeEditDialog();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeEditDialog, editingTx]);
-
-  useEffect(() => {
-    if (!editingRecurring) {
-      return;
-    }
-
-    const node = recurringDialogRef.current;
-    node?.focus({ preventScroll: true });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeRecurringDialog();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeRecurringDialog, editingRecurring]);
-
-  useEffect(() => {
-    if (!creating) {
-      return;
-    }
-
-    const node = createDialogRef.current;
-    node?.focus({ preventScroll: true });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeCreateDialog();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeCreateDialog, creating]);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    if (editingTx || creating || editingRecurring) {
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = previousOverflow;
-      };
-    }
-    document.body.style.overflow = previousOverflow;
-  }, [editingTx, creating, editingRecurring]);
+  // Radix Dialog handles Escape key, focus trapping, and scroll lock automatically.
 
   const showFeedback = (message: string, variant: "success" | "error" = "success") => {
     setFeedback({ message, variant });
@@ -313,58 +263,37 @@ function TransactionsPage() {
     }
   }, [feedback]);
 
-  useEffect(() => {
-    const shouldCreate = searchParams.get("new") === "1";
-    if (shouldCreate) {
-      setCreating(true);
-    } else {
-      setCreating(false);
-    }
-  }, [searchParams]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredItems = useMemo(() => {
-    const fromDate = dateFrom ? new Date(dateFrom) : null;
-    const toDate = dateTo ? new Date(dateTo) : null;
-    if (toDate) {
-      toDate.setHours(23, 59, 59, 999);
-    }
+    const fromDate = dateFrom ? startOfDay(new Date(dateFrom)) : null;
+    const toDate = dateTo ? startOfDay(new Date(dateTo)) : null;
 
     return items.filter((t) => {
-      // Filter by type (income/outcome)
-      if (filterType === "income" && t.amountCents < 0) {
-        return false;
-      }
-      if (filterType === "outcome" && t.amountCents >= 0) {
-        return false;
-      }
+      if (filterType === "income" && t.amountCents < 0) return false;
+      if (filterType === "outcome" && t.amountCents >= 0) return false;
+      if (categoryFilter && t.categoryId !== categoryFilter) return false;
 
-      if (categoryFilter && t.categoryId !== categoryFilter) {
-        return false;
-      }
+      const occurredDate = parseISO(t.occurredAt);
+      if (fromDate && isBefore(occurredDate, fromDate)) return false;
+      if (toDate && isAfter(occurredDate, startOfDay(new Date(toDate.getTime() + 86_400_000 - 1)))) return false;
 
-      const occurredDate = new Date(t.occurredAt);
-      if (fromDate && occurredDate < fromDate) return false;
-      if (toDate && occurredDate > toDate) return false;
-
-      if (!normalizedQuery) {
-        return true;
-      }
+      if (!normalizedQuery) return true;
 
       const description = t.description?.toLowerCase?.() ?? "";
       const account = t.accountId?.toLowerCase?.() ?? "";
       const categoryName = t.categoryId ? (categoriesById[t.categoryId]?.toLowerCase?.() ?? "") : "";
       const amount = toDecimalString(fromCents(t.amountCents)).toLowerCase();
-      const occurred = new Date(t.occurredAt).toLocaleString(dateLocale).toLowerCase();
+      const occurred = format(parseISO(t.occurredAt), "Pp", { locale: dfLocale }).toLowerCase();
 
       return [description, account, categoryName, amount, occurred].some((value) => value.includes(normalizedQuery));
     });
-  }, [categoryFilter, categoriesById, dateFrom, dateLocale, dateTo, filterType, items, normalizedQuery]);
+  }, [categoryFilter, categoriesById, dateFrom, dateTo, dfLocale, filterType, items, normalizedQuery]);
   const sortedItems = useMemo(() => {
     const copy = [...filteredItems];
     switch (sortOption) {
       case "oldest":
-        return copy.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+        return copy.sort((a, b) => parseISO(a.occurredAt).getTime() - parseISO(b.occurredAt).getTime());
       case "amountDesc":
         return copy.sort((a, b) => b.amountCents - a.amountCents);
       case "amountAsc":
@@ -373,7 +302,7 @@ function TransactionsPage() {
         return copy.sort((a, b) => (a.description || "").localeCompare(b.description || ""));
       case "newest":
       default:
-        return copy.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+        return copy.sort((a, b) => parseISO(b.occurredAt).getTime() - parseISO(a.occurredAt).getTime());
     }
   }, [filteredItems, sortOption]);
   const hasFilters = Boolean(normalizedQuery || categoryFilter || dateFrom || dateTo || filterType !== "all");
@@ -406,13 +335,13 @@ function TransactionsPage() {
       const account = rec.accountId?.toLowerCase?.() ?? "";
       const categoryName = rec.categoryId ? (categoriesById[rec.categoryId]?.toLowerCase?.() ?? "") : "";
       const amount = toDecimalString(fromCents(rec.amountCents)).toLowerCase();
-      const nextOccurrence = new Date(rec.nextOccurrence).toLocaleDateString(dateLocale).toLowerCase();
+      const nextOccurrence = format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }).toLowerCase();
       const interval = String(rec.intervalMonths ?? 1);
 
       return [description, account, categoryName, amount, nextOccurrence, interval]
         .some((value) => value.includes(normalizedRecurringQuery));
     });
-  }, [categoriesById, dateLocale, normalizedRecurringQuery, recurringItems]);
+  }, [categoriesById, dfLocale, normalizedRecurringQuery, recurringItems]);
   const recurringTotalCents = useMemo(() => {
     return filteredRecurringItems.reduce((total, rec) => total + rec.amountCents, 0);
   }, [filteredRecurringItems]);
@@ -470,16 +399,6 @@ function TransactionsPage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
-      {/* Page Header */}
-      <header className="mx-auto w-full max-w-2xl">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-100">
-          {t("page.transactions")}
-        </h1>
-        <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">
-          {t("page.transactionsSubtitle")}
-        </p>
-      </header>
-
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {activeTab === "transactions" && (
@@ -520,7 +439,7 @@ function TransactionsPage() {
                   type="search"
                   inputMode="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => void setQuery(event.target.value)}
                   placeholder={t("transactions.searchPlaceholder")}
                   className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
                 />
@@ -586,7 +505,7 @@ function TransactionsPage() {
               aria-controls={`tab-panel-${tab.id}`}
               id={`tab-${tab.id}`}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => void setActiveTab(tab.id)}
               className={`rounded-full px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
                 activeTab === tab.id
                   ? "bg-indigo-600 text-white"
@@ -685,7 +604,7 @@ function TransactionsPage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setFilterType("all")}
+                onClick={() => void setFilterType("all")}
                 className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "all"
                     ? "bg-indigo-600 text-white shadow-sm"
@@ -696,7 +615,7 @@ function TransactionsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setFilterType("income")}
+                onClick={() => void setFilterType("income")}
                 className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "income"
                     ? "bg-emerald-600 text-white shadow-sm"
@@ -710,7 +629,7 @@ function TransactionsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setFilterType("outcome")}
+                onClick={() => void setFilterType("outcome")}
                 className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "outcome"
                     ? "bg-red-600 text-white shadow-sm"
@@ -733,7 +652,7 @@ function TransactionsPage() {
                 <select
                   id="filter-category"
                   value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  onChange={(event) => void setCategoryFilter(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 >
                   <option value="">{t("transactions.filterCategoryAll")}</option>
@@ -752,7 +671,7 @@ function TransactionsPage() {
                   id="filter-from"
                   type="date"
                   value={dateFrom}
-                  onChange={(event) => setDateFrom(event.target.value)}
+                  onChange={(event) => void setDateFrom(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 />
               </div>
@@ -764,7 +683,7 @@ function TransactionsPage() {
                   id="filter-to"
                   type="date"
                   value={dateTo}
-                  onChange={(event) => setDateTo(event.target.value)}
+                  onChange={(event) => void setDateTo(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 />
               </div>
@@ -775,7 +694,7 @@ function TransactionsPage() {
                 <select
                   id="sort-transactions"
                   value={sortOption}
-                  onChange={(event) => setSortOption(event.target.value as SortOption)}
+                  onChange={(event) => void setSortOption(event.target.value as SortOption)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 >
                   <option value="newest">{t("transactions.sortNewest")}</option>
@@ -793,11 +712,11 @@ function TransactionsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setCategoryFilter("");
-                    setDateFrom("");
-                    setDateTo("");
-                    setQuery("");
-                    setFilterType("all");
+                    void setCategoryFilter(null);
+                    void setDateFrom(null);
+                    void setDateTo(null);
+                    void setQuery(null);
+                    void setFilterType(null);
                   }}
                   className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                 >
@@ -868,7 +787,7 @@ function TransactionsPage() {
                 <p className="text-xs font-normal text-gray-600 dark:text-neutral-300">{t("transactions.upcomingRecurring")}</p>
               </div>
               <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
-                {nextDate.toLocaleDateString(dateLocale, { month: "long", year: "numeric" })}
+                {format(nextDate, "LLLL yyyy", { locale: dfLocale })}
                 <svg
                   aria-hidden="true"
                   className="h-3.5 w-3.5 text-gray-400 transition-transform duration-200 group-open:rotate-90 dark:text-neutral-400"
@@ -948,11 +867,7 @@ function TransactionsPage() {
             {sortedItems.map((tx) => (
               <li
                 key={tx.id}
-                className={`rounded-xl border border-gray-100 border-l-4 bg-white/90 p-3 text-sm shadow-sm transition hover:shadow-md focus-within:shadow-md dark:border-neutral-700/60 dark:bg-neutral-900/90 ${
-                  tx.amountCents >= 0
-                    ? "border-l-emerald-400 dark:border-l-emerald-500"
-                    : "border-l-red-400 dark:border-l-red-500"
-                }`}
+                className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
               >
                 <div className="flex items-stretch justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -963,7 +878,7 @@ function TransactionsPage() {
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <time dateTime={tx.occurredAt}>
-                        {new Date(tx.occurredAt).toLocaleDateString(dateLocale)}
+                        {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
                       </time>
                       {tx.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
@@ -982,7 +897,7 @@ function TransactionsPage() {
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-indigo-300 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingTx(tx);
@@ -991,10 +906,9 @@ function TransactionsPage() {
                         description: tx.description || t("transactions.withoutDescription")
                       })}
                     >
-                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
+                      <span aria-hidden="true" className="leading-none">
+                        ⚙
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -1037,11 +951,7 @@ function TransactionsPage() {
           </div>
           <ul className="space-y-2">
             {filteredRecurringItems.map((rec) => (
-              <li key={rec.id} className={`rounded-xl border border-gray-100 border-l-4 bg-white/90 p-3 text-sm shadow-sm transition hover:shadow-md dark:border-neutral-700/60 dark:bg-neutral-900/90 ${
-                rec.amountCents >= 0
-                  ? "border-l-emerald-400 dark:border-l-emerald-500"
-                  : "border-l-red-400 dark:border-l-red-500"
-              }`}>
+              <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
                 <div className="flex items-stretch justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
@@ -1050,7 +960,7 @@ function TransactionsPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        {t("transactions.nextLabel", { date: new Date(rec.nextOccurrence).toLocaleDateString(dateLocale) })}
+                        {t("transactions.nextLabel", { date: format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }) })}
                       </span>
                       {rec.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
@@ -1065,7 +975,7 @@ function TransactionsPage() {
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-indigo-300 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingRecurring(rec);
@@ -1074,10 +984,9 @@ function TransactionsPage() {
                         description: rec.description || t("transactions.withoutDescription")
                       })}
                     >
-                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
+                      <span aria-hidden="true" className="leading-none">
+                        ⚙
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -1095,78 +1004,66 @@ function TransactionsPage() {
         </section>
       )}
 
-      {editingTx && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeEditDialog} />
-          <div
-            ref={editDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={dialogTitleId}
-            className="relative z-10 mx-4 flex w-full max-w-2xl justify-center focus:outline-none"
-            tabIndex={-1}
-          >
-            <TransactionForm
-              mode="edit"
-              transaction={editingTx}
-              headingId={dialogTitleId}
-              onSuccess={handleEditSuccess}
-              onDelete={handleDeleteSuccess}
-              onClose={closeEditDialog}
-            />
-          </div>
-        </div>
-      )}
+      {/* Edit Transaction Dialog */}
+      <Dialog
+        open={!!editingTx}
+        onOpenChange={(open) => { if (!open) closeEditDialog(); }}
+        titleId={dialogTitleId}
+        title={t("transactionForm.editTitle")}
+      >
+        {editingTx && (
+          <TransactionForm
+            mode="edit"
+            transaction={editingTx}
+            headingId={dialogTitleId}
+            onSuccess={handleEditSuccess}
+            onDelete={handleDeleteSuccess}
+            onClose={closeEditDialog}
+          />
+        )}
+      </Dialog>
 
-      {creating && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeCreateDialog} />
-          <div
-            ref={createDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={createDialogTitleId}
-            className="relative z-10 mx-4 flex w-full max-w-2xl justify-center focus:outline-none"
-            tabIndex={-1}
-          >
-            <TransactionForm
-              headingId={createDialogTitleId}
-              onSuccess={handleCreateSuccess}
-              onClose={closeCreateDialog}
-            />
-          </div>
-        </div>
-      )}
+      {/* Create Transaction Dialog */}
+      <Dialog
+        open={creating}
+        onOpenChange={(open) => { if (!open) closeCreateDialog(); }}
+        titleId={createDialogTitleId}
+        title={t("transactionForm.addTitle")}
+      >
+        {creating && (
+          <TransactionForm
+            headingId={createDialogTitleId}
+            onSuccess={handleCreateSuccess}
+            onClose={closeCreateDialog}
+          />
+        )}
+      </Dialog>
 
-      {editingRecurring && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeRecurringDialog} />
-          <div
-            ref={recurringDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`edit-recurring-${editingRecurring.id}`}
-            className="relative z-10 mx-4 flex w-full max-w-2xl justify-center focus:outline-none"
-            tabIndex={-1}
-          >
-            <RecurringTransactionForm
-              recurring={{
-                id: editingRecurring.id,
-                accountId: editingRecurring.accountId,
-                amountCents: editingRecurring.amountCents,
-                description: editingRecurring.description,
-                categoryId: editingRecurring.categoryId ?? null,
-                intervalMonths: editingRecurring.intervalMonths ?? 1,
-                dayOfMonth: editingRecurring.dayOfMonth ?? 1
-              }}
-              headingId={`edit-recurring-${editingRecurring.id}`}
-              onSuccess={handleRecurringEditSuccess}
-              onDelete={handleRecurringDeleteSuccess}
-              onClose={closeRecurringDialog}
-            />
-          </div>
-        </div>
-      )}
+      {/* Edit Recurring Dialog */}
+      <Dialog
+        open={!!editingRecurring}
+        onOpenChange={(open) => { if (!open) closeRecurringDialog(); }}
+        titleId={editingRecurring ? `edit-recurring-${editingRecurring.id}` : undefined}
+        title={t("recurringForm.title")}
+      >
+        {editingRecurring && (
+          <RecurringTransactionForm
+            recurring={{
+              id: editingRecurring.id,
+              accountId: editingRecurring.accountId,
+              amountCents: editingRecurring.amountCents,
+              description: editingRecurring.description,
+              categoryId: editingRecurring.categoryId ?? null,
+              intervalMonths: editingRecurring.intervalMonths ?? 1,
+              dayOfMonth: editingRecurring.dayOfMonth ?? 1,
+            }}
+            headingId={`edit-recurring-${editingRecurring.id}`}
+            onSuccess={handleRecurringEditSuccess}
+            onDelete={handleRecurringDeleteSuccess}
+            onClose={closeRecurringDialog}
+          />
+        )}
+      </Dialog>
 
       {feedback && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center" role="presentation">
