@@ -1,11 +1,14 @@
 "use client";
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
 
 import { appConfig } from "../lib/config";
 import { cn } from "../lib/cn";
 import { useI18n } from "../lib/i18n";
+import { transactionFormSchema, type TransactionFormValues } from "../lib/schemas/forms";
 
 import SearchableSelect from "./SearchableSelect";
 import { Button } from "./ui/Button";
@@ -34,23 +37,17 @@ export default function TransactionForm({
   headingId,
   onSuccess,
   onClose,
-  onDelete
+  onDelete,
 }: Props) {
   const { t } = useI18n();
-  const [form, setForm] = useState(() => ({
-    description: transaction?.description ?? "",
-    amount: transaction ? toDecimalString(fromCents(Math.abs(transaction.amountCents))) : "",
-    accountId: transaction?.accountId ?? "",
-    categoryId: transaction?.categoryId ?? ""
-  }));
 
   const [txType, setTxType] = useState<"income" | "outcome">(
     transaction ? (transaction.amountCents >= 0 ? "income" : "outcome") : "outcome"
   );
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -68,6 +65,25 @@ export default function TransactionForm({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
   const newCategoryRef = useRef<HTMLInputElement>(null);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<TransactionFormValues>({
+    resolver: zodResolver(transactionFormSchema),
+    defaultValues: {
+      description: transaction?.description ?? "",
+      amount: transaction ? toDecimalString(fromCents(Math.abs(transaction.amountCents))) : "",
+      accountId: transaction?.accountId ?? "",
+      categoryId: transaction?.categoryId ?? "",
+    },
+  });
+
+  const categoryId = watch("categoryId");
 
   useEffect(() => {
     if (mode !== "create") return;
@@ -93,15 +109,17 @@ export default function TransactionForm({
       try {
         const [accRes, catRes] = await Promise.all([
           fetch("/api/accounts", { cache: "no-store" }),
-          fetch("/api/categories?sortByUsage=true", { cache: "no-store" })
+          fetch("/api/categories?sortByUsage=true", { cache: "no-store" }),
         ]);
 
         if (!accRes.ok || !catRes.ok) {
           throw new Error(t("transactionForm.errorLoadRef"));
         }
 
-        const [acc, cat]: [Array<{ id: string; name: string }>, Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>]
-          = await Promise.all([accRes.json(), catRes.json()]);
+        const [acc, cat]: [
+          Array<{ id: string; name: string }>,
+          Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>
+        ] = await Promise.all([accRes.json(), catRes.json()]);
 
         if (!active) return;
 
@@ -112,34 +130,32 @@ export default function TransactionForm({
           const defaultAccount = acc[0];
           const defaultCategory = (txType === "income" ? cat.find((c) => c.isIncome) : cat.find((c) => !c.isIncome)) ?? cat[0];
 
-          setForm((current) => ({
-            ...current,
-            accountId: current.accountId || (defaultAccount?.id ?? ""),
-            categoryId: current.categoryId || (defaultCategory?.id ?? "")
-          }));
+          if (defaultAccount && !watch("accountId")) setValue("accountId", defaultAccount.id);
+          if (defaultCategory && !watch("categoryId")) setValue("categoryId", defaultCategory.id);
         }
       } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : t("transactionForm.errorLoadRefFallback"));
+        setLoadError(err instanceof Error ? err.message : t("transactionForm.errorLoadRefFallback"));
       }
     })();
 
     return () => {
       active = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, t, txType]);
 
   useEffect(() => {
     if (mode === "edit" && transaction) {
-      setForm({
+      reset({
         description: transaction.description,
         amount: toDecimalString(fromCents(Math.abs(transaction.amountCents))),
         accountId: transaction.accountId,
-        categoryId: transaction.categoryId ?? ""
+        categoryId: transaction.categoryId ?? "",
       });
       setTxType(transaction.amountCents >= 0 ? "income" : "outcome");
     }
-  }, [mode, transaction]);
+  }, [mode, transaction, reset]);
 
   useEffect(() => {
     if (showNewCategory) {
@@ -162,42 +178,25 @@ export default function TransactionForm({
     return base;
   }, [categories, mode, transaction?.categoryId, txType]);
 
-
   useEffect(() => {
-    if (form.categoryId === "" || form.categoryId === "__new__" || categories.length === 0) {
-      return;
+    if (!categoryId || categoryId === "" || categoryId === "__new__" || categories.length === 0) return;
+
+    const allowed = categories.filter((c) => (txType === "income" ? c.isIncome : !c.isIncome));
+    if (!allowed.some((c) => c.id === categoryId)) {
+      setValue("categoryId", allowed[0]?.id ?? "");
     }
+  }, [categories, categoryId, txType, setValue]);
 
-    setForm((current) => {
-      if (current.categoryId === "") {
-        return current;
-      }
-
-      const allowed = categories.filter((category) => (txType === "income" ? category.isIncome : !category.isIncome));
-      if (allowed.some((category) => category.id === current.categoryId)) {
-        return current;
-      }
-
-      const fallback = allowed[0]?.id ?? "";
-      if (fallback === current.categoryId) {
-        return current;
-      }
-
-      return { ...current, categoryId: fallback };
-    });
-  }, [categories, form.categoryId, txType]);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
+  async function onSubmit(values: TransactionFormValues) {
+    setSubmitError(null);
     setInlineSuccess(null);
     setRecurringError(null);
 
     let rawCents: number;
     try {
-      rawCents = parseCents(form.amount);
+      rawCents = parseCents(values.amount);
     } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : t("transactionForm.errorInvalidAmount"));
+      setSubmitError(parseError instanceof Error ? parseError.message : t("transactionForm.errorInvalidAmount"));
       return;
     }
 
@@ -211,18 +210,16 @@ export default function TransactionForm({
       return;
     }
 
-    setLoading(true);
-
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
     const endpoint = mode === "edit" && transaction ? `/api/transactions/${transaction.id}` : "/api/transactions";
     const method = mode === "edit" ? "PATCH" : "POST";
     const payload = {
-      accountId: form.accountId,
+      accountId: values.accountId,
       amountCents: signedCents,
-      description: form.description,
+      description: values.description,
       occurredAt: mode === "edit" && transaction ? transaction.occurredAt : new Date().toISOString(),
-      categoryId: form.categoryId && form.categoryId !== "__new__" ? form.categoryId : undefined,
-      savingGoalId: isSavingGoal && selectedSavingGoalId ? selectedSavingGoalId : undefined
+      categoryId: values.categoryId && values.categoryId !== "__new__" ? values.categoryId : undefined,
+      savingGoalId: isSavingGoal && selectedSavingGoalId ? selectedSavingGoalId : undefined,
     };
 
     try {
@@ -233,17 +230,17 @@ export default function TransactionForm({
           amountCents: payload.amountCents,
           description: payload.description,
           intervalMonths,
-          dayOfMonth
+          dayOfMonth,
         });
       } else {
         const res = await fetch(endpoint, {
           method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
         });
 
         if (!res.ok) {
-          setError(t("transactionForm.errorSaveFailed", { status: res.status }));
+          setSubmitError(t("transactionForm.errorSaveFailed", { status: res.status }));
           return;
         }
       }
@@ -257,12 +254,10 @@ export default function TransactionForm({
       onSuccess?.(message);
 
       if (mode === "create") {
-        setForm((current) => ({ ...current, description: "", amount: "" }));
+        reset((current) => ({ ...current, description: "", amount: "" }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("transactionForm.errorSave"));
-    } finally {
-      setLoading(false);
+      setSubmitError(err instanceof Error ? err.message : t("transactionForm.errorSave"));
     }
   }
 
@@ -277,7 +272,7 @@ export default function TransactionForm({
     const res = await fetch("/api/recurring-transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -300,7 +295,7 @@ export default function TransactionForm({
       const res = await fetch("/api/categories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed, isIncome: txType === "income" })
+        body: JSON.stringify({ name: trimmed, isIncome: txType === "income" }),
       });
 
       if (!res.ok) {
@@ -312,7 +307,7 @@ export default function TransactionForm({
 
       const created: { id: string; name: string; isIncome: boolean } = await res.json();
       setCategories((current) => [created, ...current]);
-      setForm((current) => ({ ...current, categoryId: created.id }));
+      setValue("categoryId", created.id);
       setNewCategoryName("");
       setShowNewCategory(false);
     } catch (err) {
@@ -345,7 +340,7 @@ export default function TransactionForm({
     }
   }
 
-  const submitLabel = loading
+  const submitLabel = isSubmitting
     ? t("transactionForm.saving")
     : mode === "edit"
       ? t("transactionForm.save")
@@ -363,9 +358,9 @@ export default function TransactionForm({
         style={{ animationDuration: "3.5s" }}
       />
       <form
-        onSubmit={handleSubmit}
+        onSubmit={handleSubmit(onSubmit)}
         className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-xl border border-white/40 bg-white/95 p-4 text-left shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-neutral-800/95 sm:p-6"
-        aria-describedby={error ? "form-error" : undefined}
+        aria-describedby={submitError ? "form-error" : undefined}
       >
         <div className="flex items-center justify-between">
           <h3 id={headingId} className="text-base font-semibold">
@@ -400,7 +395,7 @@ export default function TransactionForm({
             onClick={() => {
               setTxType("income");
               const first = categories.find((c) => c.isIncome);
-              setForm((current) => ({ ...current, categoryId: first?.id ?? current.categoryId }));
+              setValue("categoryId", first?.id ?? categoryId);
             }}
           >
             <span className="relative z-10">{t("transactionForm.income")}</span>
@@ -424,7 +419,7 @@ export default function TransactionForm({
             onClick={() => {
               setTxType("outcome");
               const first = categories.find((c) => !c.isIncome);
-              setForm((current) => ({ ...current, categoryId: first?.id ?? current.categoryId }));
+              setValue("categoryId", first?.id ?? categoryId);
             }}
           >
             <span className="relative z-10">{t("transactionForm.outcome")}</span>
@@ -444,13 +439,10 @@ export default function TransactionForm({
               {t("transactionForm.accountLabel")} <span className="text-red-600">*</span>
             </label>
             <select
+              {...register("accountId")}
               id="tx-account"
-              name="accountId"
-              required
-              value={form.accountId}
-              onChange={(event) => setForm((current) => ({ ...current, accountId: event.target.value }))}
+              aria-invalid={!!errors.accountId}
               className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-              aria-invalid={!!error && !form.accountId}
             >
               <option value="" disabled>
                 {t("transactionForm.accountPlaceholder")}
@@ -461,6 +453,9 @@ export default function TransactionForm({
                 </option>
               ))}
             </select>
+            {errors.accountId && (
+              <p role="alert" className="mt-1 text-xs text-red-600">{errors.accountId.message}</p>
+            )}
           </div>
         )}
 
@@ -471,11 +466,11 @@ export default function TransactionForm({
           <SearchableSelect
             id="tx-category"
             name="categoryId"
-            value={form.categoryId}
+            value={categoryId ?? ""}
             options={filteredCategories.map((category) => ({
               id: category.id,
               label: category.name,
-              usageCount: category.usageCount
+              usageCount: category.usageCount,
             }))}
             placeholder={t("transactionForm.categoryNone")}
             searchPlaceholder={t("transactionForm.categorySearchPlaceholder")}
@@ -484,11 +479,11 @@ export default function TransactionForm({
             onChange={(value) => {
               setShowNewCategory(false);
               setNewCategoryError(null);
-              setForm((current) => ({ ...current, categoryId: value }));
+              setValue("categoryId", value);
             }}
             onAddNew={() => {
               setShowNewCategory(true);
-              setForm((current) => ({ ...current, categoryId: "__new__" }));
+              setValue("categoryId", "__new__");
             }}
             aria-describedby={newCategoryError ? "tx-category-error" : undefined}
           />
@@ -523,7 +518,7 @@ export default function TransactionForm({
                     setShowNewCategory(false);
                     setNewCategoryName("");
                     setNewCategoryError(null);
-                    setForm((current) => ({ ...current, categoryId: "" }));
+                    setValue("categoryId", "");
                   }}
                 >
                   {t("transactionForm.categoryCancel")}
@@ -543,15 +538,18 @@ export default function TransactionForm({
             {t("transactionForm.descriptionLabel")} <span className="text-red-600">*</span>
           </label>
           <input
+            {...register("description")}
+            ref={(el) => {
+              register("description").ref(el);
+              (descriptionRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+            }}
             id="tx-description"
-            name="description"
-            required
-            value={form.description}
-            onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-            ref={descriptionRef}
+            aria-invalid={!!errors.description}
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && form.description.trim() === ""}
           />
+          {errors.description && (
+            <p role="alert" className="mt-1 text-xs text-red-600">{errors.description.message}</p>
+          )}
         </div>
 
         <div>
@@ -559,20 +557,20 @@ export default function TransactionForm({
             {t("transactionForm.amountLabel")} <span className="text-red-600">*</span>
           </label>
           <input
+            {...register("amount")}
             id="tx-amount"
-            name="amount"
             inputMode="decimal"
-            required
-            value={form.amount}
-            onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
             placeholder={t("transactionForm.amountPlaceholder")}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-            aria-invalid={!!error && form.amount.trim() === ""}
+            aria-invalid={!!errors.amount}
             aria-describedby="tx-amount-hint"
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
           />
           <p id="tx-amount-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
             {t("transactionForm.amountHint")}
           </p>
+          {errors.amount && (
+            <p role="alert" className="mt-1 text-xs text-red-600">{errors.amount.message}</p>
+          )}
         </div>
 
         {mode === "create" && (
@@ -692,7 +690,7 @@ export default function TransactionForm({
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={loading} className="flex-1">
+          <Button type="submit" disabled={isSubmitting} className="flex-1">
             {submitLabel}
           </Button>
           {onClose && (
@@ -702,9 +700,9 @@ export default function TransactionForm({
           )}
         </div>
 
-        {error && (
+        {submitError && (
           <p id="form-error" role="alert" className="text-sm text-red-600">
-            {error}
+            {submitError}
           </p>
         )}
 
