@@ -156,6 +156,7 @@ export const en: Record<string, string> = {
   "dashboard.carryoverNegativeHint": "Last month in the red: reduces your budget.",
   "dashboard.savingsRate": "Savings rate",
   "dashboard.savingsRateHint": "Share of income saved this month",
+  "dashboard.savedThisMonth": "Saved this month",
   "dashboard.fixedCostRatio": "Fixed-cost ratio",
   "dashboard.fixedCostRatioHint": "Recurring expenses / income",
   "dashboard.spentBreakdownTooltip": "Expenses {outcome} + Savings {savings}",

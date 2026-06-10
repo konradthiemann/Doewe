@@ -156,6 +156,7 @@ export const de: Record<string, string> = {
   "dashboard.carryoverNegativeHint": "Vormonat im Minus: reduziert das Budget.",
   "dashboard.savingsRate": "Sparquote",
   "dashboard.savingsRateHint": "Anteil der Einnahmen, der gespart wird",
+  "dashboard.savedThisMonth": "Gespart diesen Monat",
   "dashboard.fixedCostRatio": "Fixkosten-Quote",
   "dashboard.fixedCostRatioHint": "Wiederkehrende Ausgaben / Einnahmen",
   "dashboard.spentBreakdownTooltip": "Ausgaben {outcome} + Sparen {savings}",
