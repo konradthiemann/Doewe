@@ -3,6 +3,7 @@ import { compare } from "bcryptjs";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 import { env } from "../env";
+
 import { prisma } from "./prisma";
 
 import type { NextAuthOptions } from "next-auth";
