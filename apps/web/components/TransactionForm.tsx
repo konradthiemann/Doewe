@@ -4,9 +4,11 @@ import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { appConfig } from "../lib/config";
+import { cn } from "../lib/cn";
 import { useI18n } from "../lib/i18n";
 
 import SearchableSelect from "./SearchableSelect";
+import { Button } from "./ui/Button";
 
 type TransactionDetails = {
   id: string;
@@ -388,11 +390,12 @@ export default function TransactionForm({
         >
           <button
             type="button"
-            className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
+            className={cn(
+              "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "income"
                 ? "text-white focus-visible:ring-green-500"
                 : "text-green-700 dark:text-green-300 focus-visible:ring-green-500"
-            }`}
+            )}
             aria-pressed={txType === "income"}
             onClick={() => {
               setTxType("income");
@@ -411,11 +414,12 @@ export default function TransactionForm({
           </button>
           <button
             type="button"
-            className={`relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2 ${
+            className={cn(
+              "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "outcome"
                 ? "text-white focus-visible:ring-red-500"
                 : "text-red-700 dark:text-red-300 focus-visible:ring-red-500"
-            }`}
+            )}
             aria-pressed={txType === "outcome"}
             onClick={() => {
               setTxType("outcome");
@@ -503,26 +507,27 @@ export default function TransactionForm({
                 aria-describedby={newCategoryError ? "tx-category-error" : undefined}
               />
               <div className="flex flex-wrap items-center gap-2">
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   onClick={handleAddCategory}
                   disabled={newCategoryLoading}
-                  className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900"
                 >
                   {newCategoryLoading ? t("transactionForm.saving") : t("transactionForm.categoryAddButton")}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  size="sm"
+                  variant="secondary"
                   onClick={() => {
                     setShowNewCategory(false);
                     setNewCategoryName("");
                     setNewCategoryError(null);
                     setForm((current) => ({ ...current, categoryId: "" }));
                   }}
-                  className="inline-flex items-center justify-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
                 >
                   {t("transactionForm.categoryCancel")}
-                </button>
+                </Button>
               </div>
               {newCategoryError && (
                 <p id="tx-category-error" role="alert" className="text-sm text-red-600">
@@ -687,21 +692,13 @@ export default function TransactionForm({
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex flex-1 items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-          >
+          <Button type="submit" disabled={loading} className="flex-1">
             {submitLabel}
-          </button>
+          </Button>
           {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
-            >
+            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
               {t("transactionForm.cancel")}
-            </button>
+            </Button>
           )}
         </div>
 
@@ -741,24 +738,26 @@ export default function TransactionForm({
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <button
+                  <Button
                     type="button"
+                    variant="danger"
                     onClick={handleDelete}
                     disabled={deleteLoading}
-                    className="inline-flex flex-1 items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                    className="flex-1"
                   >
                     {deleteLoading ? t("transactionForm.deleteLoading") : t("transactionForm.delete")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => {
                       setDeleteConfirm(false);
                       setDeleteError(null);
                     }}
-                    className="inline-flex flex-1 items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-offset-2 focus-visible:ring-gray-400 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                    className="flex-1"
                   >
                     {t("transactionForm.cancelDelete")}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
