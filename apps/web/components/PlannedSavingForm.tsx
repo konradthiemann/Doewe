@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
 
+import { Button } from "./ui/Button";
+
 type Account = {
   id: string;
   name: string;
@@ -277,21 +279,13 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <button
-          type="submit"
-          disabled={loading}
-          className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900"
-        >
+        <Button type="submit" disabled={loading}>
           {submitLabel}
-        </button>
+        </Button>
         {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800 dark:focus-visible:ring-offset-neutral-900"
-          >
+          <Button type="button" variant="secondary" onClick={onClose}>
             {t("savingPlan.form.cancel")}
-          </button>
+          </Button>
         )}
       </div>
 
