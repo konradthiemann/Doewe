@@ -23,6 +23,7 @@ import {
 
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
+import { Dialog } from "../../components/ui/Dialog";
 import { useI18n } from "../../lib/i18n";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -66,9 +67,6 @@ function TransactionsPage() {
   const [recurringItems, setRecurringItems] = useState<RecurringTx[]>([]);
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTx | null>(null);
-  const editDialogRef = useRef<HTMLDivElement>(null);
-  const createDialogRef = useRef<HTMLDivElement>(null);
-  const recurringDialogRef = useRef<HTMLDivElement>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; variant: "success" | "error" } | null>(null);
   const feedbackDismissRef = useRef<HTMLButtonElement | null>(null);
@@ -186,79 +184,7 @@ function TransactionsPage() {
     }, 0);
   }, []);
 
-  useEffect(() => {
-    if (!editingTx) {
-      return;
-    }
-
-    const node = editDialogRef.current;
-    node?.focus({ preventScroll: true });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeEditDialog();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeEditDialog, editingTx]);
-
-  useEffect(() => {
-    if (!editingRecurring) {
-      return;
-    }
-
-    const node = recurringDialogRef.current;
-    node?.focus({ preventScroll: true });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeRecurringDialog();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeRecurringDialog, editingRecurring]);
-
-  useEffect(() => {
-    if (!creating) {
-      return;
-    }
-
-    const node = createDialogRef.current;
-    node?.focus({ preventScroll: true });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeCreateDialog();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeCreateDialog, creating]);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    if (editingTx || creating || editingRecurring) {
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = previousOverflow;
-      };
-    }
-    document.body.style.overflow = previousOverflow;
-  }, [editingTx, creating, editingRecurring]);
+  // Radix Dialog handles Escape key, focus trapping, and scroll lock automatically.
 
   const showFeedback = (message: string, variant: "success" | "error" = "success") => {
     setFeedback({ message, variant });
@@ -1079,78 +1005,66 @@ function TransactionsPage() {
         </section>
       )}
 
-      {editingTx && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeEditDialog} />
-          <div
-            ref={editDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={dialogTitleId}
-            className="relative z-10 mx-4 flex w-full max-w-2xl justify-center focus:outline-none"
-            tabIndex={-1}
-          >
-            <TransactionForm
-              mode="edit"
-              transaction={editingTx}
-              headingId={dialogTitleId}
-              onSuccess={handleEditSuccess}
-              onDelete={handleDeleteSuccess}
-              onClose={closeEditDialog}
-            />
-          </div>
-        </div>
-      )}
+      {/* Edit Transaction Dialog */}
+      <Dialog
+        open={!!editingTx}
+        onOpenChange={(open) => { if (!open) closeEditDialog(); }}
+        titleId={dialogTitleId}
+        title={t("transactionForm.editTitle")}
+      >
+        {editingTx && (
+          <TransactionForm
+            mode="edit"
+            transaction={editingTx}
+            headingId={dialogTitleId}
+            onSuccess={handleEditSuccess}
+            onDelete={handleDeleteSuccess}
+            onClose={closeEditDialog}
+          />
+        )}
+      </Dialog>
 
-      {creating && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeCreateDialog} />
-          <div
-            ref={createDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={createDialogTitleId}
-            className="relative z-10 mx-4 flex w-full max-w-2xl justify-center focus:outline-none"
-            tabIndex={-1}
-          >
-            <TransactionForm
-              headingId={createDialogTitleId}
-              onSuccess={handleCreateSuccess}
-              onClose={closeCreateDialog}
-            />
-          </div>
-        </div>
-      )}
+      {/* Create Transaction Dialog */}
+      <Dialog
+        open={creating}
+        onOpenChange={(open) => { if (!open) closeCreateDialog(); }}
+        titleId={createDialogTitleId}
+        title={t("transactionForm.addTitle")}
+      >
+        {creating && (
+          <TransactionForm
+            headingId={createDialogTitleId}
+            onSuccess={handleCreateSuccess}
+            onClose={closeCreateDialog}
+          />
+        )}
+      </Dialog>
 
-      {editingRecurring && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeRecurringDialog} />
-          <div
-            ref={recurringDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`edit-recurring-${editingRecurring.id}`}
-            className="relative z-10 mx-4 flex w-full max-w-2xl justify-center focus:outline-none"
-            tabIndex={-1}
-          >
-            <RecurringTransactionForm
-              recurring={{
-                id: editingRecurring.id,
-                accountId: editingRecurring.accountId,
-                amountCents: editingRecurring.amountCents,
-                description: editingRecurring.description,
-                categoryId: editingRecurring.categoryId ?? null,
-                intervalMonths: editingRecurring.intervalMonths ?? 1,
-                dayOfMonth: editingRecurring.dayOfMonth ?? 1
-              }}
-              headingId={`edit-recurring-${editingRecurring.id}`}
-              onSuccess={handleRecurringEditSuccess}
-              onDelete={handleRecurringDeleteSuccess}
-              onClose={closeRecurringDialog}
-            />
-          </div>
-        </div>
-      )}
+      {/* Edit Recurring Dialog */}
+      <Dialog
+        open={!!editingRecurring}
+        onOpenChange={(open) => { if (!open) closeRecurringDialog(); }}
+        titleId={editingRecurring ? `edit-recurring-${editingRecurring.id}` : undefined}
+        title={t("recurringForm.title")}
+      >
+        {editingRecurring && (
+          <RecurringTransactionForm
+            recurring={{
+              id: editingRecurring.id,
+              accountId: editingRecurring.accountId,
+              amountCents: editingRecurring.amountCents,
+              description: editingRecurring.description,
+              categoryId: editingRecurring.categoryId ?? null,
+              intervalMonths: editingRecurring.intervalMonths ?? 1,
+              dayOfMonth: editingRecurring.dayOfMonth ?? 1,
+            }}
+            headingId={`edit-recurring-${editingRecurring.id}`}
+            onSuccess={handleRecurringEditSuccess}
+            onDelete={handleRecurringDeleteSuccess}
+            onClose={closeRecurringDialog}
+          />
+        )}
+      </Dialog>
 
       {feedback && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center" role="presentation">
