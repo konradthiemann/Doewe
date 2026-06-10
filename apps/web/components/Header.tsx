@@ -146,7 +146,7 @@ export default function Header() {
     >
       <div className="mx-auto max-w-xl">
         <div className="relative flex items-end justify-center">
-          <div className="flex w-full items-center justify-between gap-4 rounded-full border border-gray-200 bg-white/95 px-6 pb-3 pt-5 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-neutral-700 dark:bg-neutral-900/95 dark:supports-[backdrop-filter]:bg-neutral-900/80">
+          <div className="flex w-full items-center justify-between gap-2 rounded-full border border-gray-200/80 bg-white/95 px-4 pb-3 pt-4 shadow-xl backdrop-blur supports-[backdrop-filter]:bg-white/85 dark:border-neutral-700/80 dark:bg-neutral-900/95 dark:supports-[backdrop-filter]:bg-neutral-900/85">
             {navLinks.map(({ href, label, icon }) => {
               const active = pathname === href;
               return (
@@ -154,7 +154,7 @@ export default function Header() {
                   key={href}
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex w-full flex-col items-center gap-1 text-xs font-medium transition focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900 ${active ? "text-indigo-600" : "text-gray-600 dark:text-neutral-300"}`}
+                  className={`flex w-full flex-col items-center gap-1 rounded-xl px-2 py-1 text-xs font-medium transition-all focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900 ${active ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400" : "text-gray-600 hover:bg-gray-100/60 dark:text-neutral-300 dark:hover:bg-neutral-800/50"}`}
                 >
                   {icon(active)}
                   <span className="text-[11px]">{label}</span>
@@ -164,7 +164,7 @@ export default function Header() {
           </div>
           <Link
             href={primaryAction.href}
-            className="absolute -top-7 flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-white bg-indigo-600 text-white shadow-xl transition hover:bg-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-900"
+            className="absolute -top-7 flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-white bg-indigo-600 text-white shadow-2xl transition hover:bg-indigo-500 hover:scale-105 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-95 dark:border-neutral-900"
             aria-label={primaryAction.label}
           >
             {primaryAction.icon}
