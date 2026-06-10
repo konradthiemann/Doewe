@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { createCategoryAction } from "../app/actions/categories";
 import { appConfig } from "../lib/config";
 import { cn } from "../lib/cn";
 import { useI18n } from "../lib/i18n";
@@ -292,20 +293,19 @@ export default function TransactionForm({
 
     setNewCategoryLoading(true);
     try {
-      const res = await fetch("/api/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed, isIncome: txType === "income" }),
-      });
+      const result = await createCategoryAction({ name: trimmed, isIncome: txType === "income" });
 
-      if (!res.ok) {
-        const details = await res.json().catch(() => null);
-        const message = details?.error ? JSON.stringify(details.error) : t("transactionForm.errorSaveFailed", { status: res.status });
-        setNewCategoryError(message);
+      if (result?.serverError) {
+        setNewCategoryError(String(result.serverError));
         return;
       }
 
-      const created: { id: string; name: string; isIncome: boolean } = await res.json();
+      const created = result?.data;
+      if (!created) {
+        setNewCategoryError(t("transactionForm.errorAddCategory"));
+        return;
+      }
+
       setCategories((current) => [created, ...current]);
       setValue("categoryId", created.id);
       setNewCategoryName("");
