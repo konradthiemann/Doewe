@@ -2,24 +2,27 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { compare } from "bcryptjs";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+import { env } from "../env";
 import { prisma } from "./prisma";
 
 import type { NextAuthOptions } from "next-auth";
 
-const rawNextAuthUrl = process.env.NEXTAUTH_URL || process.env.NUXTAUTH_URL;
-if (rawNextAuthUrl && !process.env.NEXTAUTH_URL) {
+// Railway may provide NUXTAUTH_URL / NUXTAUTH_SECRET instead of the canonical names.
+// Copy them into the expected env vars so NextAuth picks them up automatically.
+const rawNextAuthUrl = env.NEXTAUTH_URL ?? env.NUXTAUTH_URL;
+if (rawNextAuthUrl && !env.NEXTAUTH_URL) {
   process.env.NEXTAUTH_URL = rawNextAuthUrl.startsWith("http")
     ? rawNextAuthUrl
     : `https://${rawNextAuthUrl}`;
 }
 
-if (!process.env.NEXTAUTH_SECRET && process.env.NUXTAUTH_SECRET) {
-  process.env.NEXTAUTH_SECRET = process.env.NUXTAUTH_SECRET;
+if (!env.NEXTAUTH_SECRET && env.NUXTAUTH_SECRET) {
+  process.env.NEXTAUTH_SECRET = env.NUXTAUTH_SECRET;
 }
 
 export const authOptions: NextAuthOptions = {
   // NEXTAUTH_SECRET is required in production; AUTH_SECRET keeps NextAuth v5 compatibility
-  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
+  secret: env.NEXTAUTH_SECRET ?? env.NUXTAUTH_SECRET ?? env.AUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },

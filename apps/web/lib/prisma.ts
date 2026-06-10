@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
+import { env } from "../env";
+
 // Ensure a single PrismaClient instance is used across hot-reloads in development.
 // This attaches the PrismaClient to the global object, preventing multiple instances
 // which can cause connection issues with the database.
@@ -15,6 +17,6 @@ export const prisma =
 
 // In development, attach PrismaClient to the global object to prevent
 // multiple instances during hot-reloads, which can cause connection issues.
-if (process.env.NODE_ENV !== "production") {
+if (env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }

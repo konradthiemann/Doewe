@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth/next";
 
+import { env } from "../env";
 import { authOptions } from "./authOptions";
 
 /** Die Nutzerdaten, die aus der Session gelesen werden. */
@@ -23,10 +24,10 @@ export type SessionUser = {
  * ```
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
-  if (process.env.TEST_USER_ID_BYPASS) {
+  if (env.TEST_USER_ID_BYPASS) {
     return {
-      id: process.env.TEST_USER_ID_BYPASS,
-      email: process.env.TEST_USER_EMAIL_BYPASS ?? null
+      id: env.TEST_USER_ID_BYPASS,
+      email: env.TEST_USER_EMAIL_BYPASS ?? null
     };
   }
 
