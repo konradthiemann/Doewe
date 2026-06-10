@@ -1,5 +1,8 @@
 import "./globals.css";
 
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+
 import AppChrome from "../components/AppChrome";
 
 import Providers from "./providers";
@@ -43,6 +46,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <AppChrome />
         </Providers>
+        {/* Vercel Analytics — no cookie banner required, privacy-friendly */}
+        <Analytics />
+        {/* Core Web Vitals monitoring visible in Vercel Dashboard */}
+        <SpeedInsights />
       </body>
     </html>
   );
