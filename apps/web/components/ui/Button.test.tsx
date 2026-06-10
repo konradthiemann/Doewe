@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+// eslint-disable-next-line import/no-named-as-default
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 

@@ -2,8 +2,8 @@
 
 import { z } from "zod";
 
-import { authActionClient } from "../../lib/safe-action";
 import { prisma } from "../../lib/prisma";
+import { authActionClient } from "../../lib/safe-action";
 
 const PROTECTED_CATEGORY_NAMES = ["savings", "sparen"];
 

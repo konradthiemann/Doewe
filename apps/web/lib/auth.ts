@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth/next";
 
 import { env } from "../env";
+
 import { authOptions } from "./authOptions";
 
 /** Die Nutzerdaten, die aus der Session gelesen werden. */

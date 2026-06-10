@@ -6,8 +6,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { createCategoryAction } from "../app/actions/categories";
-import { appConfig } from "../lib/config";
 import { cn } from "../lib/cn";
+import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
 import { transactionFormSchema, type TransactionFormValues } from "../lib/schemas/forms";
 
@@ -47,7 +47,7 @@ export default function TransactionForm({
   );
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [_loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const [showNewCategory, setShowNewCategory] = useState(false);
