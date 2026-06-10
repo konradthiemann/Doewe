@@ -158,8 +158,11 @@ export async function GET() {
   const activeRecurringThisMonth = recurringThisMonth.filter((r) => !skippedIds.has(r.id));
 
   // Dauerauftrag-Summen — ebenfalls in Cents
+  // Sparbuchungs-Daueraufträge werden analog zu echten Sparbuchungen separat gezählt,
+  // damit projectedRemaining konsistent mit remaining ist (beide schließen Sparen aus Ausgaben aus).
   let recurringIncomeTotalCents = 0;
   let recurringOutcomeTotalCents = 0;
+  let recurringPlannedSavingsCents = 0;
   const recurringByCategoryCents: Record<string, number> = {};
 
   for (const rec of activeRecurringThisMonth) {
@@ -168,9 +171,13 @@ export async function GET() {
       recurringIncomeTotalCents += amt;
     } else {
       const abs = -amt;
-      recurringOutcomeTotalCents += abs;
-      if (rec.categoryId && rec.categoryId !== savingsCatId) {
-        recurringByCategoryCents[rec.categoryId] = (recurringByCategoryCents[rec.categoryId] || 0) + abs;
+      if (savingsCatId && rec.categoryId === savingsCatId) {
+        recurringPlannedSavingsCents += abs;
+      } else {
+        recurringOutcomeTotalCents += abs;
+        if (rec.categoryId) {
+          recurringByCategoryCents[rec.categoryId] = (recurringByCategoryCents[rec.categoryId] || 0) + abs;
+        }
       }
     }
   }
@@ -242,7 +249,8 @@ export async function GET() {
 
   const projectedIncomeTotalCents = incomeTotalCents + recurringIncomeTotalCents;
   const projectedOutcomeTotalCents = outcomeTotalCents + recurringOutcomeTotalCents;
-  const projectedRemainingCents = projectedIncomeTotalCents - projectedOutcomeTotalCents - monthlySavingsActualCents;
+  const projectedSavingsTotalCents = monthlySavingsActualCents + recurringPlannedSavingsCents;
+  const projectedRemainingCents = projectedIncomeTotalCents - projectedOutcomeTotalCents - projectedSavingsTotalCents;
 
   // Daueraufträge in Kategorie-Aufteilung einrechnen (beide in Cents)
   for (const [catId, amountCents] of Object.entries(recurringByCategoryCents)) {
@@ -305,6 +313,8 @@ export async function GET() {
     })),
     recurringIncomeTotal: recurringIncomeTotalCents / 100,
     recurringOutcomeTotal: recurringOutcomeTotalCents / 100,
+    recurringPlannedSavings: recurringPlannedSavingsCents / 100,
+    projectedSavingsTotal: projectedSavingsTotalCents / 100,
     daily: {
       labels: Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`),
       income: incomeDaily,
