@@ -1,10 +1,18 @@
 import "./globals.css";
 
+import { Inter } from "next/font/google";
+
 import AppChrome from "../components/AppChrome";
 
 import Providers from "./providers";
 
 import type { Metadata } from "next";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap"
+});
 
 export const metadata: Metadata = {
   title: "Doewe",
@@ -29,7 +37,7 @@ const themeScript = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="de" suppressHydrationWarning>
+    <html lang="de" className={inter.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

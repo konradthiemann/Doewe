@@ -290,9 +290,19 @@ export default function HomePage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
+      {/* Page Header */}
+      <header className="max-w-5xl">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-100">
+          {t("page.dashboard")}
+        </h1>
+        <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">
+          {t("page.dashboardSubtitle")}
+        </p>
+      </header>
+
       {/* Account Balance & Carryover Section */}
       <section aria-labelledby="balance-overview" className="max-w-5xl">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="balance-overview" className="text-lg font-medium mb-4">
             {t("dashboard.balanceOverview")}
           </h2>
@@ -331,7 +341,7 @@ export default function HomePage() {
 
       {/* Category Budgets — nach oben gezogen: wichtigste Info für tägliche Haushaltsplanung */}
       <section aria-labelledby="category-budgets" className="max-w-3xl">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="category-budgets" className="text-lg font-medium mb-1">
             {t("dashboard.categoryBudgetsTitle")}
           </h2>
@@ -381,7 +391,7 @@ export default function HomePage() {
       </section>
 
       <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
             {t("dashboard.outgoingsByCategory")}
           </h2>
@@ -394,7 +404,7 @@ export default function HomePage() {
           )}
         </div>
 
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="income-usage-heading" className="text-lg font-medium mb-1">
             {t("dashboard.monthlyIncomeUsage")}
           </h2>
@@ -450,7 +460,7 @@ export default function HomePage() {
               </div>
               <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
                 <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t("dashboard.incomeReportBreakdown")}>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.spent")}</dt>
                     <dd
                       className="text-lg font-semibold text-red-600 dark:text-red-400"
@@ -471,7 +481,7 @@ export default function HomePage() {
                       })}
                     </p>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.left")}</dt>
                     <dd className={`text-lg font-semibold ${projectedLeft >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{formatCurrency(projectedLeft)}</dd>
                     <p className="text-xs text-slate-600 dark:text-neutral-400">
@@ -482,7 +492,7 @@ export default function HomePage() {
                           : t("dashboard.negativeLeft")}
                     </p>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
                     <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.overspend")}</dt>
                     <dd className={`text-lg font-semibold ${overspent > 0 ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-neutral-400"}`}>
                       {overspent > 0 ? formatCurrency(overspent) : t("dashboard.zeroEuro")}
@@ -513,7 +523,7 @@ export default function HomePage() {
 
       {/* Recurring Transactions Section */}
       <section aria-labelledby="recurring-overview" className="max-w-3xl">
-        <details className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
+        <details className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
           <summary className="flex items-center justify-between cursor-pointer p-5 select-none list-none [&::-webkit-details-marker]:hidden">
             <div>
               <h2 id="recurring-overview" className="text-lg font-medium mb-1">
@@ -577,7 +587,7 @@ export default function HomePage() {
       </section>
 
       <section aria-labelledby="savings-overview" className="max-w-3xl">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="savings-overview" className="text-lg font-medium mb-4">
             {t("dashboard.savingsOverview")}
           </h2>
@@ -641,7 +651,7 @@ export default function HomePage() {
 
       {/* Quarterly Overview Section */}
       <section aria-labelledby="quarterly-overview" className="max-w-4xl">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="quarterly-overview" className="text-lg font-medium mb-1">
             {t("dashboard.quarterlyOverview")}
           </h2>
@@ -730,7 +740,7 @@ export default function HomePage() {
                         : "text-red-600 dark:text-red-400";
                     const sign = positive ? "+" : "";
                     return (
-                      <div key={labelKey} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800">
+                      <div key={labelKey} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800">
                         <p className="text-xs text-gray-500 dark:text-neutral-400">{t(`dashboard.${labelKey}`)}</p>
                         <p className={`text-sm font-semibold tabular-nums ${colorClass}`}>
                           {d.pct !== null

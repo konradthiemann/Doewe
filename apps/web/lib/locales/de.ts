@@ -1,4 +1,12 @@
 export const de: Record<string, string> = {
+  "page.dashboard": "Übersicht",
+  "page.dashboardSubtitle": "Dein Monatsüberblick",
+  "page.transactions": "Transaktionen",
+  "page.transactionsSubtitle": "Einnahmen und Ausgaben",
+  "page.savingPlan": "Sparplan",
+  "page.savingPlanSubtitle": "Sparziele und Fortschritt",
+  "page.settings": "Einstellungen",
+  "page.settingsSubtitle": "Konto und Darstellung",
   "common.close": "Schließen",
   "common.scrollTop": "Nach oben",
   "nav.dashboard": "Übersicht",
