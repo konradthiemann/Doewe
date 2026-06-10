@@ -1,6 +1,8 @@
 "use client";
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
+import { addMonths, format, parse } from "date-fns";
+import { de, enUS } from "date-fns/locale";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { appConfig } from "../lib/config";
@@ -30,13 +32,11 @@ type Props = {
 };
 
 function nextMonthValue() {
-  const today = new Date();
-  const next = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+  return format(addMonths(new Date(), 1), "yyyy-MM");
 }
 
 function monthYearToValue(month: number, year: number) {
-  return `${year}-${String(month).padStart(2, "0")}`;
+  return format(new Date(year, month - 1, 1), "yyyy-MM");
 }
 
 function centsToDisplayString(cents: number) {
@@ -57,8 +57,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   const [error, setError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
-  const dateLocale = locale === "de" ? "de-DE" : "en-US";
-
+  const dfLocale = locale === "de" ? de : enUS;
 
   useEffect(() => {
     let active = true;
@@ -88,11 +87,10 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   }, []);
 
   const dueLabel = useMemo(() => {
-    const [year, month] = form.targetMonth.split("-");
-    if (!year || !month) return t("savingPlan.form.plannedDate");
-    const date = new Date(Number(year), Number(month) - 1);
-    return date.toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
-  }, [dateLocale, form.targetMonth, t]);
+    if (!form.targetMonth || form.targetMonth.length < 7) return t("savingPlan.form.plannedDate");
+    const date = parse(form.targetMonth, "yyyy-MM", new Date());
+    return format(date, "LLLL yyyy", { locale: dfLocale });
+  }, [dfLocale, form.targetMonth, t]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

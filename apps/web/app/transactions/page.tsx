@@ -1,6 +1,18 @@
 "use client";
 
 import { fromCents, toDecimalString } from "@doewe/shared";
+import {
+  addMonths,
+  format,
+  getMonth,
+  getYear,
+  isAfter,
+  isBefore,
+  isEqual,
+  parseISO,
+  startOfDay,
+} from "date-fns";
+import { de, enUS } from "date-fns/locale";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -74,7 +86,7 @@ function TransactionsPage() {
   const [skipsNext, setSkipsNext] = useState<Set<string>>(new Set());
   const router = useRouter();
   const searchParams = useSearchParams();
-  const dateLocale = locale === "de" ? "de-DE" : "en-US";
+  const dfLocale = locale === "de" ? de : enUS;
 
   const tabs: Array<{ id: ActiveTab; label: string }> = useMemo(() => (
     [
@@ -122,17 +134,17 @@ function TransactionsPage() {
   }, [t]);
 
   const now = useMemo(() => new Date(), []);
-  const currentYear = useMemo(() => now.getFullYear(), [now]);
-  const currentMonth = useMemo(() => now.getMonth() + 1, [now]);
-  const nextDate = useMemo(() => new Date(currentYear, currentMonth, 1), [currentYear, currentMonth]);
-  const nextYear = useMemo(() => nextDate.getFullYear(), [nextDate]);
-  const nextMonth = useMemo(() => nextDate.getMonth() + 1, [nextDate]);
+  const currentYear = useMemo(() => getYear(now), [now]);
+  const currentMonth = useMemo(() => getMonth(now) + 1, [now]);
+  const nextDate = useMemo(() => addMonths(now, 1), [now]);
+  const nextYear = useMemo(() => getYear(nextDate), [nextDate]);
+  const nextMonth = useMemo(() => getMonth(nextDate) + 1, [nextDate]);
 
   const monthIndex = useCallback((year: number, month: number) => year * 12 + (month - 1), []);
 
   const occursInMonth = useCallback((recurring: RecurringTx, year: number, month: number) => {
-    const base = new Date(recurring.nextOccurrence);
-    const baseIndex = monthIndex(base.getFullYear(), base.getMonth() + 1);
+    const base = parseISO(recurring.nextOccurrence);
+    const baseIndex = monthIndex(getYear(base), getMonth(base) + 1);
     const targetIndex = monthIndex(year, month);
     const interval = recurring.intervalMonths ?? 1;
     const diff = targetIndex - baseIndex;
@@ -324,47 +336,34 @@ function TransactionsPage() {
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredItems = useMemo(() => {
-    const fromDate = dateFrom ? new Date(dateFrom) : null;
-    const toDate = dateTo ? new Date(dateTo) : null;
-    if (toDate) {
-      toDate.setHours(23, 59, 59, 999);
-    }
+    const fromDate = dateFrom ? startOfDay(new Date(dateFrom)) : null;
+    const toDate = dateTo ? startOfDay(new Date(dateTo)) : null;
 
     return items.filter((t) => {
-      // Filter by type (income/outcome)
-      if (filterType === "income" && t.amountCents < 0) {
-        return false;
-      }
-      if (filterType === "outcome" && t.amountCents >= 0) {
-        return false;
-      }
+      if (filterType === "income" && t.amountCents < 0) return false;
+      if (filterType === "outcome" && t.amountCents >= 0) return false;
+      if (categoryFilter && t.categoryId !== categoryFilter) return false;
 
-      if (categoryFilter && t.categoryId !== categoryFilter) {
-        return false;
-      }
+      const occurredDate = parseISO(t.occurredAt);
+      if (fromDate && isBefore(occurredDate, fromDate)) return false;
+      if (toDate && isAfter(occurredDate, startOfDay(new Date(toDate.getTime() + 86_400_000 - 1)))) return false;
 
-      const occurredDate = new Date(t.occurredAt);
-      if (fromDate && occurredDate < fromDate) return false;
-      if (toDate && occurredDate > toDate) return false;
-
-      if (!normalizedQuery) {
-        return true;
-      }
+      if (!normalizedQuery) return true;
 
       const description = t.description?.toLowerCase?.() ?? "";
       const account = t.accountId?.toLowerCase?.() ?? "";
       const categoryName = t.categoryId ? (categoriesById[t.categoryId]?.toLowerCase?.() ?? "") : "";
       const amount = toDecimalString(fromCents(t.amountCents)).toLowerCase();
-      const occurred = new Date(t.occurredAt).toLocaleString(dateLocale).toLowerCase();
+      const occurred = format(parseISO(t.occurredAt), "Pp", { locale: dfLocale }).toLowerCase();
 
       return [description, account, categoryName, amount, occurred].some((value) => value.includes(normalizedQuery));
     });
-  }, [categoryFilter, categoriesById, dateFrom, dateLocale, dateTo, filterType, items, normalizedQuery]);
+  }, [categoryFilter, categoriesById, dateFrom, dateTo, dfLocale, filterType, items, normalizedQuery]);
   const sortedItems = useMemo(() => {
     const copy = [...filteredItems];
     switch (sortOption) {
       case "oldest":
-        return copy.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+        return copy.sort((a, b) => parseISO(a.occurredAt).getTime() - parseISO(b.occurredAt).getTime());
       case "amountDesc":
         return copy.sort((a, b) => b.amountCents - a.amountCents);
       case "amountAsc":
@@ -373,7 +372,7 @@ function TransactionsPage() {
         return copy.sort((a, b) => (a.description || "").localeCompare(b.description || ""));
       case "newest":
       default:
-        return copy.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+        return copy.sort((a, b) => parseISO(b.occurredAt).getTime() - parseISO(a.occurredAt).getTime());
     }
   }, [filteredItems, sortOption]);
   const hasFilters = Boolean(normalizedQuery || categoryFilter || dateFrom || dateTo || filterType !== "all");
@@ -406,13 +405,13 @@ function TransactionsPage() {
       const account = rec.accountId?.toLowerCase?.() ?? "";
       const categoryName = rec.categoryId ? (categoriesById[rec.categoryId]?.toLowerCase?.() ?? "") : "";
       const amount = toDecimalString(fromCents(rec.amountCents)).toLowerCase();
-      const nextOccurrence = new Date(rec.nextOccurrence).toLocaleDateString(dateLocale).toLowerCase();
+      const nextOccurrence = format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }).toLowerCase();
       const interval = String(rec.intervalMonths ?? 1);
 
       return [description, account, categoryName, amount, nextOccurrence, interval]
         .some((value) => value.includes(normalizedRecurringQuery));
     });
-  }, [categoriesById, dateLocale, normalizedRecurringQuery, recurringItems]);
+  }, [categoriesById, dfLocale, normalizedRecurringQuery, recurringItems]);
   const recurringTotalCents = useMemo(() => {
     return filteredRecurringItems.reduce((total, rec) => total + rec.amountCents, 0);
   }, [filteredRecurringItems]);
@@ -858,7 +857,7 @@ function TransactionsPage() {
                 <p className="text-xs font-normal text-gray-600 dark:text-neutral-300">{t("transactions.upcomingRecurring")}</p>
               </div>
               <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
-                {nextDate.toLocaleDateString(dateLocale, { month: "long", year: "numeric" })}
+                {format(nextDate, "LLLL yyyy", { locale: dfLocale })}
                 <svg
                   aria-hidden="true"
                   className="h-3.5 w-3.5 text-gray-400 transition-transform duration-200 group-open:rotate-90 dark:text-neutral-400"
@@ -949,7 +948,7 @@ function TransactionsPage() {
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <time dateTime={tx.occurredAt}>
-                        {new Date(tx.occurredAt).toLocaleString(dateLocale)}
+                        {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
                       </time>
                       {tx.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
@@ -1031,7 +1030,7 @@ function TransactionsPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
-                        {t("transactions.nextLabel", { date: new Date(rec.nextOccurrence).toLocaleDateString(dateLocale) })}
+                        {t("transactions.nextLabel", { date: format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }) })}
                       </span>
                       {rec.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
