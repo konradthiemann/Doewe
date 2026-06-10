@@ -146,7 +146,6 @@ export default function HomePage() {
     mediaQuery.addEventListener("change", update);
     return () => mediaQuery.removeEventListener("change", update);
   }, []);
-
   const outgoingLabels = useMemo(
     () => summary.outgoingByCategory.map((c) => c.name),
     [summary.outgoingByCategory]
@@ -162,11 +161,13 @@ export default function HomePage() {
   const projectedOutcome = Math.max(0, summary.projectedOutcomeTotal ?? (summary.outcomeTotal + (summary.recurringOutcomeTotal || 0)));
   const totalSavingsTransfer = Math.max(0, summary.monthlySavingsActual || 0);
   const projectedSpent = projectedOutcome + totalSavingsTransfer;
+  // Expenses-only and savings-only percentages for the segmented progress bar
   const projectedExpenses = projectedOutcome;
   // Available budget = carryover from previous month + income of current month (incl. recurring).
   // Carryover is intentionally NOT floored at 0 so a negative carryover reduces the budget honestly.
   const availableBudget = carryover + projectedIncome;
   const projectedLeft = availableBudget - projectedSpent;
+  const spentPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
   const expensesPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedExpenses / availableBudget) * 100)) : 0;
   const savedPercent = availableBudget > 0 ? Math.min(100 - expensesPercent, Math.round((totalSavingsTransfer / availableBudget) * 100)) : 0;
   const leftPercent = availableBudget > 0 ? Math.max(0, 100 - expensesPercent - savedPercent) : 0;
@@ -175,17 +176,23 @@ export default function HomePage() {
   const hasIncomeData = projectedIncome > 0 || carryover !== 0;
   const budgetUnderwater = availableBudget <= 0;
 
-  // Savings rate: share of projected income transferred to savings this month
+  // Core KPIs derived from the summary numbers above.
+  // Savings rate: how much of projected income is transferred to savings this month.
   const savingsRate = projectedIncome > 0
     ? Math.max(0, Math.round((totalSavingsTransfer / projectedIncome) * 100))
     : 0;
+  // Fixed-cost ratio: recurring expenses as share of projected income (proxy for financial obligation load).
+  const recurringOutcome = summary.recurringOutcomeTotal || 0;
+  const fixedCostRatio = projectedIncome > 0
+    ? Math.max(0, Math.round((recurringOutcome / projectedIncome) * 100))
+    : 0;
 
-  // Saving-plan recommendation: suggested monthly savings vs. actual
+  // Saving-plan recommendation: suggested monthly savings vs. actual.
   const suggestedMonthly = savingPlan ? savingPlan.totals.suggestedMonthlyCents / 100 : 0;
   const savingShortfall = Math.max(0, suggestedMonthly - totalSavingsTransfer);
   const savingOnTrack = suggestedMonthly > 0 ? totalSavingsTransfer >= suggestedMonthly : totalSavingsTransfer > 0;
 
-  // Category budgets: budgets set at category level vs. actual spent (incl. recurring)
+  // Category budgets: budgets set at category level vs. actual spent (incl. recurring).
   const categoryBudgets = summary.categoryBudgets || [];
   const overBudgetCategories = categoryBudgets.filter((c) => c.diff > 0);
 
@@ -222,22 +229,28 @@ export default function HomePage() {
     "#FDE68A", // yellow-300
     "#FCA5A5"  // rose-300
   ];
+  // Distribute colors to reduce adjacent similarity by stepping through palette
   const step = 5; // co-prime with warmPalette.length for better spread
   const outColors = outgoingLabels.map((_, i) => warmPalette[(i * step) % warmPalette.length]);
 
+  // Doughnut chart shows only outcome categories
+  const doughnutLabels = outgoingLabels;
+  const doughnutValues = outgoingValues;
+  const doughnutColors = outColors;
+
   const doughnutData = {
-    labels: outgoingLabels,
+    labels: doughnutLabels,
     datasets: [
       {
         label: "€",
-        data: outgoingValues,
-        backgroundColor: outColors,
+        data: doughnutValues,
+        backgroundColor: doughnutColors,
         borderWidth: 0
       }
     ]
   };
 
-  // Planned vs Actual savings
+  // Planned vs Actual savings cards
   const plannedSavings = summary.plannedSavings;
   const actualSavings = summary.monthlySavingsActual || 0;
   const plannedColor = "#6366F1"; // indigo
@@ -277,165 +290,23 @@ export default function HomePage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
-
-      {/* Page Header */}
-      <header className="max-w-5xl">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-100">
-          {t("page.dashboard")}
-        </h1>
-        <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">
-          {new Date().toLocaleDateString(dateLocale, { month: "long", year: "numeric" })}
-        </p>
-      </header>
-
-      {/* HERO: Monthly Budget — the most important number front and center */}
-      <section aria-labelledby="monthly-hero" className="max-w-3xl">
-        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-6 dark:bg-neutral-900">
-          <h2 id="monthly-hero" className="text-sm font-semibold uppercase tracking-widest text-gray-400 dark:text-neutral-500 mb-4">
-            {t("dashboard.monthlyIncomeUsage")}
-          </h2>
-
-          {budgetUnderwater && !loading && (
-            <div className="mb-4 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300" role="alert">
-              {t("dashboard.budgetUnderwaterWarning")}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="space-y-3 animate-pulse">
-              <div className="h-12 rounded-xl bg-gray-100 dark:bg-neutral-800" />
-              <div className="h-4 rounded-full bg-gray-100 dark:bg-neutral-800" />
-              <div className="grid grid-cols-3 gap-3">
-                {[0, 1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-gray-100 dark:bg-neutral-800" />)}
-              </div>
-            </div>
-          ) : hasIncomeData ? (
-            <>
-              {/* Big remaining number */}
-              <div className="mb-5">
-                <p className="text-xs font-medium uppercase tracking-widest text-gray-400 dark:text-neutral-500 mb-1">
-                  {t("dashboard.left")}
-                </p>
-                <p className={`text-5xl font-bold tabular-nums leading-none ${projectedLeft >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                  {formatCurrency(projectedLeft)}
-                </p>
-                {overspent > 0 && (
-                  <p className="mt-1.5 text-sm font-medium text-red-600 dark:text-red-400">
-                    {t("dashboard.overspendAboveBudget", { percent: overspentPercent })}
-                  </p>
-                )}
-                {projectedLeft >= 0 && leftPercent > 0 && (
-                  <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
-                    {t("dashboard.leftAvailable", { percent: leftPercent })}
-                  </p>
-                )}
-              </div>
-
-              {/* Segmented progress bar */}
-              <div
-                className="relative w-full h-4 rounded-full overflow-hidden bg-emerald-100 dark:bg-emerald-900/30 mb-2"
-                role="img"
-                aria-label={t("dashboard.incomeUsageTitle")}
-              >
-                <div
-                  className="absolute inset-y-0 left-0 bg-red-400 dark:bg-red-500 transition-all duration-700"
-                  style={{ width: `${Math.min(100, expensesPercent)}%` }}
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={expensesPercent}
-                  aria-label={t("dashboard.spent")}
-                />
-                {totalSavingsTransfer > 0 && (
-                  <div
-                    className="absolute inset-y-0 bg-blue-400 dark:bg-blue-500 transition-all duration-700"
-                    style={{ left: `${Math.min(100, expensesPercent)}%`, width: `${Math.min(100 - expensesPercent, savedPercent)}%` }}
-                    role="progressbar"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={savedPercent}
-                    aria-label={t("dashboard.saved")}
-                  />
-                )}
-              </div>
-              <div className="mb-5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-neutral-400">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-red-400 dark:bg-red-500" aria-hidden="true" />
-                  {t("dashboard.spent")}
-                </span>
-                {totalSavingsTransfer > 0 && (
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400 dark:bg-blue-500" aria-hidden="true" />
-                    {t("dashboard.saved")}
-                  </span>
-                )}
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 dark:bg-emerald-500" aria-hidden="true" />
-                  {t("dashboard.left")}
-                </span>
-              </div>
-
-              {/* 3 metric pills */}
-              <dl className="grid grid-cols-3 gap-3" aria-label={t("dashboard.incomeReportBreakdown")}>
-                <div className="rounded-xl bg-gray-50 dark:bg-neutral-800/60 px-3 py-3 text-center">
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
-                    {t("dashboard.quarterlyIncome")}
-                  </dt>
-                  <dd className="mt-0.5 text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(projectedIncome)}
-                  </dd>
-                </div>
-                <div className="rounded-xl bg-gray-50 dark:bg-neutral-800/60 px-3 py-3 text-center">
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
-                    {t("dashboard.spent")}
-                  </dt>
-                  <dd className="mt-0.5 text-lg font-bold tabular-nums text-red-600 dark:text-red-400">
-                    {formatCurrency(projectedExpenses)}
-                  </dd>
-                </div>
-                <div className="rounded-xl bg-gray-50 dark:bg-neutral-800/60 px-3 py-3 text-center">
-                  <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
-                    {t("dashboard.saved")}
-                  </dt>
-                  <dd className={`mt-0.5 text-lg font-bold tabular-nums ${totalSavingsTransfer > 0 ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-neutral-500"}`}>
-                    {formatCurrency(totalSavingsTransfer)}
-                  </dd>
-                </div>
-              </dl>
-
-              <p className="mt-3 text-xs text-gray-400 dark:text-neutral-500">
-                {t("dashboard.budgetBreakdown", {
-                  carryover: formatCurrency(carryover),
-                  income: formatCurrency(projectedIncome),
-                  budget: formatCurrency(availableBudget)
-                })}
-              </p>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-gray-500 dark:text-neutral-400">
-              {t("dashboard.addIncomeTransactions")}
-            </p>
-          )}
-        </div>
-      </section>
-
-      {/* Secondary KPIs: Balance, Carryover, Savings Rate, Saved This Month */}
+      {/* Account Balance & Carryover Section */}
       <section aria-labelledby="balance-overview" className="max-w-5xl">
-        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
-          <h2 id="balance-overview" className="text-sm font-semibold uppercase tracking-widest text-gray-400 dark:text-neutral-500 mb-4">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="balance-overview" className="text-lg font-medium mb-4">
             {t("dashboard.balanceOverview")}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalance")}</p>
-              <p className={`text-2xl font-semibold tabular-nums ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+              <p className={`text-2xl font-semibold ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                 {formatCurrency(summary.totalBalance)}
               </p>
               <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalanceHint")}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverFromLastMonth")}</p>
-              <p className={`text-2xl font-semibold tabular-nums ${carryover >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
+              <p className={`text-2xl font-semibold ${carryover >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
                 {formatCurrency(carryover)}
               </p>
               <p className="text-xs text-gray-500 dark:text-neutral-400">
@@ -444,35 +315,29 @@ export default function HomePage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.savingsRate")}</p>
-              <p className="text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{savingsRate}%</p>
+              <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{savingsRate}%</p>
               <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.savingsRateHint")}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.savedThisMonth")}</p>
-              <p className="text-2xl font-semibold tabular-nums text-blue-600 dark:text-blue-400">
-                {formatCurrency(actualSavings)}
+              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatio")}</p>
+              <p className={`text-2xl font-semibold ${fixedCostRatio >= 70 ? "text-red-600 dark:text-red-400" : fixedCostRatio >= 50 ? "text-amber-600 dark:text-amber-400" : "text-gray-700 dark:text-neutral-200"}`}>
+                {fixedCostRatio}%
               </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">
-                {plannedSavings > 0
-                  ? t("dashboard.percentOfTarget", { percent: savingsProgress })
-                  : "—"}
-              </p>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatioHint")}</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Category Budgets */}
+      {/* Category Budgets — nach oben gezogen: wichtigste Info für tägliche Haushaltsplanung */}
       <section aria-labelledby="category-budgets" className="max-w-3xl">
-        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="category-budgets" className="text-lg font-medium mb-1">
             {t("dashboard.categoryBudgetsTitle")}
           </h2>
           <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.categoryBudgetsSubtitle")}</p>
           {loading ? (
-            <div className="space-y-2 animate-pulse">
-              {[0, 1, 2].map((i) => <div key={i} className="h-14 rounded-xl bg-gray-100 dark:bg-neutral-800" />)}
-            </div>
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
           ) : categoryBudgets.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.categoryBudgetsEmpty")}</p>
           ) : (
@@ -488,16 +353,16 @@ export default function HomePage() {
                     const pct = c.budget > 0 ? Math.min(200, Math.round((c.spent / c.budget) * 100)) : 0;
                     const over = c.diff > 0;
                     return (
-                      <li key={c.categoryId} className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
-                        <div className="flex items-center justify-between mb-1.5">
+                      <li key={c.categoryId} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+                        <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium text-gray-900 dark:text-neutral-100">{c.name}</span>
                           <span className={`text-xs font-semibold tabular-nums ${over ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                             {formatCurrency(c.spent)} / {formatCurrency(c.budget)}
                           </span>
                         </div>
-                        <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-neutral-900 overflow-hidden" aria-hidden="true">
+                        <div className="h-2 w-full rounded bg-gray-200 dark:bg-neutral-900 overflow-hidden" aria-hidden="true">
                           <div
-                            className={`h-2 rounded-full transition-all duration-500 ${over ? "bg-red-500" : "bg-emerald-500"}`}
+                            className={`h-2 rounded ${over ? "bg-red-500" : "bg-emerald-500"}`}
                             style={{ width: `${Math.min(100, pct)}%` }}
                           />
                         </div>
@@ -515,53 +380,233 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Spending by Category */}
-      <section aria-labelledby="outgoing-chart" className="max-w-xl">
-        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 p-5 bg-white dark:bg-neutral-900">
-          <h2 id="outgoing-chart" className="text-lg font-medium mb-4">
+      <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
+          <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
             {t("dashboard.outgoingsByCategory")}
           </h2>
           {loading ? (
-            <div className="h-64 rounded-xl bg-gray-100 dark:bg-neutral-800 animate-pulse" />
+            <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
           ) : outgoingValues.length > 0 ? (
             <Doughnut data={doughnutData} options={doughnutOptions} />
           ) : (
-            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.noOutgoings")}</p>
+            <p className="text-sm text-gray-500">{t("dashboard.noOutgoings")}</p>
+          )}
+        </div>
+
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
+          <h2 id="income-usage-heading" className="text-lg font-medium mb-1">
+            {t("dashboard.monthlyIncomeUsage")}
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">{t("dashboard.incomeUsageSubtitle")}</p>
+          {budgetUnderwater && !loading && (
+            <div className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300" role="alert">
+              {t("dashboard.budgetUnderwaterWarning")}
+            </div>
+          )}
+          {loading ? (
+            <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
+          ) : hasIncomeData ? (
+            <figure aria-labelledby="income-usage-heading income-usage-summary" className="space-y-4">
+              {/* Progress bar: red (expenses) + blue (savings) + green (remaining) */}
+              <div className="space-y-2">
+                <div className="relative w-full h-8 rounded-full overflow-hidden bg-emerald-500 dark:bg-emerald-600">
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-l-full bg-red-500 dark:bg-red-600 transition-all duration-500"
+                    style={{ width: `${Math.min(100, expensesPercent)}%` }}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={expensesPercent}
+                    aria-label={t("dashboard.spent")}
+                  />
+                  {totalSavingsTransfer > 0 && (
+                    <div
+                      className="absolute inset-y-0 bg-blue-500 dark:bg-blue-600 transition-all duration-500"
+                      style={{ left: `${Math.min(100, expensesPercent)}%`, width: `${Math.min(100 - expensesPercent, savedPercent)}%` }}
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={savedPercent}
+                      aria-label={t("dashboard.saved")}
+                    />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow">
+                    {expensesPercent + savedPercent}%
+                  </div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-600 dark:text-neutral-400">
+                  <span>{t("dashboard.spent")}: {formatCurrency(projectedExpenses)}</span>
+                  {totalSavingsTransfer > 0 && <span className="text-blue-600 dark:text-blue-400">{t("dashboard.saved")}: {formatCurrency(totalSavingsTransfer)}</span>}
+                  <span>{t("dashboard.left")}: {formatCurrency(projectedLeft)}</span>
+                </div>
+                <div className="text-xs text-gray-500 dark:text-neutral-400">
+                  {t("dashboard.budgetBreakdown", {
+                    carryover: formatCurrency(carryover),
+                    income: formatCurrency(projectedIncome),
+                    budget: formatCurrency(availableBudget)
+                  })}
+                </div>
+              </div>
+              <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
+                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t("dashboard.incomeReportBreakdown")}>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.spent")}</dt>
+                    <dd
+                      className="text-lg font-semibold text-red-600 dark:text-red-400"
+                      title={t("dashboard.spentBreakdownTooltip", {
+                        outcome: formatCurrency(projectedOutcome),
+                        savings: formatCurrency(totalSavingsTransfer)
+                      })}
+                    >
+                      {formatCurrency(projectedSpent)}
+                    </dd>
+                    <p className="text-xs text-slate-600 dark:text-neutral-400">
+                      {t("dashboard.spentOfBudget", { percent: spentPercent })}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-neutral-500 mt-0.5">
+                      {t("dashboard.spentBreakdownTooltip", {
+                        outcome: formatCurrency(projectedOutcome),
+                        savings: formatCurrency(totalSavingsTransfer)
+                      })}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.left")}</dt>
+                    <dd className={`text-lg font-semibold ${projectedLeft >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{formatCurrency(projectedLeft)}</dd>
+                    <p className="text-xs text-slate-600 dark:text-neutral-400">
+                      {projectedLeft > 0
+                        ? t("dashboard.leftAvailable", { percent: leftPercent })
+                        : projectedLeft === 0
+                          ? t("dashboard.fullyAllocated")
+                          : t("dashboard.negativeLeft")}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.overspend")}</dt>
+                    <dd className={`text-lg font-semibold ${overspent > 0 ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-neutral-400"}`}>
+                      {overspent > 0 ? formatCurrency(overspent) : t("dashboard.zeroEuro")}
+                    </dd>
+                    <p className="text-xs text-slate-600 dark:text-neutral-400">
+                      {overspent > 0
+                        ? t("dashboard.overspendAboveBudget", { percent: overspentPercent })
+                        : t("dashboard.noOverspend")}
+                    </p>
+                  </div>
+                </dl>
+                <p>
+                  {t("dashboard.spentSummary", {
+                    spent: formatCurrency(projectedSpent),
+                    budget: formatCurrency(availableBudget)
+                  })}
+                  {totalSavingsTransfer > 0 && ` ${t("dashboard.savedSummary", { saved: formatCurrency(totalSavingsTransfer) })}`}
+                  {projectedLeft > 0 && ` ${t("dashboard.leftSummary", { left: formatCurrency(projectedLeft) })}`}
+                  {overspent > 0 && ` ${t("dashboard.overspentSummary", { overspent: formatCurrency(overspent) })}`}
+                </p>
+              </figcaption>
+            </figure>
+          ) : (
+            <p className="text-sm text-gray-500">{t("dashboard.addIncomeTransactions")}</p>
           )}
         </div>
       </section>
 
-      {/* Savings Status */}
+      {/* Recurring Transactions Section */}
+      <section aria-labelledby="recurring-overview" className="max-w-3xl">
+        <details className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
+          <summary className="flex items-center justify-between cursor-pointer p-5 select-none list-none [&::-webkit-details-marker]:hidden">
+            <div>
+              <h2 id="recurring-overview" className="text-lg font-medium mb-1">
+                {t("dashboard.recurringOverview")}
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">
+                {t("dashboard.recurringSubtitle")}
+              </p>
+            </div>
+            <svg className="w-5 h-5 text-gray-500 dark:text-neutral-400 transition-transform group-open:rotate-180 shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </summary>
+          <div className="px-5 pb-5">
+          {loading ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
+          ) : recurringTransactions.length > 0 ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringIncome")}</p>
+                  <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                    {formatCurrency(recurringIncomeTotal)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringOutcome")}</p>
+                  <p className="text-2xl font-semibold text-red-600 dark:text-red-400">
+                    {formatCurrency(recurringOutcomeTotal)}
+                  </p>
+                </div>
+              </div>
+
+              <ul className="space-y-2">
+                {recurringTransactions.map((rec) => (
+                  <li key={rec.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 truncate">
+                        {rec.description}
+                      </p>
+                      {rec.dayOfMonth && (
+                        <p className="text-xs text-gray-500 dark:text-neutral-400">
+                          {t("dashboard.recurringDay", { day: rec.dayOfMonth })}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`text-sm font-semibold ml-3 ${
+                      rec.amountCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+                    }`}>
+                      {formatCurrency(rec.amountCents / 100)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.noRecurring")}</p>
+          )}
+          </div>
+        </details>
+      </section>
+
       <section aria-labelledby="savings-overview" className="max-w-3xl">
-        <div className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="savings-overview" className="text-lg font-medium mb-4">
             {t("dashboard.savingsOverview")}
           </h2>
-          <div className="grid gap-4 sm:grid-cols-3 mb-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.plannedSavings")}</p>
-              <p className="text-2xl font-semibold tabular-nums" style={{ color: plannedColor }}>{plannedSavings.toFixed(0)} €</p>
+              <p className="text-2xl font-semibold" style={{ color: plannedColor }}>{plannedSavings.toFixed(0)} €</p>
               <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.targetForMonth")}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.actualSaved")}</p>
-              <p className="text-2xl font-semibold tabular-nums" style={{ color: actualColor }}>{actualSavings.toFixed(0)} €</p>
+              <p className="text-2xl font-semibold" style={{ color: actualColor }}>{actualSavings.toFixed(0)} €</p>
               <p className="text-xs text-gray-500 dark:text-neutral-400">
                 {t("dashboard.percentOfTarget", { percent: savingsProgress })}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recommendedSavings")}</p>
-              <p className={`text-2xl font-semibold tabular-nums ${savingOnTrack ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+              <p className={`text-2xl font-semibold ${savingOnTrack ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
                 {suggestedMonthly.toFixed(0)} €
               </p>
               <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.recommendedSavingsHint")}</p>
             </div>
           </div>
-          <div className="mb-3">
-            <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-neutral-800" aria-hidden="true">
+          <div className="mt-5">
+            <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">{t("dashboard.progress")}</p>
+            <div className="mt-2 h-2 w-full rounded bg-gray-200 dark:bg-neutral-800" aria-hidden="true">
               <div
-                className="h-2 rounded-full transition-all duration-500"
+                className="h-2 rounded"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
@@ -572,7 +617,7 @@ export default function HomePage() {
             </div>
           </div>
           {savingPlan && suggestedMonthly > 0 && (
-            <div className={`rounded-xl border px-3 py-2.5 text-sm ${savingOnTrack
+            <div className={`mt-4 rounded-md border px-3 py-2 text-xs ${savingOnTrack
               ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
               : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
             }`}>
@@ -582,7 +627,7 @@ export default function HomePage() {
                   : t("dashboard.savingShortfall", { shortfall: formatCurrency(savingShortfall) })}
               </p>
               {savingPlan.nextDeadline && (
-                <p className="mt-0.5 text-xs opacity-80">
+                <p className="mt-0.5 text-[11px] opacity-80">
                   {t("dashboard.savingNextDeadline", {
                     date: new Date(savingPlan.nextDeadline.year, savingPlan.nextDeadline.month - 1, 1)
                       .toLocaleDateString(dateLocale, { month: "long", year: "numeric" })
@@ -594,184 +639,177 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Monthly Trend — collapsible, no data table */}
+      {/* Quarterly Overview Section */}
       <section aria-labelledby="quarterly-overview" className="max-w-4xl">
-        <details className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
-          <summary className="flex cursor-pointer list-none items-center justify-between rounded-2xl p-5 select-none [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900">
-            <div>
-              <h2 id="quarterly-overview" className="text-lg font-medium">
-                {t("dashboard.quarterlyOverview")}
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">{t("dashboard.quarterlySubtitle")}</p>
-            </div>
-            <svg className="w-5 h-5 shrink-0 ml-2 text-gray-500 dark:text-neutral-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </summary>
-
-          <div className="space-y-5 px-5 pb-5">
-            {quarterlyLoading ? (
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
-            ) : quarterlyError ? (
-              <p className="text-sm text-red-600 dark:text-red-400">{quarterlyError}</p>
-            ) : quarterly && quarterly.quarters.length > 0 ? (
-              <>
-                {/* MoM deltas */}
-                {momDeltas && (
-                  <div className="grid gap-2 sm:grid-cols-3" aria-label={t("dashboard.momDelta")}>
-                    <p className="col-span-full text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
-                      {t("dashboard.momDelta")}
-                    </p>
-                    {([
-                      ["quarterlyIncome", momDeltas.income],
-                      ["quarterlyOutcome", momDeltas.outcome],
-                      ["quarterlySavings", momDeltas.savings]
-                    ] as const).map(([labelKey, d]) => {
-                      const positive = d.absDiff > 0;
-                      const neutral = d.absDiff === 0;
-                      const goodDirection = labelKey === "quarterlyOutcome" ? !positive : positive;
-                      const colorClass = neutral
-                        ? "text-gray-500 dark:text-neutral-400"
-                        : goodDirection
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-red-600 dark:text-red-400";
-                      const sign = positive ? "+" : "";
-                      return (
-                        <div key={labelKey} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-800">
-                          <p className="text-xs text-gray-500 dark:text-neutral-400">{t(`dashboard.${labelKey}`)}</p>
-                          <p className={`text-sm font-semibold tabular-nums ${colorClass}`}>
-                            {d.pct !== null
-                              ? t("dashboard.momDeltaAbs", { delta: `${sign}${formatCurrency(d.absDiff)}`, pct: `${sign}${d.pct}` })
-                              : t("dashboard.momDeltaAbsOnly", { delta: `${sign}${formatCurrency(d.absDiff)}` })}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Bar chart */}
-                <div className="h-48 sm:h-64">
-                  <Bar
-                    data={{
-                      labels: quarterly.quarters.map(q => {
-                        const date = new Date(q.year, q.month - 1, 1);
-                        return date.toLocaleDateString(dateLocale, { month: "short", year: "numeric" });
-                      }),
-                      datasets: [
-                        {
-                          label: t("dashboard.quarterlyIncome"),
-                          data: quarterly.quarters.map(q => q.incomeCents / 100),
-                          backgroundColor: "#16A34A",
-                          borderRadius: 4
-                        },
-                        {
-                          label: t("dashboard.quarterlyOutcome"),
-                          data: quarterly.quarters.map(q => q.outcomeCents / 100),
-                          backgroundColor: "#DC2626",
-                          borderRadius: 4
-                        },
-                        {
-                          label: t("dashboard.quarterlySavings"),
-                          data: quarterly.quarters.map(q => q.savingsCents / 100),
-                          backgroundColor: "#3B82F6",
-                          borderRadius: 4
-                        }
-                      ]
-                    }}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          position: "bottom",
-                          labels: { boxWidth: isMobile ? 12 : 18, font: { size: isMobile ? 10 : 12 } }
-                        },
-                        datalabels: { display: false }
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="quarterly-overview" className="text-lg font-medium mb-1">
+            {t("dashboard.quarterlyOverview")}
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.quarterlySubtitle")}</p>
+          
+          {quarterlyLoading ? (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
+          ) : quarterlyError ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{quarterlyError}</p>
+          ) : quarterly && quarterly.quarters.length > 0 ? (
+            <>
+              {/* Bar Chart - Responsive height */}
+              <div className="h-48 sm:h-64 mb-4 sm:mb-6">
+                <Bar
+                  data={{
+                    labels: quarterly.quarters.map(q => {
+                      const date = new Date(q.year, q.month - 1, 1);
+                      return date.toLocaleDateString(dateLocale, { month: "short", year: "numeric" });
+                    }),
+                    datasets: [
+                      {
+                        label: t("dashboard.quarterlyIncome"),
+                        data: quarterly.quarters.map(q => q.incomeCents / 100),
+                        backgroundColor: "#16A34A",
+                        borderRadius: 4
                       },
-                      scales: {
-                        x: { grid: { display: false } },
-                        y: {
-                          beginAtZero: true,
-                          ticks: {
-                            callback: (value) => `${Number(value).toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
-                          },
-                          grid: { color: "rgba(203,213,225,0.4)" }
-                        }
+                      {
+                        label: t("dashboard.quarterlyOutcome"),
+                        data: quarterly.quarters.map(q => q.outcomeCents / 100),
+                        backgroundColor: "#DC2626",
+                        borderRadius: 4
+                      },
+                      {
+                        label: t("dashboard.quarterlySavings"),
+                        data: quarterly.quarters.map(q => q.savingsCents / 100),
+                        backgroundColor: "#3B82F6",
+                        borderRadius: 4
                       }
-                    }}
-                  />
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
-            )}
-          </div>
-        </details>
-      </section>
-
-      {/* Recurring Transactions */}
-      <section aria-labelledby="recurring-overview" className="max-w-3xl">
-        <details className="rounded-2xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
-          <summary className="flex cursor-pointer list-none items-center justify-between rounded-2xl p-5 select-none [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-900">
-            <div>
-              <h2 id="recurring-overview" className="text-lg font-medium mb-1">
-                {t("dashboard.recurringOverview")}
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">
-                {t("dashboard.recurringSubtitle")}
-              </p>
-            </div>
-            <svg className="w-5 h-5 shrink-0 ml-2 text-gray-500 dark:text-neutral-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </summary>
-          <div className="px-5 pb-5">
-            {loading ? (
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
-            ) : recurringTransactions.length > 0 ? (
-              <>
-                <div className="grid gap-4 sm:grid-cols-2 mb-4">
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringIncome")}</p>
-                    <p className="text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(recurringIncomeTotal)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringOutcome")}</p>
-                    <p className="text-2xl font-semibold tabular-nums text-red-600 dark:text-red-400">
-                      {formatCurrency(recurringOutcomeTotal)}
-                    </p>
-                  </div>
-                </div>
-                <ul className="space-y-2">
-                  {recurringTransactions.map((rec) => (
-                    <li key={rec.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 truncate">
-                          {rec.description}
+                    ]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: "bottom",
+                        labels: { boxWidth: isMobile ? 12 : 18, font: { size: isMobile ? 10 : 12 } }
+                      },
+                      datalabels: {
+                        display: false
+                      }
+                    },
+                    scales: {
+                      x: { grid: { display: false } },
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: (value) => `${Number(value).toLocaleString(dateLocale, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
+                        },
+                        grid: { color: "rgba(203,213,225,0.4)" }
+                      }
+                    }
+                  }}
+                />
+              </div>
+              
+              {/* MoM deltas (F): current month vs. previous month */}
+              {momDeltas && (
+                <div className="mb-4 grid gap-2 sm:grid-cols-3" aria-label={t("dashboard.momDelta")}>
+                  <p className="col-span-full text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
+                    {t("dashboard.momDelta")}
+                  </p>
+                  {([
+                    ["quarterlyIncome", momDeltas.income, "emerald"],
+                    ["quarterlyOutcome", momDeltas.outcome, "red"],
+                    ["quarterlySavings", momDeltas.savings, "blue"]
+                  ] as const).map(([labelKey, d, _color]) => {
+                    const positive = d.absDiff > 0;
+                    const neutral = d.absDiff === 0;
+                    // For income/savings: positive = good (green). For outcome: positive = bad (red).
+                    const goodDirection = labelKey === "quarterlyOutcome" ? !positive : positive;
+                    const colorClass = neutral
+                      ? "text-gray-500 dark:text-neutral-400"
+                      : goodDirection
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400";
+                    const sign = positive ? "+" : "";
+                    return (
+                      <div key={labelKey} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800">
+                        <p className="text-xs text-gray-500 dark:text-neutral-400">{t(`dashboard.${labelKey}`)}</p>
+                        <p className={`text-sm font-semibold tabular-nums ${colorClass}`}>
+                          {d.pct !== null
+                            ? t("dashboard.momDeltaAbs", { delta: `${sign}${formatCurrency(d.absDiff)}`, pct: `${sign}${d.pct}` })
+                            : t("dashboard.momDeltaAbsOnly", { delta: `${sign}${formatCurrency(d.absDiff)}` })}
                         </p>
-                        {rec.dayOfMonth && (
-                          <p className="text-xs text-gray-500 dark:text-neutral-400">
-                            {t("dashboard.recurringDay", { day: rec.dayOfMonth })}
-                          </p>
-                        )}
                       </div>
-                      <span className={`text-sm font-semibold tabular-nums ml-3 ${
-                        rec.amountCents < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
-                      }`}>
-                        {formatCurrency(rec.amountCents / 100)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.noRecurring")}</p>
-            )}
-          </div>
-        </details>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Summary Table - Mobile optimized with horizontal scroll */}
+              <div className="-mx-5 px-5 sm:mx-0 sm:px-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[320px] text-xs sm:text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-neutral-700">
+                        <th className="py-2 pr-2 text-left font-medium text-gray-500 dark:text-neutral-400 whitespace-nowrap"></th>
+                        {quarterly.quarters.map(q => (
+                          <th key={`${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right font-medium text-gray-500 dark:text-neutral-400 whitespace-nowrap">
+                            {new Date(q.year, q.month - 1, 1).toLocaleDateString(dateLocale, { month: "short" })}
+                          </th>
+                        ))}
+                        <th className="py-2 pl-2 text-right font-semibold text-gray-700 dark:text-neutral-200 whitespace-nowrap">{t("dashboard.quarterlyTotal")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-gray-100 dark:border-neutral-800">
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlyIncome")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`inc-${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right text-emerald-600 dark:text-emerald-400 whitespace-nowrap tabular-nums">
+                            {formatCurrency(q.incomeCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap tabular-nums">
+                          {formatCurrency(quarterly.totals.incomeCents / 100)}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-gray-100 dark:border-neutral-800">
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlyOutcome")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`out-${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">
+                            {formatCurrency(q.outcomeCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-red-600 dark:text-red-400 whitespace-nowrap tabular-nums">
+                          {formatCurrency(quarterly.totals.outcomeCents / 100)}
+                        </td>
+                      </tr>
+                      <tr className="border-b border-gray-100 dark:border-neutral-800">
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlySavings")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`sav-${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">
+                            {formatCurrency(q.savingsCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap tabular-nums">
+                          {formatCurrency(quarterly.totals.savingsCents / 100)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 pr-2 text-gray-700 dark:text-neutral-300 whitespace-nowrap">{t("dashboard.quarterlyBalance")}</td>
+                        {quarterly.quarters.map(q => (
+                          <td key={`bal-${q.year}-${q.month}`} className={`py-2 px-1 sm:px-2 text-right whitespace-nowrap tabular-nums ${q.balanceCents >= 0 ? "text-gray-700 dark:text-neutral-300" : "text-red-600 dark:text-red-400"}`}>
+                            {formatCurrency(q.balanceCents / 100)}
+                          </td>
+                        ))}
+                        <td className="py-2 pl-2 text-right font-semibold text-gray-700 dark:text-neutral-200 whitespace-nowrap">—</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
+          )}
+        </div>
       </section>
 
     </main>

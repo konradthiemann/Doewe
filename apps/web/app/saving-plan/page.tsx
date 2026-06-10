@@ -186,16 +186,6 @@ function SavingPlanPage() {
 
   return (
     <main id="maincontent" className="p-6 pb-24 space-y-8">
-      {/* Page Header */}
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-100">
-          {t("page.savingPlan")}
-        </h1>
-        <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">
-          {t("page.savingPlanSubtitle")}
-        </p>
-      </header>
-
       {feedback && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200">
           {feedback}
