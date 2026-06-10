@@ -82,13 +82,13 @@ export default function LoginPage() {
   return (
     <main id="maincontent" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-8 text-center space-y-2">
-        <h1 className="text-3xl font-semibold">Doewe</h1>
-        <p className="text-sm text-gray-600 dark:text-neutral-300">
-          Sign in to manage your finances.
+        <h1 className="text-3xl font-bold tracking-tight">Doewe</h1>
+        <p className="text-sm text-gray-500 dark:text-neutral-400">
+          Eure Finanzen. Gemeinsam im Blick.
         </p>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white/95 p-6 shadow-sm backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
+      <div className="rounded-2xl border border-gray-200 bg-white/95 p-6 shadow-md backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
         <div className="mb-4 flex items-center gap-2" role="tablist" aria-label="Auth mode">
           <button
             type="button"

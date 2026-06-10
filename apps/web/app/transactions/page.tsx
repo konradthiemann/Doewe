@@ -470,6 +470,16 @@ function TransactionsPage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
+      {/* Page Header */}
+      <header className="mx-auto w-full max-w-2xl">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-100">
+          {t("page.transactions")}
+        </h1>
+        <p className="mt-0.5 text-sm text-gray-500 dark:text-neutral-400">
+          {t("page.transactionsSubtitle")}
+        </p>
+      </header>
+
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {activeTab === "transactions" && (
@@ -938,7 +948,11 @@ function TransactionsPage() {
             {sortedItems.map((tx) => (
               <li
                 key={tx.id}
-                className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
+                className={`rounded-xl border border-gray-100 border-l-4 bg-white/90 p-3 text-sm shadow-sm transition hover:shadow-md focus-within:shadow-md dark:border-neutral-700/60 dark:bg-neutral-900/90 ${
+                  tx.amountCents >= 0
+                    ? "border-l-emerald-400 dark:border-l-emerald-500"
+                    : "border-l-red-400 dark:border-l-red-500"
+                }`}
               >
                 <div className="flex items-stretch justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -949,7 +963,7 @@ function TransactionsPage() {
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
                       <time dateTime={tx.occurredAt}>
-                        {new Date(tx.occurredAt).toLocaleString(dateLocale)}
+                        {new Date(tx.occurredAt).toLocaleDateString(dateLocale)}
                       </time>
                       {tx.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
@@ -968,7 +982,7 @@ function TransactionsPage() {
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-indigo-300 dark:focus-visible:ring-offset-neutral-900"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingTx(tx);
@@ -977,9 +991,10 @@ function TransactionsPage() {
                         description: tx.description || t("transactions.withoutDescription")
                       })}
                     >
-                      <span aria-hidden="true" className="leading-none">
-                        ⚙
-                      </span>
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -1022,7 +1037,11 @@ function TransactionsPage() {
           </div>
           <ul className="space-y-2">
             {filteredRecurringItems.map((rec) => (
-              <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
+              <li key={rec.id} className={`rounded-xl border border-gray-100 border-l-4 bg-white/90 p-3 text-sm shadow-sm transition hover:shadow-md dark:border-neutral-700/60 dark:bg-neutral-900/90 ${
+                rec.amountCents >= 0
+                  ? "border-l-emerald-400 dark:border-l-emerald-500"
+                  : "border-l-red-400 dark:border-l-red-500"
+              }`}>
                 <div className="flex items-stretch justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
@@ -1046,7 +1065,7 @@ function TransactionsPage() {
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-indigo-300 dark:focus-visible:ring-offset-neutral-900"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingRecurring(rec);
@@ -1055,9 +1074,10 @@ function TransactionsPage() {
                         description: rec.description || t("transactions.withoutDescription")
                       })}
                     >
-                      <span aria-hidden="true" className="leading-none">
-                        ⚙
-                      </span>
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
                     </button>
                   </div>
                 </div>
