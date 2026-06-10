@@ -13,8 +13,13 @@ import {
   startOfDay,
 } from "date-fns";
 import { de, enUS } from "date-fns/locale";
-import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  parseAsBoolean,
+  parseAsString,
+  parseAsStringEnum,
+  useQueryState,
+} from "nuqs";
 
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
@@ -69,23 +74,32 @@ function TransactionsPage() {
   const feedbackDismissRef = useRef<HTMLButtonElement | null>(null);
   const [categoriesById, setCategoriesById] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [query, setQuery] = useState("");
   const [recurringQuery, setRecurringQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [sortOption, setSortOption] = useState<SortOption>("newest");
-  const [filterType, setFilterType] = useState<FilterType>("all");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const recurringSearchRef = useRef<HTMLInputElement | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("transactions");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [skipsCurrent, setSkipsCurrent] = useState<Set<string>>(new Set());
   const [skipsNext, setSkipsNext] = useState<Set<string>>(new Set());
-  const router = useRouter();
-  const searchParams = useSearchParams();
+
+  // URL-persisted filter/view state (nuqs) — survives reload and is shareable
+  const [query, setQuery] = useQueryState("q", parseAsString.withDefault(""));
+  const [filterType, setFilterType] = useQueryState(
+    "filter",
+    parseAsStringEnum<FilterType>(["all", "income", "outcome"]).withDefault("all")
+  );
+  const [sortOption, setSortOption] = useQueryState(
+    "sort",
+    parseAsStringEnum<SortOption>(["newest", "oldest", "amountDesc", "amountAsc", "description"]).withDefault("newest")
+  );
+  const [activeTab, setActiveTab] = useQueryState(
+    "tab",
+    parseAsStringEnum<ActiveTab>(["transactions", "recurring"]).withDefault("transactions")
+  );
+  const [categoryFilter, setCategoryFilter] = useQueryState("category", parseAsString.withDefault(""));
+  const [dateFrom, setDateFrom] = useQueryState("from", parseAsString.withDefault(""));
+  const [dateTo, setDateTo] = useQueryState("to", parseAsString.withDefault(""));
+  const [creating, setCreating] = useQueryState("new", parseAsBoolean.withDefault(false));
   const dfLocale = locale === "de" ? de : enUS;
 
   const tabs: Array<{ id: ActiveTab; label: string }> = useMemo(() => (
@@ -105,7 +119,7 @@ function TransactionsPage() {
       ? (currentIndex + 1) % tabs.length
       : (currentIndex - 1 + tabs.length) % tabs.length;
     const nextTab = tabs[nextIndex];
-    setActiveTab(nextTab.id);
+    void setActiveTab(nextTab.id);
     tabRefs.current[nextIndex]?.focus();
   };
 
@@ -159,12 +173,11 @@ function TransactionsPage() {
   }, []);
 
   const closeCreateDialog = useCallback(() => {
-    setCreating(false);
-    router.replace("/transactions", { scroll: false });
+    void setCreating(null);
     window.setTimeout(() => {
       searchInputRef.current?.focus({ preventScroll: true });
     }, 0);
-  }, [router]);
+  }, [setCreating]);
 
   const closeRecurringDialog = useCallback(() => {
     setEditingRecurring(null);
@@ -325,14 +338,6 @@ function TransactionsPage() {
     }
   }, [feedback]);
 
-  useEffect(() => {
-    const shouldCreate = searchParams.get("new") === "1";
-    if (shouldCreate) {
-      setCreating(true);
-    } else {
-      setCreating(false);
-    }
-  }, [searchParams]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredItems = useMemo(() => {
@@ -509,7 +514,7 @@ function TransactionsPage() {
                   type="search"
                   inputMode="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => void setQuery(event.target.value)}
                   placeholder={t("transactions.searchPlaceholder")}
                   className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
                 />
@@ -575,7 +580,7 @@ function TransactionsPage() {
               aria-controls={`tab-panel-${tab.id}`}
               id={`tab-${tab.id}`}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => void setActiveTab(tab.id)}
               className={`rounded-full px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
                 activeTab === tab.id
                   ? "bg-indigo-600 text-white"
@@ -674,7 +679,7 @@ function TransactionsPage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setFilterType("all")}
+                onClick={() => void setFilterType("all")}
                 className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "all"
                     ? "bg-indigo-600 text-white shadow-sm"
@@ -685,7 +690,7 @@ function TransactionsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setFilterType("income")}
+                onClick={() => void setFilterType("income")}
                 className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "income"
                     ? "bg-emerald-600 text-white shadow-sm"
@@ -699,7 +704,7 @@ function TransactionsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setFilterType("outcome")}
+                onClick={() => void setFilterType("outcome")}
                 className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "outcome"
                     ? "bg-red-600 text-white shadow-sm"
@@ -722,7 +727,7 @@ function TransactionsPage() {
                 <select
                   id="filter-category"
                   value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  onChange={(event) => void setCategoryFilter(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 >
                   <option value="">{t("transactions.filterCategoryAll")}</option>
@@ -741,7 +746,7 @@ function TransactionsPage() {
                   id="filter-from"
                   type="date"
                   value={dateFrom}
-                  onChange={(event) => setDateFrom(event.target.value)}
+                  onChange={(event) => void setDateFrom(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 />
               </div>
@@ -753,7 +758,7 @@ function TransactionsPage() {
                   id="filter-to"
                   type="date"
                   value={dateTo}
-                  onChange={(event) => setDateTo(event.target.value)}
+                  onChange={(event) => void setDateTo(event.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 />
               </div>
@@ -764,7 +769,7 @@ function TransactionsPage() {
                 <select
                   id="sort-transactions"
                   value={sortOption}
-                  onChange={(event) => setSortOption(event.target.value as SortOption)}
+                  onChange={(event) => void setSortOption(event.target.value as SortOption)}
                   className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
                 >
                   <option value="newest">{t("transactions.sortNewest")}</option>
@@ -782,11 +787,11 @@ function TransactionsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setCategoryFilter("");
-                    setDateFrom("");
-                    setDateTo("");
-                    setQuery("");
-                    setFilterType("all");
+                    void setCategoryFilter(null);
+                    void setDateFrom(null);
+                    void setDateTo(null);
+                    void setQuery(null);
+                    void setFilterType(null);
                   }}
                   className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                 >
