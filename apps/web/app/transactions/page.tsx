@@ -74,7 +74,6 @@ function TransactionsPage() {
   const [recurringQuery, setRecurringQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const recurringSearchRef = useRef<HTMLInputElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [skipsCurrent, setSkipsCurrent] = useState<Set<string>>(new Set());
   const [skipsNext, setSkipsNext] = useState<Set<string>>(new Set());
@@ -400,116 +399,118 @@ function TransactionsPage() {
   return (
     <main id="maincontent" className="p-6 space-y-8">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* Row 1: Search + inline filter button */}
+        <div className="flex items-center gap-2">
+          <form
+            role="search"
+            className="flex-1"
+            onSubmit={(event) => {
+              event.preventDefault();
+              searchInputRef.current?.blur();
+            }}
+          >
+            <label
+              htmlFor="transaction-search"
+              className="sr-only"
+            >
+              {activeTab === "transactions"
+                ? t("transactions.searchLabel")
+                : t("transactions.recurringSearchLabel")}
+            </label>
+            <div className="relative">
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-neutral-500"
+              >
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                >
+                  <path
+                    d="M9 14.25a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5Zm6 1.5-2.9-2.9"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              <input
+                ref={searchInputRef}
+                id="transaction-search"
+                type="search"
+                inputMode="search"
+                value={activeTab === "transactions" ? query : recurringQuery}
+                onChange={(event) =>
+                  activeTab === "transactions"
+                    ? void setQuery(event.target.value)
+                    : setRecurringQuery(event.target.value)
+                }
+                placeholder={
+                  activeTab === "transactions"
+                    ? t("transactions.searchPlaceholder")
+                    : t("transactions.recurringSearchPlaceholder")
+                }
+                className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
+              />
+            </div>
+          </form>
+
+          {/* Filter button — only for transactions tab */}
           {activeTab === "transactions" && (
-            <form
-              role="search"
-              className="w-full sm:w-72"
-              onSubmit={(event) => {
-                event.preventDefault();
-                searchInputRef.current?.blur();
-              }}
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              aria-label={hasFilters ? t("transactions.filtersExpandActive") : t("transactions.filtersExpand")}
+              aria-pressed={showFilters}
+              className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+                hasFilters
+                  ? "border-indigo-500 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:border-indigo-400 dark:bg-indigo-950 dark:text-indigo-400 dark:hover:bg-indigo-900"
+                  : showFilters
+                    ? "border-gray-400 bg-gray-100 text-gray-800 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
+                    : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              }`}
             >
-              <label htmlFor="transaction-search" className="sr-only">
-                {t("transactions.searchLabel")}
-              </label>
-              <div className="relative">
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-neutral-500"
-                >
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M9 14.25a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5Zm6 1.5-2.9-2.9"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path d="M4 6H20M7 12H17M10 18H14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              {hasFilters && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75 dark:bg-indigo-500" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500 dark:bg-indigo-400" />
                 </span>
-                <input
-                  ref={searchInputRef}
-                  id="transaction-search"
-                  type="search"
-                  inputMode="search"
-                  value={query}
-                  onChange={(event) => void setQuery(event.target.value)}
-                  placeholder={t("transactions.searchPlaceholder")}
-                  className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
-                />
-              </div>
-            </form>
-          )}
-          {activeTab === "recurring" && (
-            <form
-              role="search"
-              className="w-full sm:w-72"
-              onSubmit={(event) => {
-                event.preventDefault();
-                recurringSearchRef.current?.blur();
-              }}
-            >
-              <label htmlFor="recurring-search" className="sr-only">
-                {t("transactions.recurringSearchLabel")}
-              </label>
-              <div className="relative">
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-neutral-500"
-                >
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M9 14.25a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5Zm6 1.5-2.9-2.9"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
-                <input
-                  ref={recurringSearchRef}
-                  id="recurring-search"
-                  type="search"
-                  inputMode="search"
-                  value={recurringQuery}
-                  onChange={(event) => setRecurringQuery(event.target.value)}
-                  placeholder={t("transactions.recurringSearchPlaceholder")}
-                  className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
-                />
-              </div>
-            </form>
+              )}
+            </button>
           )}
         </div>
-        <div role="tablist" aria-label={t("transactions.tabsLabel")}
-             className="flex gap-2" onKeyDown={handleTabKeyDown}>
+
+        {/* Row 2: Segmented tab control */}
+        <div
+          role="tablist"
+          aria-label={t("transactions.tabsLabel")}
+          onKeyDown={handleTabKeyDown}
+          className="flex rounded-xl bg-gray-100 p-1 dark:bg-neutral-800"
+        >
           {tabs.map((tab, index) => (
             <button
               key={tab.id}
-              ref={(node) => {
-                tabRefs.current[index] = node;
-              }}
+              ref={(node) => { tabRefs.current[index] = node; }}
               role="tab"
               aria-selected={activeTab === tab.id}
               aria-controls={`tab-panel-${tab.id}`}
               id={`tab-${tab.id}`}
               type="button"
               onClick={() => void setActiveTab(tab.id)}
-              className={`rounded-full px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+              className={`flex-1 rounded-lg py-2 text-sm font-medium transition focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-100 dark:focus-visible:ring-offset-neutral-800 ${
                 activeTab === tab.id
-                  ? "bg-indigo-600 text-white"
-                  : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-neutral-200"
+                  ? "bg-white text-gray-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100"
+                  : "text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200"
               }`}
             >
               {tab.label}
@@ -538,37 +539,6 @@ function TransactionsPage() {
             <p role="alert" className="text-sm text-red-600">
               {recurringError}
             </p>
-          )}
-
-          {!showFilters && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowFilters(true)}
-                aria-label={hasFilters ? t("transactions.filtersExpandActive") : t("transactions.filtersExpand")}
-                className={`relative inline-flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
-                  hasFilters 
-                    ? "border-indigo-500 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:shadow-md dark:border-indigo-400 dark:bg-indigo-950 dark:text-indigo-400 dark:hover:bg-indigo-900" 
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
-                }`}
-              >
-                <svg
-                  aria-hidden="true"
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path d="M4 6H20M7 12H17M10 18H14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-                {hasFilters && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75 dark:bg-indigo-500"></span>
-                    <span className="relative inline-flex h-3 w-3 rounded-full bg-indigo-500 dark:bg-indigo-400"></span>
-                  </span>
-                )}
-              </button>
-            </div>
           )}
 
           <div
