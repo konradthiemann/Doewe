@@ -21,6 +21,8 @@ pnpm-debug.log*
 /out/
 # Next.js
 .next/
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # Env
 .env
