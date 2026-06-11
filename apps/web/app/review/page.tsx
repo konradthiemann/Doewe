@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
 
@@ -91,7 +91,7 @@ const VERDICT_CONFIG: Record<
   }
 };
 
-export default function ReviewPage() {
+function ReviewPage() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -558,5 +558,14 @@ export default function ReviewPage() {
         </>
       )}
     </main>
+  );
+}
+
+export default function ReviewPageWithSuspense() {
+  const { t } = useI18n();
+  return (
+    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500 dark:text-neutral-400">{t("review.loading")}</p></main>}>
+      <ReviewPage />
+    </Suspense>
   );
 }
