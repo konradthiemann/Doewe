@@ -48,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main
         </a>
         <Providers>
-          <div className="flex-1 w-full pb-[calc(7rem+env(safe-area-inset-bottom))]">
+          <div className="flex-1 w-full pt-12 pb-[calc(7rem+env(safe-area-inset-bottom))]">
             {children}
           </div>
           <AppChrome />
