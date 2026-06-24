@@ -58,7 +58,7 @@ Architectural principles:
 
 ## Getting Started
 ### Prerequisites
-- Node.js >= 18.18.0 (install via nvm recommended)
+- Node.js >= 22.12.0 (pinned in `.nvmrc`, currently 22.14.0; install via nvm recommended)
 - npm (comes with Node)
 - PostgreSQL database for Prisma (local Docker is fine)
 
@@ -68,8 +68,8 @@ Architectural principles:
 git clone https://github.com/konradthiemann/Doewe.git
 cd Doewe
 
-# (Optional) ensure Node version
-nvm use 18
+# Ensure the pinned Node version (reads .nvmrc)
+nvm use
 
 # Install all workspace dependencies
 npm ci
@@ -190,6 +190,12 @@ Planned / extensible areas:
 - CI pipeline (`.github/workflows/ci.yml`) runs: lint → typecheck → test → build with concurrency control.
 - Prefer small, incremental PRs; keep quality gates green locally before pushing.
 - Branching: flexible (CI runs on all branches); recommend feature branches named `feat/<short-name>` or `chore/<short-name>`.
+
+## Deployment & CI
+- The web app deploys to **Railway** (EU region `europe-west4`) on push to `main` — but only when the **CI is green** *and* the push changes files under the **watch path `apps/web/**`**. Otherwise Railway marks the deploy `SKIPPED`.
+- Node version for CI **and** Railway comes from `.nvmrc` (`engine-strict=true` makes a wrong version fail `npm ci`).
+- Docs deploy to **GitHub Pages** via `.github/workflows/docs.yml`.
+- Full details, skip reasons, and how to fix "prod is not on main's state": see [docs/deployment.md](docs/deployment.md).
 
 ## Claude AI Agents
 
