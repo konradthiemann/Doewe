@@ -27,6 +27,12 @@ type ReviewData = {
     categoryName: string | null;
     occurredAt: string;
   }>;
+  completedGoals: Array<{
+    title: string;
+    amountCents: number;
+    spentCents: number;
+  }>;
+  completedGoalsSpentCents: number;
   prevMonth: {
     month: number;
     year: number;
@@ -197,38 +203,31 @@ function ReviewPage() {
 
   return (
     <main id="maincontent" className="p-6 space-y-8">
-      {/* Month navigation header */}
-      <div className="flex items-center justify-between max-w-3xl">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-neutral-100">
-            {t("review.title")}
-          </h1>
-          {data && !loading && (
-            <p className="text-sm text-gray-500 dark:text-neutral-400 mt-0.5">
-              {formatMonthLabel(data.month, data.year)}
-            </p>
-          )}
-        </div>
+      {/* Month navigation header — title and month selector stacked vertically */}
+      <div className="max-w-3xl space-y-3">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-neutral-100">
+          {t("review.title")}
+        </h1>
         <div className="flex items-center gap-2">
           <button
             onClick={goOlder}
             disabled={!canGoOlder || loading}
             aria-label={t("review.prev")}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
 
-          {data && data.availableMonths.length > 1 && (
+          {data && data.availableMonths.length > 1 ? (
             <select
               value={`${data.year}-${String(data.month).padStart(2, "0")}`}
               onChange={(e) => {
                 const [y, m] = e.target.value.split("-");
                 navigate({ month: parseInt(m, 10), year: parseInt(y, 10) });
               }}
-              className="rounded-md border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1 text-sm text-gray-700 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="min-w-0 flex-1 rounded-md border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-2 py-1 text-sm text-gray-700 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {data.availableMonths.map((m) => (
                 <option
@@ -239,13 +238,17 @@ function ReviewPage() {
                 </option>
               ))}
             </select>
+          ) : (
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700 dark:text-neutral-200">
+              {data && !loading ? formatMonthLabel(data.month, data.year) : ""}
+            </span>
           )}
 
           <button
             onClick={goNewer}
             disabled={!canGoNewer || loading}
             aria-label={t("review.next")}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed transition"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 18l6-6-6-6" />
@@ -542,6 +545,44 @@ function ReviewPage() {
               )}
             </div>
           </section>
+
+          {/* Completed saving goals */}
+          {data.completedGoals.length > 0 && (
+            <section aria-labelledby="review-completed-goals" className="max-w-3xl">
+              <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
+                <h2 id="review-completed-goals" className="text-lg font-medium mb-4">
+                  {t("review.completedGoalsTitle")}
+                </h2>
+                <ul className="space-y-2">
+                  {data.completedGoals.map((goal, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-center justify-between gap-3 rounded-md border border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800 px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 truncate">
+                          {goal.title}
+                        </p>
+                        {goal.spentCents !== goal.amountCents && (
+                          <p className="text-xs text-gray-500 dark:text-neutral-400">
+                            {t("review.completedGoalTarget", { amount: formatCurrency(goal.amountCents) })}
+                          </p>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
+                        {formatCurrency(goal.spentCents)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-sm text-gray-600 dark:text-neutral-400">
+                  {t("review.completedGoalsTotal", {
+                    amount: formatCurrency(data.completedGoalsSpentCents)
+                  })}
+                </p>
+              </div>
+            </section>
+          )}
 
           {/* No data state */}
           {data.incomeCents === 0 &&

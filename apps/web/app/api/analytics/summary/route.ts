@@ -9,6 +9,8 @@
  * - `outcomeTotal`          — Summe aller Ausgaben (ohne Sparbuchungen) diesen Monat
  * - `monthlySavingsActual`  — Tatsächliche Sparbuchungen diesen Monat
  * - `plannedSavings`        — Budget-Ziel ohne Kategorie (= Sparziel) für diesen Monat
+ * - `completedGoals`        — In diesem Monat (per completedAt) als erledigt markierte Sparziele
+ * - `completedGoalsSpent`   — Summe der dafür entnommenen Beträge (Euro)
  * - `projectedIncomeTotal`  — Hochrechnung inkl. noch nicht gebuchter Daueraufträge
  * - `projectedOutcomeTotal` — Hochrechnung Ausgaben inkl. Daueraufträge
  * - `projectedRemaining`    — Voraussichtlich verbleibendes Geld
@@ -108,13 +110,31 @@ export async function GET() {
     }
   }
 
-  // Geplante Ersparnis (Budget ohne Kategorie) für den aktuellen Monat
+  // Geplante Ersparnis (Budget ohne Kategorie) für den aktuellen Monat.
+  // Abgeschlossene Ziele (completedAt gesetzt) zählen nicht mehr als geplant.
   const { month, year } = getMonthYear(now);
   const plannedBudgetAgg = await prisma.budget.aggregate({
-    where: { accountId, categoryId: null, month, year },
+    where: { accountId, categoryId: null, month, year, completedAt: null },
     _sum: { amountCents: true }
   });
   const plannedSavings = (plannedBudgetAgg._sum.amountCents ?? 0) / 100;
+
+  // Sparziele, die in DIESEM Monat als erledigt markiert wurden (per completedAt,
+  // also dem Zeitpunkt der Entnahme/des Abhakens — unabhängig vom Zielmonat).
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 1);
+  const completedGoalsRaw = await prisma.budget.findMany({
+    where: { accountId, categoryId: null, completedAt: { gte: monthStart, lt: monthEnd } },
+    select: { title: true, amountCents: true, spentCents: true, completedAt: true },
+    orderBy: { completedAt: "asc" }
+  });
+  const completedGoals = completedGoalsRaw.map((g) => ({
+    title: g.title,
+    target: g.amountCents / 100,
+    spent: (g.spentCents ?? 0) / 100,
+    completedAt: g.completedAt
+  }));
+  const completedGoalsSpent = completedGoalsRaw.reduce((sum, g) => sum + (g.spentCents ?? 0), 0) / 100;
 
   // Kategoriebudgets für den aktuellen Monat
   const categoryBudgetsRaw = await prisma.budget.findMany({
@@ -299,6 +319,8 @@ export async function GET() {
     monthlySavingsActual: monthlySavingsActualCents / 100,
     remaining: remainingCents / 100,
     plannedSavings,
+    completedGoals,
+    completedGoalsSpent,
     projectedIncomeTotal: projectedIncomeTotalCents / 100,
     projectedOutcomeTotal: projectedOutcomeTotalCents / 100,
     projectedRemaining: projectedRemainingCents / 100,
