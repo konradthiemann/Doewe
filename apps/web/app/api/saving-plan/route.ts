@@ -5,6 +5,8 @@ import { z } from "zod";
 import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 
+import { computeSavingPlanTotals } from "./compute";
+
 const SavingPlanInput = z.object({
   accountId: z.string().min(1),
   title: z
@@ -94,7 +96,7 @@ export async function GET() {
     resolveSavingsBalanceCents(accountId, user.id)
   ]);
 
-  const goals = goalsRaw.map((goal) => ({
+  const mapGoal = (goal: (typeof goalsRaw)[number]) => ({
     id: goal.id,
     accountId: goal.accountId,
     categoryId: goal.categoryId,
@@ -109,58 +111,33 @@ export async function GET() {
     year: goal.year,
     amountCents: goal.amountCents,
     transactionSpentCents: goal.transactions.reduce((sum, tx) => sum + Math.abs(tx.amountCents), 0),
+    completedAt: goal.completedAt,
+    spentCents: goal.spentCents,
     createdAt: goal.createdAt
-  }));
+  });
 
-  const totalTargetCents = goals.reduce((sum, goal) => sum + goal.amountCents, 0);
+  // Active goals drive the forward-looking plan; completed goals are kept for history.
+  const goals = goalsRaw.filter((goal) => goal.completedAt == null).map(mapGoal);
+  const completedGoals = goalsRaw.filter((goal) => goal.completedAt != null).map(mapGoal);
 
-  // ── Suggested equal monthly savings ──────────────────────────────
-  // Find the minimum constant monthly amount X such that, by each
-  // goal's deadline, the cumulative savings (X * months) covers the
-  // cumulative target up to that deadline.
-  //
-  // Algorithm: Goals are already sorted by (year, month).
-  // For each goal i:  X >= cumulativeAmount[i] / monthsUntilDeadline[i]
-  // The answer is the maximum of those ratios.
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1; // 1-12
-  const currentYear = now.getFullYear();
-
-  let suggestedMonthlyCents = 0;
-  let cumulativeAmount = 0;
-
-  // Subtract already available savings from the first chunk
-  const remainingToSave = Math.max(totalTargetCents - availableCents, 0);
-
-  if (remainingToSave > 0 && goals.length > 0) {
-    const usedAvailable = availableCents;
-
-    for (const goal of goals) {
-      cumulativeAmount += goal.amountCents;
-
-      // How much of the cumulative target is NOT yet covered by existing savings
-      const cumulativeRemaining = Math.max(cumulativeAmount - usedAvailable, 0);
-
-      // Months from now until the goal's target month (at least 1)
-      const monthsUntil = Math.max(
-        (goal.year - currentYear) * 12 + (goal.month - currentMonth),
-        1
-      );
-
-      const requiredMonthly = Math.ceil(cumulativeRemaining / monthsUntil);
-      if (requiredMonthly > suggestedMonthlyCents) {
-        suggestedMonthlyCents = requiredMonthly;
-      }
-    }
-  }
+  // `availableCents` from resolveSavingsBalanceCents is the raw savings balance.
+  // computeSavingPlanTotals reserves the amount withdrawn for completed goals out of it.
+  const totals = computeSavingPlanTotals(
+    goalsRaw.map((goal) => ({
+      amountCents: goal.amountCents,
+      completedAt: goal.completedAt,
+      spentCents: goal.spentCents,
+      month: goal.month,
+      year: goal.year
+    })),
+    availableCents,
+    new Date()
+  );
 
   return NextResponse.json({
     goals,
-    totals: {
-      availableCents,
-      totalTargetCents,
-      suggestedMonthlyCents
-    }
+    completedGoals,
+    totals
   });
 }
 

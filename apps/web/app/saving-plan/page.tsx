@@ -1,6 +1,6 @@
 "use client";
 
-import { fromCents, toDecimalString } from "@doewe/shared";
+import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -17,12 +17,17 @@ type SavingGoal = {
   year: number;
   amountCents: number;
   transactionSpentCents: number;
+  completedAt?: string | null;
+  spentCents?: number | null;
   createdAt: string;
 };
 
 type SavingPlanResponse = {
   goals: SavingGoal[];
+  completedGoals: SavingGoal[];
   totals: {
+    rawAvailableCents: number;
+    withdrawnForCompletedCents: number;
     availableCents: number;
     totalTargetCents: number;
     suggestedMonthlyCents: number;
@@ -50,8 +55,15 @@ function SavingPlanPage() {
   const [editGoal, setEditGoal] = useState<SavingGoal | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<SavingGoal | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [completeTarget, setCompleteTarget] = useState<GoalWithProgress | null>(null);
+  const [completeSpent, setCompleteSpent] = useState("");
+  const [completeError, setCompleteError] = useState<string | null>(null);
+  const [completing, setCompleting] = useState(false);
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
+  const [completedExpanded, setCompletedExpanded] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const deleteDialogRef = useRef<HTMLDivElement | null>(null);
+  const completeDialogRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
@@ -108,6 +120,8 @@ function SavingPlanPage() {
   const lastTarget = goalsWithProgress.length ? goalsWithProgress[goalsWithProgress.length - 1].cumulativeTargetCents : 0;
   const remainingAfterGoals = Math.max(availableCents - lastTarget, 0);
   const shortfall = Math.max(lastTarget - availableCents, 0);
+  const completedGoals = plan?.completedGoals ?? [];
+  const withdrawnForCompletedCents = plan?.totals.withdrawnForCompletedCents ?? 0;
 
   useEffect(() => {
     const shouldOpen = searchParams.get("new") === "1";
@@ -120,14 +134,14 @@ function SavingPlanPage() {
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
-    if (dialogOpen || deleteConfirm) {
+    if (dialogOpen || deleteConfirm || completeTarget) {
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = previousOverflow;
       };
     }
     document.body.style.overflow = previousOverflow;
-  }, [dialogOpen, deleteConfirm]);
+  }, [dialogOpen, deleteConfirm, completeTarget]);
 
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
@@ -159,6 +173,71 @@ function SavingPlanPage() {
     }
   }, [deleteConfirm, fetchPlan, t]);
 
+  const openCompleteDialog = useCallback((goal: GoalWithProgress) => {
+    setCompleteTarget(goal);
+    setCompleteSpent(toDecimalString(fromCents(goal.achievedCents)));
+    setCompleteError(null);
+    setFeedback(null);
+  }, []);
+
+  const closeCompleteDialog = useCallback(() => {
+    setCompleteTarget(null);
+    setCompleteSpent("");
+    setCompleteError(null);
+  }, []);
+
+  const handleComplete = useCallback(async () => {
+    if (!completeTarget) return;
+    let spentCents: number;
+    try {
+      spentCents = parseCents(completeSpent);
+    } catch {
+      setCompleteError(t("savingPlan.completeSpentInvalid"));
+      return;
+    }
+    if (spentCents < 0) {
+      setCompleteError(t("savingPlan.completeSpentInvalid"));
+      return;
+    }
+    setCompleting(true);
+    try {
+      const res = await fetch(`/api/saving-plan/${completeTarget.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spentCents })
+      });
+      if (!res.ok) {
+        throw new Error(t("savingPlan.errorComplete"));
+      }
+      await fetchPlan();
+      setFeedback(t("savingPlan.feedbackCompleted"));
+      closeCompleteDialog();
+    } catch (completeErr) {
+      setCompleteError(completeErr instanceof Error ? completeErr.message : t("savingPlan.errorComplete"));
+    } finally {
+      setCompleting(false);
+    }
+  }, [closeCompleteDialog, completeSpent, completeTarget, fetchPlan, t]);
+
+  const handleReopen = useCallback(
+    async (goal: SavingGoal) => {
+      setReopeningId(goal.id);
+      try {
+        const res = await fetch(`/api/saving-plan/${goal.id}/complete`, { method: "DELETE" });
+        if (!res.ok) {
+          throw new Error(t("savingPlan.errorReopen"));
+        }
+        await fetchPlan();
+        setFeedback(t("savingPlan.feedbackReopened"));
+      } catch (reopenErr) {
+        setError(reopenErr instanceof Error ? reopenErr.message : t("savingPlan.errorReopen"));
+      } finally {
+        setReopeningId(null);
+      }
+    },
+    [fetchPlan, t]
+  );
+
   useEffect(() => {
     if (!dialogOpen) return;
     const node = dialogRef.current;
@@ -172,6 +251,20 @@ function SavingPlanPage() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [closeDialog, dialogOpen]);
+
+  useEffect(() => {
+    if (!completeTarget) return;
+    const node = completeDialogRef.current;
+    node?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCompleteDialog();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [closeCompleteDialog, completeTarget]);
 
   const handleSuccess = useCallback(
     async (message?: string) => {
@@ -234,6 +327,11 @@ function SavingPlanPage() {
         {shortfall > 0 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200">
             {t("savingPlan.shortfall", { amount: formatCurrency(shortfall) })}
+          </p>
+        )}
+        {withdrawnForCompletedCents > 0 && (
+          <p className="text-xs text-slate-500 dark:text-neutral-400">
+            {t("savingPlan.summaryWithdrawnForCompleted", { amount: formatCurrency(withdrawnForCompletedCents) })}
           </p>
         )}
       </section>
@@ -342,7 +440,14 @@ function SavingPlanPage() {
                           {t("savingPlan.timelineUpcoming", { amount: formatCurrency(goal.cumulativeTargetCents - goal.amountCents) })}
                         </p>
                       )}
-                      <div className="mt-3 flex gap-2 justify-end">
+                      <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openCompleteDialog(goal)}
+                          className="inline-flex items-center rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 shadow-sm hover:bg-emerald-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-emerald-500/40 dark:bg-neutral-800 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                        >
+                          {t("savingPlan.markComplete")}
+                        </button>
                         <button
                           type="button"
                           onClick={() => openEditDialog(goal)}
@@ -366,6 +471,87 @@ function SavingPlanPage() {
           </ol>
         )}
       </section>
+
+      {completedGoals.length > 0 && (
+        <section aria-labelledby="saving-plan-completed" className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setCompletedExpanded((value) => !value)}
+            aria-expanded={completedExpanded}
+            className="flex w-full items-center justify-between rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+          >
+            <h2 id="saving-plan-completed" className="text-lg font-medium">
+              {t("savingPlan.completedSectionTitle", { count: completedGoals.length })}
+            </h2>
+            <span aria-hidden="true" className="text-sm text-gray-500 dark:text-neutral-400">
+              {completedExpanded ? "▾" : "▸"}
+            </span>
+          </button>
+          {completedExpanded && (
+            <ul className="space-y-3">
+              {completedGoals.map((goal) => {
+                const dueDate = new Date(goal.year, goal.month - 1, 1).toLocaleDateString(dateLocale, {
+                  month: "long",
+                  year: "numeric"
+                });
+                const completedDate = goal.completedAt
+                  ? new Date(goal.completedAt).toLocaleDateString(dateLocale, {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric"
+                    })
+                  : null;
+                const spent = goal.spentCents ?? 0;
+                const diff = spent - goal.amountCents;
+                return (
+                  <li
+                    key={goal.id}
+                    className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-900/10"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                          {dueDate}
+                        </p>
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{goal.title}</h3>
+                        {completedDate && (
+                          <p className="text-xs text-slate-500 dark:text-neutral-400">
+                            {t("savingPlan.completedOn", { date: completedDate })}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.timelineGoal")}</p>
+                        <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(goal.amountCents)}</p>
+                        <p className="text-xs text-slate-600 dark:text-neutral-300">
+                          {t("savingPlan.completedWithdrawn", { amount: formatCurrency(spent) })}
+                        </p>
+                      </div>
+                    </div>
+                    {diff !== 0 && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-neutral-400">
+                        {diff > 0
+                          ? t("savingPlan.completedOverTarget", { amount: formatCurrency(diff) })
+                          : t("savingPlan.completedUnderTarget", { amount: formatCurrency(-diff) })}
+                      </p>
+                    )}
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleReopen(goal)}
+                        disabled={reopeningId === goal.id}
+                        className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                      >
+                        {reopeningId === goal.id ? t("savingPlan.reopening") : t("savingPlan.reopen")}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       {dialogOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center">
@@ -429,6 +615,63 @@ function SavingPlanPage() {
                 className="inline-flex items-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {deleting ? t("savingPlan.deleting") : t("savingPlan.confirmDeleteConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {completeTarget && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeCompleteDialog} />
+          <div
+            ref={completeDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="complete-confirm-heading"
+            aria-describedby="complete-confirm-message"
+            className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg focus:outline-none dark:bg-neutral-800"
+            tabIndex={-1}
+          >
+            <h2 id="complete-confirm-heading" className="text-lg font-semibold text-gray-900 dark:text-neutral-100">
+              {t("savingPlan.completeDialogTitle")}
+            </h2>
+            <p id="complete-confirm-message" className="mt-2 text-sm text-gray-600 dark:text-neutral-400">
+              {t("savingPlan.completeDialogMessage", { title: completeTarget.title })}
+            </p>
+            <div className="mt-4">
+              <label htmlFor="complete-spent" className="block text-sm font-medium text-gray-700 dark:text-neutral-200">
+                {t("savingPlan.completeSpentLabel")}
+              </label>
+              <input
+                id="complete-spent"
+                type="text"
+                inputMode="decimal"
+                value={completeSpent}
+                onChange={(event) => setCompleteSpent(event.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">{t("savingPlan.completeSpentHint")}</p>
+              {completeError && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{completeError}</p>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeCompleteDialog}
+                disabled={completing}
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+              >
+                {t("savingPlan.confirmDeleteCancel")}
+              </button>
+              <button
+                type="button"
+                onClick={handleComplete}
+                disabled={completing}
+                className="inline-flex items-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:opacity-50"
+              >
+                {completing ? t("savingPlan.completing") : t("savingPlan.completeConfirm")}
               </button>
             </div>
           </div>
