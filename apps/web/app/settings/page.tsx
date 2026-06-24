@@ -3,6 +3,7 @@
 import { signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import PageContainer from "../../components/PageContainer";
 import { useI18n } from "../../lib/i18n";
 import { useTheme, type Theme } from "../../lib/ThemeContext";
 
@@ -174,7 +175,9 @@ export default function SettingsPage() {
   const noCategories = useMemo(() => !catLoading && categories.length === 0, [catLoading, categories.length]);
 
   return (
-    <main id="maincontent" className="p-6 space-y-6">
+    <main id="maincontent" className="py-6 md:py-8">
+      <PageContainer className="max-w-4xl space-y-6">
+      <div className="grid gap-6 md:grid-cols-2">
       <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
         <h2 className="text-lg font-medium">{t("settings.accountTitle")}</h2>
         <p className="text-sm text-gray-600 dark:text-neutral-300">
@@ -206,6 +209,7 @@ export default function SettingsPage() {
             <option value="en">{t("settings.languageOptionEn")}</option>
           </select>
         </div>
+      </div>
       </div>
 
       {/* Theme Section */}
@@ -433,6 +437,7 @@ export default function SettingsPage() {
         </div>
         </div>
       </div>
+      </PageContainer>
     </main>
   );
 }
