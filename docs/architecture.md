@@ -51,7 +51,7 @@ Doewe/
 │       │       ├── transactions/     # GET, POST, PATCH [id], DELETE [id]
 │       │       ├── recurring-transactions/  # CRUD + skips sub-resource
 │       │       ├── budgets/          # GET, POST
-│       │       ├── saving-plan/      # GET, POST, PATCH [id], DELETE [id]
+│       │       ├── saving-plan/      # GET, POST, PATCH [id], DELETE [id], [id]/complete (POST=complete / DELETE=reopen)
 │       │       ├── categories/       # GET, POST, DELETE [id]
 │       │       ├── accounts/         # GET
 │       │       └── analytics/

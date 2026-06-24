@@ -12,6 +12,8 @@
  * - `savingsRatePct`           — Sparquote in % (savingsCents / incomeCents)
  * - `categories`               — Ausgaben je Kategorie inkl. Budget-Vergleich
  * - `topExpenses`              — Die 5 größten Einzelausgaben des Monats
+ * - `completedGoals`           — In diesem Monat als erledigt markierte Sparziele
+ * - `completedGoalsSpentCents` — Summe der dafür entnommenen Beträge
  * - `prevMonth`                — Basiswerte des Vormonats für MoM-Vergleich
  * - `availableMonths`          — Alle Monate mit Transaktionen (neueste zuerst)
  *
@@ -249,6 +251,24 @@ export async function GET(request: Request) {
     availableMonths.reverse(); // most recent first
   }
 
+  // Saving goals that were marked completed within the selected month.
+  // Goals are budgets without a category; `spentCents` is the amount withdrawn on completion.
+  const completedGoalsRaw = await prisma.budget.findMany({
+    where: {
+      accountId,
+      categoryId: null,
+      completedAt: { gte: monthStart, lt: monthEnd }
+    },
+    select: { title: true, amountCents: true, spentCents: true },
+    orderBy: { completedAt: "asc" }
+  });
+  const completedGoals = completedGoalsRaw.map((g) => ({
+    title: g.title,
+    amountCents: g.amountCents,
+    spentCents: g.spentCents ?? 0
+  }));
+  const completedGoalsSpentCents = completedGoals.reduce((sum, g) => sum + g.spentCents, 0);
+
   const savingsRatePct =
     incomeCents > 0
       ? Math.min(100, Math.round((savingsCents / incomeCents) * 100))
@@ -268,6 +288,8 @@ export async function GET(request: Request) {
     savingsRatePct,
     categories: categoryList,
     topExpenses,
+    completedGoals,
+    completedGoalsSpentCents,
     prevMonth: hasPrevData
       ? {
           month: prevMonthNum,

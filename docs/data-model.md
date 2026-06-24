@@ -59,6 +59,8 @@ erDiagram
         Int month
         Int year
         Int amountCents
+        DateTime completedAt
+        Int spentCents
         DateTime createdAt
     }
     SavingGoal {
@@ -209,11 +211,15 @@ A spending limit (or income target) set by the user for a specific category in a
 | `month` | Int | Calendar month (1–12) |
 | `year` | Int | Calendar year |
 | `amountCents` | Int | Budget limit in euro cents (always stored as a positive number) |
+| `completedAt` | DateTime? | `null` = active; set = goal closed. Only meaningful for saving goals (`categoryId = null`) |
+| `spentCents` | Int? | Amount actually withdrawn from the savings pool on completion (snapshot); `null` while active |
 | `createdAt` | DateTime | Creation timestamp |
 
 **Constraints:** `(accountId, categoryId, month, year)` is unique — only one budget per category per month per account.
 
 **Relationships:** Belongs to one `Account`. Optionally scoped to one `Category`.
+
+**Saving-goal lifecycle:** A `Budget` with `categoryId = null` acts as a saving goal. Setting `completedAt`/`spentCents` (via `POST /api/saving-plan/[id]/complete`) marks the goal as completed; clearing them (via `DELETE`) reopens it. Completing a goal does **not** create a transaction — it only reserves `spentCents` out of the computed savings pool that funds the remaining active goals. See `docs/calculations/07-sparziele.md`.
 
 ---
 

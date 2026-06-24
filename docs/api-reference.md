@@ -585,32 +585,65 @@ Create a new budget for a category and month.
 
 ### `GET /api/saving-plan`
 
-List all saving goals for the authenticated user.
+List saving goals for the authenticated user, split into active and completed, plus the computed plan totals. Saving goals are stored as `Budget` rows with `categoryId = null`.
 
 **Auth required:** Yes
 
 **Success response — `200 OK`:**
 ```json
-[
-  {
-    "id": "svg_01",
-    "accountId": "acc_01",
-    "name": "Urlaub 2027",
-    "targetCents": 300000,
-    "targetDate": "2027-06-01T00:00:00.000Z",
-    "createdAt": "2026-01-01T00:00:00.000Z",
-    "savedCents": 50000
+{
+  "goals": [
+    {
+      "id": "bud_07",
+      "accountId": "acc_01",
+      "categoryId": null,
+      "categoryName": null,
+      "title": "Urlaub 2027",
+      "month": 6,
+      "year": 2027,
+      "amountCents": 300000,
+      "transactionSpentCents": 50000,
+      "completedAt": null,
+      "spentCents": null,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "completedGoals": [
+    {
+      "id": "bud_05",
+      "accountId": "acc_01",
+      "categoryId": null,
+      "categoryName": null,
+      "title": "Laptop",
+      "month": 3,
+      "year": 2026,
+      "amountCents": 120000,
+      "transactionSpentCents": 0,
+      "completedAt": "2026-03-20T10:00:00.000Z",
+      "spentCents": 115000,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "totals": {
+    "rawAvailableCents": 200000,
+    "withdrawnForCompletedCents": 115000,
+    "availableCents": 85000,
+    "totalTargetCents": 300000,
+    "suggestedMonthlyCents": 21667
   }
-]
+}
 ```
 
-The `savedCents` field is computed as the sum of all transactions linked to this saving goal.
+- `goals` contains only **active** goals (`completedAt == null`); `completedGoals` contains closed goals (same fields).
+- `transactionSpentCents` is the absolute sum of transactions linked to the goal via `savingGoalId`.
+- `totals.rawAvailableCents` is the raw savings balance; `availableCents = max(rawAvailableCents − withdrawnForCompletedCents, 0)` is the pool for the remaining active goals. `totalTargetCents` and `suggestedMonthlyCents` consider only active goals. See `docs/calculations/07-sparziele.md`.
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
 | `401` | Not authenticated |
+| `404` | No account found for user |
 
 ---
 
@@ -624,20 +657,22 @@ Create a new saving goal.
 ```json
 {
   "accountId": "acc_01",
-  "name": "Urlaub 2027",
-  "targetCents": 300000,
-  "targetDate": "2027-06-01T00:00:00.000Z"
+  "title": "Urlaub 2027",
+  "targetMonth": 6,
+  "targetYear": 2027,
+  "amountCents": 300000
 }
 ```
 
 | Field | Type | Constraints |
 |---|---|---|
 | `accountId` | string | Required; must belong to user |
-| `name` | string | Required; non-empty |
-| `targetCents` | integer | Required; positive |
-| `targetDate` | ISO date string | Required |
+| `title` | string | Required; non-empty (trimmed) |
+| `targetMonth` | integer | Required; 1–12. Aliases accepted: `month`, `dueMonth` |
+| `targetYear` | integer | Required; 1970–9999. Aliases accepted: `year`, `dueYear` |
+| `amountCents` | integer | Required; `>= 1` |
 
-**Success response — `201 Created`:** Full saving goal object.
+**Success response — `201 Created`:** The created `Budget` row (`id`, `accountId`, `categoryId: null`, `title`, `month`, `year`, `amountCents`, `completedAt: null`, `spentCents: null`, `createdAt`).
 
 **Error responses:**
 
@@ -654,7 +689,7 @@ Get a single saving goal by ID.
 
 **Auth required:** Yes
 
-**Success response — `200 OK`:** Saving goal object (same shape as list item, including `savedCents`).
+**Success response — `200 OK`:** Saving goal object (`id`, `accountId`, `categoryId`, `categoryName`, `title`, `month`, `year`, `amountCents`, `createdAt`).
 
 **Error responses:**
 
@@ -674,13 +709,21 @@ Update a saving goal. Partial update.
 **Request body (all fields optional):**
 ```json
 {
-  "name": "Urlaub Griechenland 2027",
-  "targetCents": 350000,
-  "targetDate": "2027-07-01T00:00:00.000Z"
+  "title": "Urlaub Griechenland 2027",
+  "targetMonth": 7,
+  "targetYear": 2027,
+  "amountCents": 350000
 }
 ```
 
-**Success response — `200 OK`:** Updated saving goal object.
+| Field | Type | Constraints |
+|---|---|---|
+| `title` | string | Optional; non-empty (trimmed) |
+| `targetMonth` | integer | Optional; 1–12. Alias accepted: `month` |
+| `targetYear` | integer | Optional; 1970–9999. Alias accepted: `year` |
+| `amountCents` | integer | Optional; `>= 1` |
+
+**Success response — `200 OK`:** Updated saving goal object (`id`, `accountId`, `categoryId`, `categoryName`, `title`, `month`, `year`, `amountCents`, `createdAt`).
 
 **Error responses:**
 
@@ -698,7 +741,7 @@ Delete a saving goal. Linked transactions lose their `savingGoalId` (set to null
 
 **Auth required:** Yes
 
-**Success response — `204 No Content`**
+**Success response — `200 OK`:** `{ "success": true }`
 
 **Error responses:**
 
@@ -706,6 +749,70 @@ Delete a saving goal. Linked transactions lose their `savingGoalId` (set to null
 |---|---|
 | `401` | Not authenticated |
 | `404` | Not found or not owned by user |
+
+---
+
+### `POST /api/saving-plan/[id]/complete`
+
+Mark a saving goal as completed. Sets `completedAt = now` and stores the withdrawn amount as `spentCents`.
+
+**Auth required:** Yes (only the owner of the goal's account may act)
+
+**Request body:**
+```json
+{
+  "spentCents": 115000
+}
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `spentCents` | integer | Required; `>= 0`. Amount actually withdrawn from the savings pool on completion |
+
+**Success response — `200 OK`:**
+```json
+{
+  "id": "bud_05",
+  "completedAt": "2026-03-20T10:00:00.000Z",
+  "spentCents": 115000
+}
+```
+
+**Note:** Completing a goal does **not** create a transaction. `spentCents` is a snapshot reserved out of the computed savings pool that funds the remaining active goals; the raw savings balance and the real account balance are unchanged. See `docs/calculations/07-sparziele.md`.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Validation failed (`spentCents` missing or negative) |
+| `401` | Not authenticated |
+| `403` | Goal not owned by the authenticated user |
+| `404` | Goal not found |
+
+---
+
+### `DELETE /api/saving-plan/[id]/complete`
+
+Reopen a completed saving goal. Resets `completedAt = null` and `spentCents = null`, returning the goal to the active plan.
+
+**Auth required:** Yes (only the owner of the goal's account may act)
+
+**Success response — `200 OK`:**
+```json
+{
+  "id": "bud_05",
+  "completedAt": null,
+  "spentCents": null
+}
+```
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `403` | Goal not owned by the authenticated user |
+| `404` | Goal not found |
 
 ---
 

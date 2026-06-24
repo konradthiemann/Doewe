@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 
+import LegalFooter from "../../components/LegalFooter";
+import { DEMO_EMAIL, DEMO_PASSWORD } from "../../lib/demoConstants";
+
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -74,6 +77,40 @@ export default function LoginPage() {
     } catch (err) {
       setLoading(false);
       setError(err instanceof Error ? err.message : "Unable to register.");
+    }
+  }
+
+  async function handleDemo() {
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/demo/seed", { method: "POST" });
+      if (!res.ok) {
+        setError("Demo-Modus konnte nicht vorbereitet werden. Bitte später erneut versuchen.");
+        setLoading(false);
+        return;
+      }
+
+      const result = await signIn("credentials", {
+        redirect: false,
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+        callbackUrl: "/"
+      });
+
+      setLoading(false);
+      if (result?.error) {
+        setError("Demo-Login fehlgeschlagen. Bitte später erneut versuchen.");
+        return;
+      }
+
+      setMessage("Demo-Modus wird geladen…");
+      window.location.assign(result?.url ?? "/");
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Demo-Modus konnte nicht gestartet werden.");
     }
   }
 
@@ -183,7 +220,29 @@ export default function LoginPage() {
             </p>
           )}
         </form>
+
+        <div className="mt-6 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-gray-200 dark:bg-neutral-700" />
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-neutral-500">
+            oder
+          </span>
+          <span className="h-px flex-1 bg-gray-200 dark:bg-neutral-700" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleDemo}
+          disabled={loading}
+          className="mt-4 flex w-full items-center justify-center rounded-md border border-indigo-600 px-4 py-2 text-sm font-semibold text-indigo-600 transition hover:bg-indigo-50 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-indigo-400 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+        >
+          {loading ? "Bitte warten…" : "Im Demo-Modus testen"}
+        </button>
+        <p className="mt-2 text-center text-xs text-gray-500 dark:text-neutral-400">
+          Ohne Anmeldung mit Beispieldaten der letzten 3 Jahre.
+        </p>
       </div>
+
+      <LegalFooter className="mt-8" />
     </main>
   );
 }

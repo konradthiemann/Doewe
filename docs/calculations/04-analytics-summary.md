@@ -98,6 +98,20 @@ categoryBudgets: [
 plannedSavings  // Budget ohne categoryId (=Spar-Budget) für diesen Monat, in Euro
 ```
 
+Die zugrundeliegende Aggregation filtert zusätzlich auf `completedAt: null`:
+
+```typescript
+const plannedBudgetAgg = await prisma.budget.aggregate({
+  where: { accountId, categoryId: null, month, year, completedAt: null },
+  _sum: { amountCents: true }
+});
+```
+
+**Wichtig:** Bereits **abgeschlossene** Sparziele (`completedAt != null`) zählen
+**nicht** mehr als geplante Ersparnis des Monats. Sie verlassen die vorausschauende
+Planung beim Abschluss (siehe [07-sparziele.md](./07-sparziele.md), Abschnitt
+"Completion-Lebenszyklus").
+
 ## Tages-Chart (daily)
 
 Das Chart zeigt **kumulierte Werte** — jeder Tag ist die Summe aller Tage bis einschließlich diesem Tag.
@@ -166,6 +180,8 @@ daily: {
   monthlySavingsActual: number,
   remaining: number,
   plannedSavings: number,
+  completedGoals: { title, target, spent, completedAt }[],   // diesen Monat (per completedAt) abgeschlossene Sparziele, Beträge in Euro
+  completedGoalsSpent: number,          // Summe der entnommenen Beträge (Euro)
   projectedIncomeTotal: number,
   projectedOutcomeTotal: number,
   projectedSavingsTotal: number,     // monthlySavingsActual + recurringPlannedSavings
