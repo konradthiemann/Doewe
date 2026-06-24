@@ -46,6 +46,7 @@ export default defineConfig({
           items: [
             { label: 'User Flows', slug: 'flows' },
             { label: 'Database Management', slug: 'database_management' },
+            { label: 'Deployment & CI', slug: 'deployment' },
           ],
         },
       ],
