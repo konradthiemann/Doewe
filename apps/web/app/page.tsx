@@ -14,6 +14,7 @@ import ChartDataLabels, { type Context as DataLabelsContext } from "chartjs-plug
 import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Bar } from "react-chartjs-2";
 
+import PageContainer from "../components/PageContainer";
 import { useI18n } from "../lib/i18n";
 
 ChartJS.register(
@@ -297,9 +298,10 @@ export default function HomePage() {
   const recurringOutcomeTotal = summary.recurringOutcomeTotal || 0;
 
   return (
-    <main id="maincontent" className="p-6 space-y-8">
+    <main id="maincontent" className="py-6 md:py-8">
+      <PageContainer className="space-y-6">
       {/* Account Balance & Carryover Section */}
-      <section aria-labelledby="balance-overview" className="max-w-5xl">
+      <section aria-labelledby="balance-overview">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="balance-overview" className="text-lg font-medium mb-4">
             {t("dashboard.balanceOverview")}
@@ -338,7 +340,7 @@ export default function HomePage() {
       </section>
 
       {/* Category Budgets — nach oben gezogen: wichtigste Info für tägliche Haushaltsplanung */}
-      <section aria-labelledby="category-budgets" className="max-w-3xl">
+      <section aria-labelledby="category-budgets">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="category-budgets" className="text-lg font-medium mb-1">
             {t("dashboard.categoryBudgetsTitle")}
@@ -353,7 +355,7 @@ export default function HomePage() {
               {overBudgetCategories.length === 0 && (
                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-3">{t("dashboard.categoryBudgetsAllOk")}</p>
               )}
-              <ul className="space-y-2">
+              <ul className="grid gap-2 lg:grid-cols-2">
                 {categoryBudgets
                   .slice()
                   .sort((a, b) => b.diff - a.diff)
@@ -519,8 +521,10 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Recurring + Savings — paired side by side on lg+ */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       {/* Recurring Transactions Section */}
-      <section aria-labelledby="recurring-overview" className="max-w-3xl">
+      <section aria-labelledby="recurring-overview">
         <details className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
           <summary className="flex items-center justify-between cursor-pointer p-5 select-none list-none [&::-webkit-details-marker]:hidden">
             <div>
@@ -584,7 +588,7 @@ export default function HomePage() {
         </details>
       </section>
 
-      <section aria-labelledby="savings-overview" className="max-w-3xl">
+      <section aria-labelledby="savings-overview">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="savings-overview" className="text-lg font-medium mb-4">
             {t("dashboard.savingsOverview")}
@@ -685,9 +689,10 @@ export default function HomePage() {
           )}
         </div>
       </section>
+      </div>
 
       {/* Quarterly Overview Section */}
-      <section aria-labelledby="quarterly-overview" className="max-w-4xl">
+      <section aria-labelledby="quarterly-overview">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
           <h2 id="quarterly-overview" className="text-lg font-medium mb-1">
             {t("dashboard.quarterlyOverview")}
@@ -859,6 +864,7 @@ export default function HomePage() {
         </div>
       </section>
 
+      </PageContainer>
     </main>
   );
 }

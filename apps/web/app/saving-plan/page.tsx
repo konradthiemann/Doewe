@@ -4,6 +4,7 @@ import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import PageContainer from "../../components/PageContainer";
 import PlannedSavingForm from "../../components/PlannedSavingForm";
 import { useI18n } from "../../lib/i18n";
 
@@ -278,7 +279,8 @@ function SavingPlanPage() {
   const timelineEmpty = !loading && goalsWithProgress.length === 0;
 
   return (
-    <main id="maincontent" className="p-6 pb-24 space-y-8">
+    <main id="maincontent" className="py-6 md:py-8">
+      <PageContainer className="space-y-8">
       {feedback && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200">
           {feedback}
@@ -350,7 +352,7 @@ function SavingPlanPage() {
             <p>{t("savingPlan.timelineEmpty")}</p>
           </div>
         ) : (
-          <ol className="relative border-l border-slate-200 pl-6 dark:border-neutral-700">
+          <ol className="relative max-w-3xl border-l border-slate-200 pl-6 dark:border-neutral-700">
             {goalsWithProgress.map((goal, index) => {
               const isLast = index === goalsWithProgress.length - 1;
               const dueDate = new Date(goal.year, goal.month - 1, 1).toLocaleDateString(dateLocale, {
@@ -488,7 +490,7 @@ function SavingPlanPage() {
             </span>
           </button>
           {completedExpanded && (
-            <ul className="space-y-3">
+            <ul className="grid gap-3 lg:grid-cols-2">
               {completedGoals.map((goal) => {
                 const dueDate = new Date(goal.year, goal.month - 1, 1).toLocaleDateString(dateLocale, {
                   month: "long",
@@ -552,6 +554,7 @@ function SavingPlanPage() {
           )}
         </section>
       )}
+      </PageContainer>
 
       {dialogOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center">
