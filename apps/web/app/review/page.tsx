@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
+import PageContainer from "../../components/PageContainer";
 import { useI18n } from "../../lib/i18n";
 
 type ReviewData = {
@@ -202,13 +203,14 @@ function ReviewPage() {
   const verdictConfig = verdict ? VERDICT_CONFIG[verdict] : null;
 
   return (
-    <main id="maincontent" className="p-6 space-y-8">
-      {/* Month navigation header — title and month selector stacked vertically */}
-      <div className="max-w-3xl space-y-3">
+    <main id="maincontent" className="py-6 md:py-8">
+      <PageContainer className="space-y-6">
+      {/* Month navigation header — title left, month selector right on >= sm */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-neutral-100">
           {t("review.title")}
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:w-72">
           <button
             onClick={goOlder}
             disabled={!canGoOlder || loading}
@@ -267,8 +269,10 @@ function ReviewPage() {
 
       {!loading && data && (
         <>
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+          <div className="space-y-6">
           {/* Verdict + KPI card */}
-          <section aria-labelledby="review-verdict" className="max-w-3xl">
+          <section aria-labelledby="review-verdict">
             <div
               className={`rounded-md border-2 bg-white dark:bg-neutral-900 p-5 ${verdictConfig?.borderClass ?? ""}`}
             >
@@ -363,7 +367,7 @@ function ReviewPage() {
           </section>
 
           {/* Category breakdown */}
-          <section aria-labelledby="review-categories" className="max-w-3xl">
+          <section aria-labelledby="review-categories">
             <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
               <h2 id="review-categories" className="text-lg font-medium mb-4">
                 {t("review.categoriesTitle")}
@@ -433,10 +437,12 @@ function ReviewPage() {
               )}
             </div>
           </section>
+          </div>
+          <div className="space-y-6">
 
           {/* MoM comparison */}
           {momDeltas ? (
-            <section aria-labelledby="review-mom" className="max-w-3xl">
+            <section aria-labelledby="review-mom">
               <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
                 <h2 id="review-mom" className="text-lg font-medium mb-1">
                   {t("review.momTitle")}
@@ -490,7 +496,7 @@ function ReviewPage() {
               </div>
             </section>
           ) : (
-            <section className="max-w-3xl">
+            <section>
               <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
                 <h2 className="text-lg font-medium mb-2">{t("review.momTitle")}</h2>
                 <p className="text-sm text-gray-500 dark:text-neutral-400">{t("review.momNoPrev")}</p>
@@ -499,7 +505,7 @@ function ReviewPage() {
           )}
 
           {/* Top expenses */}
-          <section aria-labelledby="review-top-expenses" className="max-w-3xl">
+          <section aria-labelledby="review-top-expenses">
             <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
               <h2 id="review-top-expenses" className="text-lg font-medium mb-4">
                 {t("review.topExpensesTitle")}
@@ -548,7 +554,7 @@ function ReviewPage() {
 
           {/* Completed saving goals */}
           {data.completedGoals.length > 0 && (
-            <section aria-labelledby="review-completed-goals" className="max-w-3xl">
+            <section aria-labelledby="review-completed-goals">
               <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
                 <h2 id="review-completed-goals" className="text-lg font-medium mb-4">
                   {t("review.completedGoalsTitle")}
@@ -588,7 +594,7 @@ function ReviewPage() {
           {data.incomeCents === 0 &&
             data.outcomeCents === 0 &&
             data.savingsCents === 0 && (
-              <section className="max-w-3xl">
+              <section>
                 <div className="rounded-md border border-dashed border-gray-300 dark:border-neutral-700 p-8 text-center">
                   <p className="text-sm text-gray-500 dark:text-neutral-400">
                     {t("review.noData")}
@@ -596,8 +602,11 @@ function ReviewPage() {
                 </div>
               </section>
             )}
+          </div>
+          </div>
         </>
       )}
+      </PageContainer>
     </main>
   );
 }

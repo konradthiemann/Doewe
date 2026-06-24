@@ -20,6 +20,7 @@ import {
 } from "nuqs";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import PageContainer from "../../components/PageContainer";
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
 import { Dialog } from "../../components/ui/Dialog";
@@ -397,7 +398,8 @@ function TransactionsPage() {
   };
 
   return (
-    <main id="maincontent" className="p-6 space-y-8">
+    <main id="maincontent" className="py-6 md:py-8">
+      <PageContainer className="space-y-8">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-3">
         {/* Row 1: Search + inline filter button */}
         <div className="flex items-center gap-2">
@@ -521,7 +523,7 @@ function TransactionsPage() {
 
       {activeTab === "transactions" && (
         <section
-          className="space-y-4 max-w-2xl mx-auto"
+          className="space-y-4 max-w-5xl mx-auto"
           id="tab-panel-transactions"
           role="tabpanel"
           aria-labelledby="tab-transactions"
@@ -700,6 +702,7 @@ function TransactionsPage() {
           </div>
           </div>
 
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           {currentRecurring.length > 0 && (
             <details className="group rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -795,6 +798,7 @@ function TransactionsPage() {
               </ul>
             )}
           </details>
+          </div>
 
           {filteredTotals.count > 0 && (
             <div
@@ -833,7 +837,7 @@ function TransactionsPage() {
             </div>
           )}
 
-          <ul className="space-y-2">
+          <ul className="grid gap-2 xl:grid-cols-2">
             {sortedItems.map((tx) => (
               <li
                 key={tx.id}
@@ -899,7 +903,7 @@ function TransactionsPage() {
 
       {activeTab === "recurring" && (
         <section
-          className="space-y-4 max-w-2xl mx-auto"
+          className="space-y-4 max-w-5xl mx-auto"
           id="tab-panel-recurring"
           role="tabpanel"
           aria-labelledby="tab-recurring"
@@ -920,7 +924,7 @@ function TransactionsPage() {
               {toDecimalString(fromCents(recurringTotalCents))} €
             </span>
           </div>
-          <ul className="space-y-2">
+          <ul className="grid gap-2 xl:grid-cols-2">
             {filteredRecurringItems.map((rec) => (
               <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
                 <div className="flex items-stretch justify-between gap-3">
@@ -1064,6 +1068,7 @@ function TransactionsPage() {
           </div>
         </div>
       )}
+      </PageContainer>
     </main>
   );
 }
