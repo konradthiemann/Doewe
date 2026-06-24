@@ -8,6 +8,7 @@ import { useI18n } from "../lib/i18n";
 
 import BackToTopButton from "./BackToTopButton";
 import Header from "./Header";
+import Sidebar from "./Sidebar";
 
 export default function AppChrome() {
   const pathname = usePathname();
@@ -37,8 +38,11 @@ export default function AppChrome() {
     <>
       <BackToTopButton />
 
-      {/* Top bar */}
-      <header className="fixed top-0 left-0 right-0 z-40 flex h-12 items-center justify-between border-b border-gray-100 bg-white/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-neutral-800 dark:bg-neutral-950/95 dark:supports-[backdrop-filter]:bg-neutral-950/80">
+      {/* Desktop / tablet sidebar (>= md) */}
+      <Sidebar />
+
+      {/* Top bar — phones only (< md); the sidebar replaces it from md up */}
+      <header className="fixed top-0 left-0 right-0 z-40 flex h-12 items-center justify-between border-b border-gray-100 bg-white/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden dark:border-neutral-800 dark:bg-neutral-950/95 dark:supports-[backdrop-filter]:bg-neutral-950/80">
         <span className="text-sm font-semibold tracking-tight text-gray-900 dark:text-neutral-100">
           Doewe
         </span>

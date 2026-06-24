@@ -145,7 +145,7 @@ export default function Header() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed bottom-0 left-0 right-0 z-50 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+      className="fixed bottom-0 left-0 right-0 z-50 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:hidden"
     >
       <div className="mx-auto max-w-xl">
         <div className="relative flex items-end justify-center">
