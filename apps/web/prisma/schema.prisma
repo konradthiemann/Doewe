@@ -86,14 +86,16 @@ model RecurringTransactionSkip {
 }
 
 model Budget {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   accountId   String
   categoryId  String?
-  title       String   @default("")
-  month       Int      // 1-12
+  title       String    @default("")
+  month       Int       // 1-12
   year        Int
-  amountCents Int      // goal amount for the month
-  createdAt   DateTime @default(now())
+  amountCents Int       // goal amount for the month
+  completedAt DateTime? // null = active goal, set = goal closed
+  spentCents  Int?      // amount actually withdrawn from savings on completion (snapshot)
+  createdAt   DateTime  @default(now())
 
   account      Account       @relation(fields: [accountId], references: [id])
   category     Category?     @relation(fields: [categoryId], references: [id])

@@ -122,7 +122,7 @@ export default function Header() {
     }
 
     return {
-      href: "/transactions?new=1",
+      href: "/transactions?new=true",
       label: t("action.addTransaction"),
       icon: (
         <svg

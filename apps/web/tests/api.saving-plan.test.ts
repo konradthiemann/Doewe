@@ -86,6 +86,41 @@ describe("Saving Plan API", () => {
     expect(updated.amountCents).toBe(75000);
   });
 
+  it("completes and reopens a goal (completedAt + spentCents)", async () => {
+    const goal = await prisma.budget.create({
+      data: {
+        accountId: testAccountId,
+        title: "Auto",
+        year: 2026,
+        month: 9,
+        amountCents: 300000
+      }
+    });
+
+    expect(goal.completedAt).toBeNull();
+    expect(goal.spentCents).toBeNull();
+
+    // Complete with an overspend (5000 withdrawn for a 3000 goal)
+    const completed = await prisma.budget.update({
+      where: { id: goal.id },
+      data: { completedAt: new Date(), spentCents: 500000 }
+    });
+
+    expect(completed.completedAt).not.toBeNull();
+    expect(completed.spentCents).toBe(500000);
+
+    // Reopen clears both fields
+    const reopened = await prisma.budget.update({
+      where: { id: goal.id },
+      data: { completedAt: null, spentCents: null }
+    });
+
+    expect(reopened.completedAt).toBeNull();
+    expect(reopened.spentCents).toBeNull();
+
+    await prisma.budget.delete({ where: { id: goal.id } });
+  });
+
   it("DELETE /api/saving-plan/[id] removes the goal", async () => {
     await prisma.budget.delete({ where: { id: testGoalId } });
 

@@ -1,0 +1,27 @@
+{
+  "name": "@doewe/docs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "predev": "npm run sync",
+    "dev": "astro dev",
+    "prebuild": "npm run sync",
+    "build": "astro build",
+    "preview": "astro preview",
+    "lint": "echo \"[@doewe/docs] no lint configured (static docs site)\"",
+    "test": "echo \"[@doewe/docs] no tests (static docs site)\"",
+    "typecheck": "npm run sync && astro check"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.40.0",
+    "astro": "^6.4.7",
+    "astro-mermaid": "^2.0.2",
+    "mermaid": "^11.15.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "typescript": "^6.0.3"
+  }
+}

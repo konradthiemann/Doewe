@@ -13,7 +13,7 @@ Sie dient sowohl als Referenz für Entwickler als auch als Wissensbasis für Cla
 | [04-analytics-summary.md](./04-analytics-summary.md) | Monatliche Zusammenfassung — alle Dashboard-Kennzahlen |
 | [05-analytics-quarterly.md](./05-analytics-quarterly.md) | Quartalübersicht — letzte 3 Monate |
 | [06-budgets.md](./06-budgets.md) | Budget-Ziele vs. tatsächliche Ausgaben |
-| [07-sparziele.md](./07-sparziele.md) | Sparpläne, verfügbares Guthaben, empfohlene Monatsrate |
+| [07-sparziele.md](./07-sparziele.md) | Sparpläne, verfügbares Guthaben, empfohlene Monatsrate, Abschluss/Completion-Lebenszyklus |
 
 ## Kernprinzipien
 
@@ -63,6 +63,8 @@ erDiagram
         int year
         string categoryId "null = Spar-Budget"
         string title
+        DateTime completedAt "null = aktiv, gesetzt = abgeschlossen"
+        int spentCents "bei Abschluss entnommener Betrag (Snapshot)"
     }
 
     RecurringTransactionSkip {

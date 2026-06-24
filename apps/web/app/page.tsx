@@ -39,6 +39,8 @@ export default function HomePage() {
     outcomeTotal: number;
     remaining: number;
     plannedSavings: number;
+    completedGoals?: Array<{ title: string; target: number; spent: number; completedAt: string }>;
+    completedGoalsSpent?: number;
     monthlySavingsActual: number;
     outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
     categoryBudgets?: Array<{ categoryId: string; name: string; budget: number; spent: number; diff: number }>;
@@ -61,6 +63,8 @@ export default function HomePage() {
     outcomeTotal: 0,
     remaining: 0,
     plannedSavings: 0,
+    completedGoals: [],
+    completedGoalsSpent: 0,
     monthlySavingsActual: 0,
     outgoingByCategory: [],
     categoryBudgets: [],
@@ -256,6 +260,10 @@ export default function HomePage() {
   const plannedColor = "#6366F1"; // indigo
   const actualColor = "#16A34A"; // green
   const savingsProgress = plannedSavings > 0 ? Math.min(100, Math.round((actualSavings / plannedSavings) * 100)) : 0;
+
+  // Saving goals completed this month (by completion/withdrawal date)
+  const completedGoals = summary.completedGoals || [];
+  const completedGoalsSpent = summary.completedGoalsSpent || 0;
 
   const doughnutOptions: ChartOptions<"doughnut"> = {
     plugins: {
@@ -634,6 +642,45 @@ export default function HomePage() {
                   })}
                 </p>
               )}
+            </div>
+          )}
+          {completedGoals.length > 0 && (
+            <div className="mt-5 border-t border-gray-200 pt-4 dark:border-neutral-800">
+              <p className="text-sm font-medium text-gray-700 dark:text-neutral-200">
+                {t("dashboard.completedGoalsTitle")}
+              </p>
+              <ul className="mt-2 space-y-2">
+                {completedGoals.map((goal, idx) => {
+                  const diff = goal.spent - goal.target;
+                  return (
+                    <li key={idx} className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-gray-700 dark:text-neutral-300">{goal.title}</p>
+                        <p className="text-xs text-gray-500 dark:text-neutral-400">
+                          {new Date(goal.completedAt).toLocaleDateString(dateLocale, { day: "numeric", month: "long" })}
+                          {" · "}
+                          {t("dashboard.completedGoalTarget", { amount: formatCurrency(goal.target) })}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+                          {formatCurrency(goal.spent)}
+                        </p>
+                        {diff !== 0 && (
+                          <p className={`text-xs ${diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                            {diff > 0
+                              ? t("dashboard.completedGoalOver", { amount: formatCurrency(diff) })
+                              : t("dashboard.completedGoalUnder", { amount: formatCurrency(-diff) })}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-2 text-xs text-gray-500 dark:text-neutral-400">
+                {t("dashboard.completedGoalsTotal", { amount: formatCurrency(completedGoalsSpent) })}
+              </p>
             </div>
           )}
         </div>
