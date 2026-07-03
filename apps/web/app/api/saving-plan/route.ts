@@ -6,17 +6,24 @@ import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 
 import { computeSavingPlanTotals } from "./compute";
+import { resolveSavingsBalanceCents } from "./savings";
 
-const SavingPlanInput = z.object({
-  accountId: z.string().min(1),
-  title: z
-    .string()
-    .transform((value) => ensureNonEmpty(value))
-    .transform((value) => value.trim()),
-  targetMonth: z.number().int().min(1).max(12),
-  targetYear: z.number().int().min(1970).max(9999),
-  amountCents: z.number().int().min(1)
-});
+const SavingPlanInput = z
+  .object({
+    accountId: z.string().min(1),
+    title: z
+      .string()
+      .transform((value) => ensureNonEmpty(value))
+      .transform((value) => value.trim()),
+    // Undated goals omit month/year; amount is optional for idea-backlog goals.
+    targetMonth: z.number().int().min(1).max(12).nullish(),
+    targetYear: z.number().int().min(1970).max(9999).nullish(),
+    amountCents: z.number().int().min(1).nullish()
+  })
+  .refine((data) => (data.targetMonth == null) === (data.targetYear == null), {
+    message: "targetMonth and targetYear must both be provided or both omitted",
+    path: ["targetMonth"]
+  });
 
 function normalizeTitle({
   title,
@@ -26,8 +33,8 @@ function normalizeTitle({
 }: {
   title: string | null | undefined;
   categoryName: string | null | undefined;
-  month: number;
-  year: number;
+  month: number | null;
+  year: number | null;
 }) {
   const trimmed = title?.trim();
   if (trimmed) {
@@ -36,41 +43,10 @@ function normalizeTitle({
   if (categoryName) {
     return categoryName;
   }
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-/**
- * Savings category names recognised by the system (EN / DE).
- * The lookup is case-insensitive so "savings", "Savings", "Sparen" etc. all match.
- */
-const SAVINGS_CATEGORY_NAMES = ["savings", "sparen"];
-
-async function findSavingsCategoryId(userId: string): Promise<string | null> {
-  const categories = await prisma.category.findMany({
-    where: { userId },
-    select: { id: true, name: true }
-  });
-  const match = categories.find((c) =>
-    SAVINGS_CATEGORY_NAMES.includes(c.name.toLowerCase().trim())
-  );
-  return match?.id ?? null;
-}
-
-async function resolveSavingsBalanceCents(accountId: string, userId: string) {
-  const savingsCatId = await findSavingsCategoryId(userId);
-
-  if (!savingsCatId) {
-    return 0;
+  if (month != null && year != null) {
+    return `${year}-${String(month).padStart(2, "0")}`;
   }
-
-  const savingsTransactions = await prisma.transaction.findMany({
-    where: { accountId, categoryId: savingsCatId },
-    select: { amountCents: true }
-  });
-
-  // Savings transfers are stored as negative amounts (outgoing expense).
-  // Negate them to get the positive savings balance.
-  return savingsTransactions.reduce((total, tx) => total - tx.amountCents, 0);
+  return "";
 }
 
 export async function GET() {
@@ -116,8 +92,12 @@ export async function GET() {
     createdAt: goal.createdAt
   });
 
-  // Active goals drive the forward-looking plan; completed goals are kept for history.
-  const goals = goalsRaw.filter((goal) => goal.completedAt == null).map(mapGoal);
+  // Active, dated goals drive the forward-looking plan (timeline).
+  // Active, undated goals are an idea backlog shown separately.
+  // Completed goals are kept for history.
+  const activeRaw = goalsRaw.filter((goal) => goal.completedAt == null);
+  const goals = activeRaw.filter((goal) => goal.month != null && goal.year != null).map(mapGoal);
+  const undatedGoals = activeRaw.filter((goal) => goal.month == null || goal.year == null).map(mapGoal);
   const completedGoals = goalsRaw.filter((goal) => goal.completedAt != null).map(mapGoal);
 
   // `availableCents` from resolveSavingsBalanceCents is the raw savings balance.
@@ -136,6 +116,7 @@ export async function GET() {
 
   return NextResponse.json({
     goals,
+    undatedGoals,
     completedGoals,
     totals
   });
@@ -168,9 +149,9 @@ export async function POST(req: Request) {
       accountId: payload.accountId,
       categoryId: null,
       title: payload.title,
-      month: payload.targetMonth,
-      year: payload.targetYear,
-      amountCents: payload.amountCents
+      month: payload.targetMonth ?? null,
+      year: payload.targetYear ?? null,
+      amountCents: payload.amountCents ?? null
     }
   });
 

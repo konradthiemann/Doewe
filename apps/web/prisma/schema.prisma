@@ -90,9 +90,13 @@ model Budget {
   accountId   String
   categoryId  String?
   title       String    @default("")
-  month       Int       // 1-12
-  year        Int
-  amountCents Int       // goal amount for the month
+  // Category budgets always set month/year. Saving goals may be "undated"
+  // (month/year null) — an idea backlog with no deadline.
+  month       Int?      // 1-12, null = undated saving goal
+  year        Int?      // null = undated saving goal
+  // Required for category budgets; optional for saving goals (an idea may not
+  // have a concrete target amount yet).
+  amountCents Int?      // goal amount; null = no amount set yet
   completedAt DateTime? // null = active goal, set = goal closed
   spentCents  Int?      // amount actually withdrawn from savings on completion (snapshot)
   createdAt   DateTime  @default(now())

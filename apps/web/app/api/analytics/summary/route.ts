@@ -95,18 +95,19 @@ export async function GET() {
 
   for (const t of txs) {
     const amt = t.amountCents;
-    if (amt >= 0) {
+    const isSavings = savingsCatId != null && t.categoryId === savingsCatId;
+    if (isSavings) {
+      // Sparbuchungen werden zuerst behandelt — unabhängig vom Vorzeichen.
+      // Einzahlung (negativ) erhöht das Sparen, Entnahme (positiv) verringert es.
+      // Eine Entnahme ist keine Einnahme, sondern eine Umbuchung.
+      monthlySavingsActualCents += -amt;
+    } else if (amt >= 0) {
       incomeTotalCents += amt;
     } else {
       const abs = -amt;
-      if (t.categoryId && savingsCatId && t.categoryId === savingsCatId) {
-        // Sparbuchungen sind per Konvention negativ (Abgang vom Girokonto zum Sparkonto)
-        monthlySavingsActualCents += abs;
-      } else {
-        outcomeTotalCents += abs;
-        const key = t.categoryId ?? "uncategorized";
-        byCategoryCents[key] = (byCategoryCents[key] ?? 0) + abs;
-      }
+      outcomeTotalCents += abs;
+      const key = t.categoryId ?? "uncategorized";
+      byCategoryCents[key] = (byCategoryCents[key] ?? 0) + abs;
     }
   }
 
@@ -130,7 +131,7 @@ export async function GET() {
   });
   const completedGoals = completedGoalsRaw.map((g) => ({
     title: g.title,
-    target: g.amountCents / 100,
+    target: (g.amountCents ?? 0) / 100,
     spent: (g.spentCents ?? 0) / 100,
     completedAt: g.completedAt
   }));
@@ -187,17 +188,16 @@ export async function GET() {
 
   for (const rec of activeRecurringThisMonth) {
     const amt = rec.amountCents;
-    if (amt >= 0) {
+    const isSavings = savingsCatId != null && rec.categoryId === savingsCatId;
+    if (isSavings) {
+      recurringPlannedSavingsCents += -amt;
+    } else if (amt >= 0) {
       recurringIncomeTotalCents += amt;
     } else {
       const abs = -amt;
-      if (savingsCatId && rec.categoryId === savingsCatId) {
-        recurringPlannedSavingsCents += abs;
-      } else {
-        recurringOutcomeTotalCents += abs;
-        if (rec.categoryId) {
-          recurringByCategoryCents[rec.categoryId] = (recurringByCategoryCents[rec.categoryId] || 0) + abs;
-        }
+      recurringOutcomeTotalCents += abs;
+      if (rec.categoryId) {
+        recurringByCategoryCents[rec.categoryId] = (recurringByCategoryCents[rec.categoryId] || 0) + abs;
       }
     }
   }
@@ -212,10 +212,11 @@ export async function GET() {
     const day = t.occurredAt.getDate();
     const idx = day - 1;
     const amt = t.amountCents;
-    if (amt >= 0) {
-      byDay[idx].inc += amt;
-    } else if (savingsCatId && t.categoryId === savingsCatId) {
+    const isSavings = savingsCatId != null && t.categoryId === savingsCatId;
+    if (isSavings) {
       byDay[idx].sav += -amt;
+    } else if (amt >= 0) {
+      byDay[idx].inc += amt;
     } else {
       byDay[idx].out += -amt;
     }
@@ -225,25 +226,26 @@ export async function GET() {
     const day = Math.min(rec.dayOfMonth || 1, daysInMonth);
     const idx = day - 1;
     const amt = rec.amountCents;
-    if (amt >= 0) {
-      byDay[idx].inc += amt;
-    } else if (savingsCatId && rec.categoryId === savingsCatId) {
+    const isSavings = savingsCatId != null && rec.categoryId === savingsCatId;
+    if (isSavings) {
       byDay[idx].sav += -amt;
+    } else if (amt >= 0) {
+      byDay[idx].inc += amt;
     } else {
       byDay[idx].out += -amt;
     }
   }
 
-  // Baseline-Sparbetrag (alle Sparbuchungen vor diesem Monat) — nur negative Buchungen zählen,
-  // DB-Aggregation statt findMany + Loop
+  // Baseline-Sparstand (netto vor diesem Monat) — Einzahlungen (negativ) und
+  // Entnahmen (positiv) werden verrechnet, damit die kumulative Sparlinie stimmt.
+  // DB-Aggregation statt findMany + Loop.
   let baselineSavingsCents = 0;
   if (savingsCatId) {
     const prevSavingsAgg = await prisma.transaction.aggregate({
       where: {
         accountId,
         categoryId: savingsCatId,
-        occurredAt: { lt: start },
-        amountCents: { lt: 0 }
+        occurredAt: { lt: start }
       },
       _sum: { amountCents: true }
     });

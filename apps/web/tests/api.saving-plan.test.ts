@@ -121,6 +121,35 @@ describe("Saving Plan API", () => {
     await prisma.budget.delete({ where: { id: goal.id } });
   });
 
+  it("creates an undated goal with null month/year and no amount", async () => {
+    const goal = await prisma.budget.create({
+      data: {
+        accountId: testAccountId,
+        categoryId: null,
+        title: "Küche renovieren",
+        month: null,
+        year: null,
+        amountCents: null
+      }
+    });
+
+    expect(goal.month).toBeNull();
+    expect(goal.year).toBeNull();
+    expect(goal.amountCents).toBeNull();
+    expect(goal.title).toBe("Küche renovieren");
+
+    // Scheduling later: set month/year/amount together.
+    const scheduled = await prisma.budget.update({
+      where: { id: goal.id },
+      data: { month: 8, year: 2026, amountCents: 200000 }
+    });
+    expect(scheduled.month).toBe(8);
+    expect(scheduled.year).toBe(2026);
+    expect(scheduled.amountCents).toBe(200000);
+
+    await prisma.budget.delete({ where: { id: goal.id } });
+  });
+
   it("DELETE /api/saving-plan/[id] removes the goal", async () => {
     await prisma.budget.delete({ where: { id: testGoalId } });
 

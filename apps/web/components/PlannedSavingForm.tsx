@@ -22,9 +22,9 @@ type EditGoal = {
   id: string;
   accountId: string;
   title: string;
-  month: number;
-  year: number;
-  amountCents: number;
+  month: number | null;
+  year: number | null;
+  amountCents: number | null;
 };
 
 type Props = {
@@ -32,6 +32,8 @@ type Props = {
   onClose?: () => void;
   onSuccess?: (message?: string) => void;
   editGoal?: EditGoal;
+  /** Force the schedule toggle on when opening (e.g. "set a date" on an undated goal). */
+  initialScheduled?: boolean;
 };
 
 function nextMonthValue() {
@@ -42,7 +44,7 @@ function monthYearToValue(month: number, year: number) {
   return format(new Date(year, month - 1, 1), "yyyy-MM");
 }
 
-export default function PlannedSavingForm({ headingId, onClose, onSuccess, editGoal }: Props) {
+export default function PlannedSavingForm({ headingId, onClose, onSuccess, editGoal, initialScheduled }: Props) {
   const isEditMode = !!editGoal;
   const { locale, t } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -51,6 +53,8 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const dfLocale = locale === "de" ? de : enUS;
+
+  const editIsScheduled = !!editGoal && editGoal.month != null && editGoal.year != null;
 
   const {
     register,
@@ -63,13 +67,18 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
     resolver: zodResolver(plannedSavingFormSchema),
     defaultValues: {
       title: editGoal?.title ?? "",
-      amount: editGoal ? toDecimalString(fromCents(editGoal.amountCents)) : "",
+      amount: editGoal?.amountCents != null ? toDecimalString(fromCents(editGoal.amountCents)) : "",
       accountId: editGoal?.accountId ?? "",
-      targetMonth: editGoal ? monthYearToValue(editGoal.month, editGoal.year) : nextMonthValue(),
+      scheduled: initialScheduled ?? (editGoal ? editIsScheduled : true),
+      targetMonth:
+        editGoal && editGoal.month != null && editGoal.year != null
+          ? monthYearToValue(editGoal.month, editGoal.year)
+          : nextMonthValue(),
     },
   });
 
   const targetMonth = watch("targetMonth");
+  const scheduled = watch("scheduled");
 
   useEffect(() => {
     let active = true;
@@ -111,25 +120,37 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
     setSubmitError(null);
     setInlineSuccess(null);
 
-    const [year, month] = values.targetMonth.split("-");
-    let amountCents: number;
-    try {
-      amountCents = parseCents(values.amount);
-      if (amountCents <= 0) {
-        setSubmitError(t("savingPlan.form.errorAmountPositive"));
+    // Amount is optional — an undated idea may not have a concrete target yet.
+    let amountCents: number | null = null;
+    const trimmedAmount = values.amount.trim();
+    if (trimmedAmount !== "") {
+      try {
+        amountCents = parseCents(trimmedAmount);
+        if (amountCents <= 0) {
+          setSubmitError(t("savingPlan.form.errorAmountPositive"));
+          return;
+        }
+      } catch (parseError) {
+        setSubmitError(parseError instanceof Error ? parseError.message : t("savingPlan.form.errorAmountInvalid"));
         return;
       }
-    } catch (parseError) {
-      setSubmitError(parseError instanceof Error ? parseError.message : t("savingPlan.form.errorAmountInvalid"));
-      return;
+    }
+
+    // Undated goals send null for month/year (also un-schedules on edit).
+    let targetYear: number | null = null;
+    let targetMonth: number | null = null;
+    if (values.scheduled) {
+      const [year, month] = values.targetMonth.split("-");
+      targetYear = Number(year);
+      targetMonth = Number(month);
     }
 
     try {
       const payload = {
         accountId: values.accountId,
         title: values.title,
-        targetYear: Number(year),
-        targetMonth: Number(month),
+        targetYear,
+        targetMonth,
         amountCents,
       };
 
@@ -182,7 +203,11 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             {isEditMode ? t("savingPlan.form.editTitle") : t("savingPlan.form.title")}
           </h3>
           <p className="text-xs text-gray-500 dark:text-neutral-400">
-            {isEditMode ? t("savingPlan.form.editSubtitle") : t("savingPlan.form.subtitle")}
+            {isEditMode
+              ? t("savingPlan.form.editSubtitle")
+              : scheduled
+                ? t("savingPlan.form.subtitle")
+                : t("savingPlan.form.subtitleUndated")}
           </p>
         </div>
         {onClose && (
@@ -244,28 +269,54 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex items-center justify-between rounded-lg bg-indigo-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-indigo-900/20 dark:text-neutral-200">
         <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-due">
-            {t("savingPlan.form.targetMonth")} <span className="text-red-600">*</span>
-          </label>
-          <input
-            {...register("targetMonth")}
-            id="saving-plan-due"
-            type="month"
-            aria-invalid={!!errors.targetMonth}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
-          />
-          <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400" aria-live="polite">
-            {dueLabel}
+          <p className="font-medium">{t("savingPlan.form.scheduleToggleTitle")}</p>
+          <p className="text-xs text-gray-500 dark:text-neutral-400">
+            {t("savingPlan.form.scheduleToggleDescription")}
           </p>
-          {errors.targetMonth && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.targetMonth.message}</p>
-          )}
         </div>
+        <label className="relative inline-flex cursor-pointer items-center">
+          <input
+            type="checkbox"
+            className="sr-only peer"
+            checked={scheduled}
+            onChange={(event) => setValue("scheduled", event.target.checked)}
+            aria-checked={scheduled}
+            aria-label={t("savingPlan.form.scheduleToggleTitle")}
+          />
+          <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-indigo-600 dark:bg-neutral-700" />
+          <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+        </label>
+      </div>
+
+      <div className={`grid gap-4 ${scheduled ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+        {scheduled && (
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-due">
+              {t("savingPlan.form.targetMonth")} <span className="text-red-600">*</span>
+            </label>
+            <input
+              {...register("targetMonth")}
+              id="saving-plan-due"
+              type="month"
+              aria-invalid={!!errors.targetMonth}
+              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400" aria-live="polite">
+              {dueLabel}
+            </p>
+            {errors.targetMonth && (
+              <p role="alert" className="mt-1 text-xs text-red-600">{errors.targetMonth.message}</p>
+            )}
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-amount">
-            {t("savingPlan.form.amount")} <span className="text-red-600">*</span>
+            {t("savingPlan.form.amount")}{" "}
+            <span className="text-xs font-normal text-gray-400 dark:text-neutral-500">
+              {t("savingPlan.form.amountOptional")}
+            </span>
           </label>
           <input
             {...register("amount")}
@@ -277,7 +328,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
           />
           <p id="saving-amount-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
-            {t("savingPlan.form.amountHint")}
+            {scheduled ? t("savingPlan.form.amountHint") : t("savingPlan.form.amountUndatedHint")}
           </p>
           {errors.amount && (
             <p role="alert" className="mt-1 text-xs text-red-600">{errors.amount.message}</p>

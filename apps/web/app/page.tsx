@@ -164,13 +164,17 @@ export default function HomePage() {
   const carryover = summary.carryoverFromLastMonth || 0;
   const projectedIncome = Math.max(0, summary.projectedIncomeTotal ?? (summary.incomeTotal + (summary.recurringIncomeTotal || 0)));
   const projectedOutcome = Math.max(0, summary.projectedOutcomeTotal ?? (summary.outcomeTotal + (summary.recurringOutcomeTotal || 0)));
-  const totalSavingsTransfer = Math.max(0, summary.monthlySavingsActual || 0);
+  // Net savings this month: positive = money set aside, negative = withdrawn back to spending.
+  const savingsNet = summary.monthlySavingsActual || 0;
+  const totalSavingsTransfer = Math.max(0, savingsNet); // deposits, shown as "saved"
+  const savingsWithdrawn = Math.max(0, -savingsNet); // withdrawals returning to the budget
   const projectedSpent = projectedOutcome + totalSavingsTransfer;
   // Expenses-only and savings-only percentages for the segmented progress bar
   const projectedExpenses = projectedOutcome;
-  // Available budget = carryover from previous month + income of current month (incl. recurring).
+  // Available budget = carryover from previous month + income of current month (incl. recurring)
+  // + any savings withdrawn back into everyday spending this month.
   // Carryover is intentionally NOT floored at 0 so a negative carryover reduces the budget honestly.
-  const availableBudget = carryover + projectedIncome;
+  const availableBudget = carryover + projectedIncome + savingsWithdrawn;
   const projectedLeft = availableBudget - projectedSpent;
   const spentPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
   const expensesPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedExpenses / availableBudget) * 100)) : 0;
@@ -260,7 +264,7 @@ export default function HomePage() {
   const actualSavings = summary.monthlySavingsActual || 0;
   const plannedColor = "#6366F1"; // indigo
   const actualColor = "#16A34A"; // green
-  const savingsProgress = plannedSavings > 0 ? Math.min(100, Math.round((actualSavings / plannedSavings) * 100)) : 0;
+  const savingsProgress = plannedSavings > 0 ? Math.max(0, Math.min(100, Math.round((actualSavings / plannedSavings) * 100))) : 0;
 
   // Saving goals completed this month (by completion/withdrawal date)
   const completedGoals = summary.completedGoals || [];
@@ -451,11 +455,18 @@ export default function HomePage() {
                   <span>{t("dashboard.left")}: {formatCurrency(projectedLeft)}</span>
                 </div>
                 <div className="text-xs text-gray-500 dark:text-neutral-400">
-                  {t("dashboard.budgetBreakdown", {
-                    carryover: formatCurrency(carryover),
-                    income: formatCurrency(projectedIncome),
-                    budget: formatCurrency(availableBudget)
-                  })}
+                  {savingsWithdrawn > 0
+                    ? t("dashboard.budgetBreakdownWithWithdrawal", {
+                        carryover: formatCurrency(carryover),
+                        income: formatCurrency(projectedIncome),
+                        withdrawn: formatCurrency(savingsWithdrawn),
+                        budget: formatCurrency(availableBudget)
+                      })
+                    : t("dashboard.budgetBreakdown", {
+                        carryover: formatCurrency(carryover),
+                        income: formatCurrency(projectedIncome),
+                        budget: formatCurrency(availableBudget)
+                      })}
                 </div>
               </div>
               <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
@@ -601,9 +612,11 @@ export default function HomePage() {
             </div>
             <div>
               <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.actualSaved")}</p>
-              <p className="text-2xl font-semibold" style={{ color: actualColor }}>{actualSavings.toFixed(0)} €</p>
+              <p className="text-2xl font-semibold" style={{ color: actualSavings >= 0 ? actualColor : "#D97706" }}>{actualSavings.toFixed(0)} €</p>
               <p className="text-xs text-gray-500 dark:text-neutral-400">
-                {t("dashboard.percentOfTarget", { percent: savingsProgress })}
+                {actualSavings >= 0
+                  ? t("dashboard.percentOfTarget", { percent: savingsProgress })
+                  : t("dashboard.savingsNetWithdrawn")}
               </p>
             </div>
             <div>
