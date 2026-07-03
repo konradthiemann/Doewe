@@ -292,3 +292,47 @@ describe("/api/analytics/summary", () => {
     expect(availableBudget - projectedSpent).toBe(1150);
   }, 30000);
 });
+
+describe("/api/analytics/summary — savings withdrawal", () => {
+  // Adds a POSITIVE savings transaction (a withdrawal) on top of the base setup.
+  // Runs after the base suite; cleans up its own transaction afterwards.
+  beforeAll(async () => {
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    await prisma.transaction.create({
+      data: {
+        accountId: testAccountId,
+        categoryId: savingsCategoryId,
+        amountCents: 4000, // +40€ withdrawn from savings this month
+        description: "Withdrawal test tx",
+        occurredAt: new Date(thisMonthStart.getTime() + 6 * 86400000)
+      }
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.transaction.deleteMany({
+      where: { accountId: testAccountId, description: "Withdrawal test tx" }
+    });
+  });
+
+  it("counts a positive savings transaction as a net-savings reduction, not income", async () => {
+    const routes = await import("../app/api/analytics/summary/route");
+    const res = await routes.GET();
+    const data = await res.json();
+    // Base savings deposit -100 plus a +40 withdrawal → net 60 saved this month.
+    expect(data.monthlySavingsActual).toBe(60);
+    // The +40 must NOT inflate income — still just the +500 salary.
+    expect(data.incomeTotal).toBe(500);
+    // remaining = 500 income - 200 outcome - 60 net savings = 240.
+    expect(data.remaining).toBe(240);
+  }, 30000);
+
+  it("raises the total balance by the withdrawn amount", async () => {
+    const routes = await import("../app/api/analytics/summary/route");
+    const res = await routes.GET();
+    const data = await res.json();
+    // Base totalBalance 900 + 40 withdrawal = 940.
+    expect(data.totalBalance).toBe(940);
+  }, 30000);
+});

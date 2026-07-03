@@ -69,10 +69,12 @@ export async function GET() {
 
       if (tMs >= startMs && tMs < endMs) {
         const amt = t.amountCents;
-        if (amt >= 0) {
-          income += amt;
-        } else if (savingsCatId && t.categoryId === savingsCatId) {
+        const isSavings = savingsCatId != null && t.categoryId === savingsCatId;
+        if (isSavings) {
+          // Netto-Sparen: Einzahlung (negativ) erhöht, Entnahme (positiv) verringert.
           savings += -amt;
+        } else if (amt >= 0) {
+          income += amt;
         } else {
           outcome += -amt;
         }

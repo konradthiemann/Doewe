@@ -41,7 +41,7 @@ const MONTHS_BACK = 36;
  * UND ggf. {@link VERSION_PROBE_CATEGORY} anpassen, damit bestehende
  * Demo-Datenbanken beim nächsten Seed-Lauf neu generiert werden.
  */
-const DEMO_DATA_VERSION = 2;
+const DEMO_DATA_VERSION = 3;
 
 /**
  * Kategorie, die ausschließlich diese Datensatz-Version anlegt. Fehlt sie im
@@ -401,6 +401,16 @@ function buildBudgets(accountId, categoryMap, now) {
   ];
   for (const g of activeGoals) {
     budgets.push({ accountId, categoryId: null, title: g.title, month: g.month, year: g.year, amountCents: g.amountCents });
+  }
+
+  // Terminlose Vorhaben (Ideen-Backlog, month/year null). Eines mit Zielbetrag,
+  // eines ohne — zählen nicht zum Sparfortschritt, dienen nur dem Überblick.
+  const undatedGoals = [
+    { title: "Neue Couch", amountCents: 150000 },
+    { title: "Küche renovieren", amountCents: null }
+  ];
+  for (const g of undatedGoals) {
+    budgets.push({ accountId, categoryId: null, title: g.title, month: null, year: null, amountCents: g.amountCents });
   }
 
   // Abgeschlossene Sparziele (Historie) mit Abschlusszeitpunkt + entnommenem Betrag.

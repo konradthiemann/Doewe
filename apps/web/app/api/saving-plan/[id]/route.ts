@@ -5,16 +5,33 @@ import { z } from "zod";
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 
-const UpdateSavingPlanInput = z.object({
-  title: z
-    .string()
-    .transform((value) => ensureNonEmpty(value))
-    .transform((value) => value.trim())
-    .optional(),
-  targetMonth: z.number().int().min(1).max(12).optional(),
-  targetYear: z.number().int().min(1970).max(9999).optional(),
-  amountCents: z.number().int().min(1).optional()
-});
+const UpdateSavingPlanInput = z
+  .object({
+    title: z
+      .string()
+      .transform((value) => ensureNonEmpty(value))
+      .transform((value) => value.trim())
+      .optional(),
+    // `undefined` = leave unchanged; `null` = clear (un-schedule / remove amount).
+    targetMonth: z.number().int().min(1).max(12).nullish(),
+    targetYear: z.number().int().min(1970).max(9999).nullish(),
+    amountCents: z.number().int().min(1).nullish()
+  })
+  .refine(
+    (data) => {
+      // month and year must be updated together and share their null-ness,
+      // so a goal is never left half-scheduled.
+      const monthProvided = data.targetMonth !== undefined;
+      const yearProvided = data.targetYear !== undefined;
+      if (monthProvided !== yearProvided) return false;
+      if (!monthProvided) return true;
+      return (data.targetMonth == null) === (data.targetYear == null);
+    },
+    {
+      message: "targetMonth and targetYear must be updated together (both a value or both null)",
+      path: ["targetMonth"]
+    }
+  );
 
 export async function GET(
   _request: Request,
@@ -81,10 +98,13 @@ export async function PATCH(
   }
 
   const json = await request.json();
+  // Accept legacy `month`/`year` aliases, but preserve an explicit `null`
+  // (used to un-schedule a goal) — `??` would swallow it, so only fall back
+  // to the alias when the primary key is genuinely absent.
   const parsed = UpdateSavingPlanInput.safeParse({
     ...json,
-    targetMonth: json?.targetMonth ?? json?.month,
-    targetYear: json?.targetYear ?? json?.year
+    targetMonth: json?.targetMonth !== undefined ? json.targetMonth : json?.month,
+    targetYear: json?.targetYear !== undefined ? json.targetYear : json?.year
   });
 
   if (!parsed.success) {

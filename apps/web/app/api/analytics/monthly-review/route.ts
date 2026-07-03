@@ -116,10 +116,11 @@ export async function GET(request: Request) {
     const isSavings = savingsCatId !== null && tx.categoryId === savingsCatId;
 
     if (isCurrent) {
-      if (amt >= 0) {
-        incomeCents += amt;
-      } else if (isSavings) {
+      if (isSavings) {
+        // Netto-Sparen: Einzahlung (negativ) erhöht, Entnahme (positiv) verringert.
         savingsCents += -amt;
+      } else if (amt >= 0) {
+        incomeCents += amt;
       } else {
         outcomeCents += -amt;
         const key = tx.categoryId ?? "uncategorized";
@@ -128,10 +129,10 @@ export async function GET(request: Request) {
         byCategoryCents[key].count += 1;
       }
     } else if (isPrev) {
-      if (amt >= 0) {
-        prevIncomeCents += amt;
-      } else if (isSavings) {
+      if (isSavings) {
         prevSavingsCents += -amt;
+      } else if (amt >= 0) {
+        prevIncomeCents += amt;
       } else {
         prevOutcomeCents += -amt;
       }
@@ -153,7 +154,7 @@ export async function GET(request: Request) {
   });
   const budgetMap: Record<string, number> = {};
   for (const b of budgets) {
-    if (b.categoryId) budgetMap[b.categoryId] = b.amountCents;
+    if (b.categoryId) budgetMap[b.categoryId] = b.amountCents ?? 0;
   }
 
   // Resolve category names for all relevant IDs
