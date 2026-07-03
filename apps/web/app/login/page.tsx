@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
@@ -208,6 +209,17 @@ export default function LoginPage() {
           >
             {loading ? "Please wait…" : mode === "login" ? "Login" : "Create account"}
           </button>
+
+          {mode === "login" && (
+            <p className="text-center text-sm">
+              <Link
+                href="/forgot-password"
+                className="font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                Passwort vergessen?
+              </Link>
+            </p>
+          )}
 
           {error && (
             <p id="auth-error" role="alert" className="text-sm text-red-600">

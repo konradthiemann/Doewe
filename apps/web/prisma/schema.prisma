@@ -114,7 +114,26 @@ model User {
   password  String
   name      String?
   createdAt DateTime  @default(now())
+  // Bumped on every password change/reset. JWTs issued before this instant are
+  // treated as stale and rejected, so a reset evicts existing sessions.
+  passwordChangedAt DateTime?
 
   accounts  Account[]
   categories Category[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+// One-time tokens for the "forgot password" flow. Only the SHA-256 hash of the
+// token is stored — the plaintext lives solely in the emailed reset link.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

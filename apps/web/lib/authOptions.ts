@@ -43,14 +43,37 @@ export const authOptions: NextAuthOptions = {
         const ok = await compare(credentials.password, user.password);
         if (!ok) return null;
 
-        return { id: user.id, email: user.email, name: user.name ?? undefined };
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name ?? undefined,
+          passwordChangedAt: user.passwordChangedAt
+        } as { id: string; email: string; name?: string; passwordChangedAt: Date | null };
       }
     })
   ],
   callbacks: {
     async jwt({ token, user }) {
+      // Sign-in: stamp the token with the user's current passwordChangedAt.
       if (user) {
         token.userId = (user as { id?: string }).id;
+        const changedAt = (user as { passwordChangedAt?: Date | null }).passwordChangedAt;
+        token.pwdStamp = changedAt ? new Date(changedAt).getTime() : 0;
+        return token;
+      }
+
+      // Subsequent requests: reject the token if the password changed after it
+      // was issued (a reset/change evicts previously-issued sessions).
+      if (token.userId) {
+        const current = await prisma.user.findUnique({
+          where: { id: token.userId as string },
+          select: { passwordChangedAt: true }
+        });
+        if (!current) return {};
+        const dbStamp = current.passwordChangedAt ? current.passwordChangedAt.getTime() : 0;
+        if (dbStamp > ((token.pwdStamp as number | undefined) ?? 0)) {
+          return {}; // stale token → no userId → getSessionUser() returns null (401)
+        }
       }
       return token;
     },

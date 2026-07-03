@@ -27,6 +27,23 @@ export const env = createEnv({
     /** Test-only bypass — must never be set in production. */
     TEST_USER_ID_BYPASS: z.string().optional(),
     TEST_USER_EMAIL_BYPASS: z.string().email().optional(),
+    /**
+     * SMTP transport for outgoing mail (e.g. Gmail: smtp.gmail.com:465 with an
+     * App Password). Takes precedence over Resend when SMTP_HOST/USER/PASS are set.
+     * Note: Railway disables outbound SMTP on Free/Trial/Hobby plans (Pro+ only).
+     */
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().optional(),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    /**
+     * Resend API key for sending transactional email (password reset links).
+     * Used when SMTP is not configured. When neither SMTP nor Resend is set, the
+     * mailer logs the reset link to the server console — fine for local dev only.
+     */
+    RESEND_API_KEY: z.string().optional(),
+    /** Sender address for outgoing mail, e.g. `Doewe <konrad.thiemann@gmail.com>`. */
+    EMAIL_FROM: z.string().optional(),
   },
   client: {},
   runtimeEnv: {
@@ -39,6 +56,12 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     TEST_USER_ID_BYPASS: process.env.TEST_USER_ID_BYPASS,
     TEST_USER_EMAIL_BYPASS: process.env.TEST_USER_EMAIL_BYPASS,
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });
