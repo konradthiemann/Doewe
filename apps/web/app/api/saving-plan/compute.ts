@@ -8,18 +8,23 @@
  * Completed goals leave the forward-looking plan: they no longer count toward the
  * planned total nor the suggested monthly rate, and the amount withdrawn for them is
  * subtracted from the savings pool that funds the remaining active goals.
+ *
+ * "Undated" goals (month/year null) are an idea backlog with no deadline. They do
+ * NOT participate in the forward-looking plan at all: they are excluded from the
+ * planned total, the suggested monthly rate, and the savings-pool cascade.
  */
 
 export type SavingPlanGoal = {
-  amountCents: number;
+  /** goal amount; null = no amount set yet (undated ideas may omit it) */
+  amountCents: number | null;
   /** null = active, set = completed */
   completedAt: Date | string | null;
   /** amount withdrawn from savings on completion (set only when completed) */
   spentCents: number | null;
-  /** target month 1-12 */
-  month: number;
-  /** target year */
-  year: number;
+  /** target month 1-12, null = undated */
+  month: number | null;
+  /** target year, null = undated */
+  year: number | null;
 };
 
 export type SavingPlanTotals = {
@@ -39,6 +44,11 @@ function isCompleted(goal: SavingPlanGoal): boolean {
   return goal.completedAt != null;
 }
 
+/** A goal drives the forward-looking plan only if it has a concrete deadline. */
+function isScheduled(goal: SavingPlanGoal): goal is SavingPlanGoal & { month: number; year: number } {
+  return goal.month != null && goal.year != null;
+}
+
 /**
  * Compute the saving-plan totals.
  *
@@ -51,7 +61,12 @@ export function computeSavingPlanTotals(
   rawSavingsBalance: number,
   now: Date
 ): SavingPlanTotals {
-  const activeGoals = goals.filter((goal) => !isCompleted(goal));
+  // Only dated, non-completed goals drive the forward-looking plan.
+  // Undated goals are an idea backlog and are ignored here entirely.
+  const activeGoals = goals.filter(
+    (goal): goal is SavingPlanGoal & { month: number; year: number } =>
+      !isCompleted(goal) && isScheduled(goal)
+  );
 
   const withdrawnForCompletedCents = goals
     .filter(isCompleted)
@@ -59,7 +74,7 @@ export function computeSavingPlanTotals(
 
   const availableCents = Math.max(rawSavingsBalance - withdrawnForCompletedCents, 0);
 
-  const totalTargetCents = activeGoals.reduce((sum, goal) => sum + goal.amountCents, 0);
+  const totalTargetCents = activeGoals.reduce((sum, goal) => sum + (goal.amountCents ?? 0), 0);
 
   // ── Suggested equal monthly savings (active goals only) ──────────
   // Find the minimum constant monthly amount X such that, by each active
@@ -80,7 +95,7 @@ export function computeSavingPlanTotals(
     let cumulativeAmount = 0;
 
     for (const goal of activeGoals) {
-      cumulativeAmount += goal.amountCents;
+      cumulativeAmount += goal.amountCents ?? 0;
 
       // How much of the cumulative target is NOT yet covered by existing savings
       const cumulativeRemaining = Math.max(cumulativeAmount - usedAvailable, 0);

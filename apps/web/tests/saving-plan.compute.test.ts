@@ -25,6 +25,16 @@ function completedGoal(amountCents: number, spentCents: number): SavingPlanGoal 
   };
 }
 
+function undatedGoal(amountCents: number | null): SavingPlanGoal {
+  return {
+    amountCents,
+    completedAt: null,
+    spentCents: null,
+    month: null,
+    year: null
+  };
+}
+
 describe("computeSavingPlanTotals", () => {
   it("computes target and suggested monthly for a single active goal", () => {
     const totals = computeSavingPlanTotals([activeGoal(120000, 3)], 0, NOW);
@@ -67,5 +77,22 @@ describe("computeSavingPlanTotals", () => {
     expect(totals.totalTargetCents).toBe(120000);
     // remaining 60000 over 3 months
     expect(totals.suggestedMonthlyCents).toBe(20000);
+  });
+
+  it("ignores undated goals in the planned total and suggested monthly rate", () => {
+    // Two undated ideas (one with an amount, one without) must not affect the plan.
+    const goals = [activeGoal(120000, 3), undatedGoal(500000), undatedGoal(null)];
+    const totals = computeSavingPlanTotals(goals, 0, NOW);
+
+    // Only the dated goal counts toward the plan.
+    expect(totals.totalTargetCents).toBe(120000);
+    expect(totals.suggestedMonthlyCents).toBe(40000);
+  });
+
+  it("returns a zero plan when only undated goals exist", () => {
+    const totals = computeSavingPlanTotals([undatedGoal(500000), undatedGoal(null)], 0, NOW);
+
+    expect(totals.totalTargetCents).toBe(0);
+    expect(totals.suggestedMonthlyCents).toBe(0);
   });
 });
