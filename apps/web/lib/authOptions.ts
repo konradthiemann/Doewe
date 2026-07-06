@@ -1,10 +1,11 @@
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { compare } from "bcryptjs";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 
 import { env } from "../env";
 
 import { prisma } from "./prisma";
+import { createUserWithDefaults } from "./userProvisioning";
 
 import type { NextAuthOptions } from "next-auth";
 
@@ -21,38 +22,82 @@ if (!env.NEXTAUTH_SECRET && env.NUXTAUTH_SECRET) {
   process.env.NEXTAUTH_SECRET = env.NUXTAUTH_SECRET;
 }
 
+// Google OAuth is optional: only enabled when both credentials are present.
+// We deliberately do NOT use the PrismaAdapter — the app's `Account` model is a
+// domain entity (a financial account), not the NextAuth OAuth-account table, and
+// sessions are JWT-based. User persistence for Google sign-in is handled manually
+// in the `signIn` callback below (find-or-create + default account/categories).
+const googleEnabled = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+
+const providers: NextAuthOptions["providers"] = [
+  CredentialsProvider({
+    name: "Credentials",
+    credentials: {
+      email: { label: "Email", type: "email" },
+      password: { label: "Password", type: "password" }
+    },
+    async authorize(credentials) {
+      if (!credentials?.email || !credentials?.password) return null;
+
+      const user = await prisma.user.findUnique({ where: { email: credentials.email } });
+      if (!user || !user.password) return null;
+
+      const ok = await compare(credentials.password, user.password);
+      if (!ok) return null;
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name ?? undefined,
+        passwordChangedAt: user.passwordChangedAt
+      } as { id: string; email: string; name?: string; passwordChangedAt: Date | null };
+    }
+  })
+];
+
+if (googleEnabled) {
+  providers.push(
+    GoogleProvider({
+      clientId: env.GOOGLE_CLIENT_ID as string,
+      clientSecret: env.GOOGLE_CLIENT_SECRET as string,
+      allowDangerousEmailAccountLinking: true
+    })
+  );
+}
+
 export const authOptions: NextAuthOptions = {
   // NEXTAUTH_SECRET is required in production; AUTH_SECRET keeps NextAuth v5 compatibility
   secret: env.NEXTAUTH_SECRET ?? env.NUXTAUTH_SECRET ?? env.AUTH_SECRET,
-  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
-  providers: [
-    CredentialsProvider({
-      name: "Credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
-
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
-        if (!user || !user.password) return null;
-
-        const ok = await compare(credentials.password, user.password);
-        if (!ok) return null;
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name ?? undefined,
-          passwordChangedAt: user.passwordChangedAt
-        } as { id: string; email: string; name?: string; passwordChangedAt: Date | null };
-      }
-    })
-  ],
+  providers,
   callbacks: {
+    async signIn({ user, account, profile }) {
+      // Credentials sign-in already resolved the DB user in `authorize`.
+      if (account?.provider !== "google") return true;
+
+      const email = user.email ?? profile?.email;
+      if (!email) return false;
+
+      // Find or provision the local user, then hand the DB id + password stamp
+      // back on the `user` object so the jwt callback below stamps the token.
+      let dbUser = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, passwordChangedAt: true }
+      });
+      if (!dbUser) {
+        const created = await createUserWithDefaults({
+          email,
+          name: (profile?.name ?? user.name) || null,
+          password: null
+        });
+        dbUser = { id: created.id, passwordChangedAt: created.passwordChangedAt };
+      }
+
+      user.id = dbUser.id;
+      (user as { passwordChangedAt?: Date | null }).passwordChangedAt = dbUser.passwordChangedAt;
+      return true;
+    },
     async jwt({ token, user }) {
       // Sign-in: stamp the token with the user's current passwordChangedAt.
       if (user) {
