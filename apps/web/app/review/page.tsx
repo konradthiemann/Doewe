@@ -339,8 +339,8 @@ function ReviewPage() {
                 </div>
               </dl>
 
-              {/* Balance change */}
-              <div className="mt-4 flex items-center gap-3 text-sm text-gray-600 dark:text-neutral-400">
+              {/* Balance change — wraps on narrow screens to avoid horizontal overflow */}
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 dark:text-neutral-400">
                 <span>
                   {t("review.balanceAtStart")}:{" "}
                   <span className="font-medium tabular-nums text-gray-800 dark:text-neutral-200">
