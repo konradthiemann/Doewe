@@ -8,7 +8,7 @@ Dieses Dokument beschreibt den Workflow für Datenbankänderungen zwischen lokal
 |----------|-----------|-------------------|
 | Lokal (dev) | PostgreSQL localhost | `prisma db push` oder `prisma migrate dev` |
 | CI Tests | PostgreSQL (GitHub Actions Service) | `prisma db push` |
-| Production | Production PostgreSQL | `prisma migrate deploy` |
+| Production | Production PostgreSQL | `prisma migrate deploy` (Railway **Pre-Deploy Command**) |
 
 ## Wichtige Befehle
 
@@ -63,9 +63,21 @@ git commit -m "feat(db): add dayOfMonth column to RecurringTransaction"
 
 Wenn Code auf `main` gepusht wird:
 
-1. **CI Job** (ci.yml): Führt Tests mit `db push` aus (temporäre Test-DB)
-2. **Deploy Job** (deploy.yml): Führt `prisma migrate deploy` auf Production aus
-3. **Deployment**: Anwendung wird mit neuem Schema deployed
+1. **CI Job** (`ci.yml`): Führt Tests mit `db push` aus (temporäre Test-DB)
+2. **Railway Build & Deploy**: Railway baut das Image und führt vor dem Start das
+   **Pre-Deploy Command** aus:
+   ```
+   npm --workspace @doewe/web run prisma:migrate:deploy
+   ```
+   Der Befehl läuft zwischen Build und Start im privaten Railway-Netz und nutzt die
+   interne `DATABASE_URL`-Referenz (`postgres.railway.internal`). Schlägt die
+   Migration fehl, wird **nicht deployt** (der alte Container bleibt aktiv).
+3. **Deployment**: Anwendung wird mit neuem Schema gestartet.
+
+> Es gibt **keinen** GitHub-Actions-Deploy-Job mehr. Der frühere `deploy.yml`-Job
+> (mit `DATABASE_URL`-Secret über den Public-Proxy) wurde entfernt, weil er bei jeder
+> Passwort-Rotation brach. Migrationen laufen jetzt ausschließlich als Railway
+> Pre-Deploy Command. Details: [Deployment](deployment).
 
 ---
 
@@ -97,7 +109,8 @@ DATABASE_URL="<production_url>" npx prisma migrate status
 DATABASE_URL="<production_url>" npx prisma migrate deploy
 ```
 
-Oder: Manuell den Deploy-Workflow in GitHub Actions triggern.
+Oder: In Railway einen **Redeploy** des Service `@doewe/web` auslösen — das
+Pre-Deploy Command führt die ausstehenden Migrationen erneut aus.
 
 ### Problem: Migration schlägt auf Production fehl
 
@@ -125,25 +138,27 @@ npx prisma migrate deploy
 
 ---
 
-## GitHub Actions Secrets
+## Migrations-Konfiguration (Railway)
 
-Erforderliche Secrets für Production-Migrationen:
+Die Production-Migration läuft als **Pre-Deploy Command** im Railway-Service
+`@doewe/web` (*Settings → Deploy → Pre-Deploy Command*):
 
-| Secret | Beschreibung |
-|--------|--------------|
-| `DATABASE_URL` | **PUBLIC** PostgreSQL Connection String für Production |
+```
+npm --workspace @doewe/web run prisma:migrate:deploy
+```
 
-**⚠️ WICHTIG für Railway/Supabase/etc.:**
-- Verwende die **PUBLIC/EXTERNAL** Database URL, nicht die interne!
-- Interne URLs (z.B. `postgres.railway.internal`) funktionieren nur innerhalb des Hosting-Netzwerks
-- GitHub Actions benötigt die öffentliche URL
+**Verbindung:**
+- Das Pre-Deploy Command läuft **im privaten Railway-Netz** und nutzt die interne
+  `DATABASE_URL`-Referenz (`postgres.railway.internal`) — kein Public-Proxy, kein
+  GitHub-Secret nötig.
+- Die **öffentliche** URL (`DATABASE_PUBLIC_URL`, z.B. `…proxy.rlwy.net:PORT`) wird nur
+  noch für **manuelle** Migrationen/Diagnose von außerhalb Railways gebraucht
+  (Project → PostgreSQL → Variables → `DATABASE_PUBLIC_URL`).
 
-**Railway Beispiel:**
-- ❌ Falsch: `postgresql://...@postgres.railway.internal:5432/railway`
-- ✅ Richtig: `postgresql://...@roundhouse.proxy.rlwy.net:12345/railway`
-
-In Railway findest du die öffentliche URL unter:
-- Project → PostgreSQL → Connect → `DATABASE_PUBLIC_URL`
+> Früher lief die Migration über einen GitHub-Actions-Job mit einem
+> `DATABASE_URL`-Secret (Public-Proxy). Dieser Job wurde entfernt — bei jeder
+> Passwort-Rotation der DB brach das Secret. Nichts committen, was die reale URL
+> enthält.
 
 ---
 
@@ -155,7 +170,7 @@ In Railway findest du die öffentliche URL unter:
 - [ ] Migration-Datei committed
 - [ ] Code auf `develop` getestet
 - [ ] PR nach `main` erstellt
-- [ ] Nach Merge: Deploy-Workflow prüfen (Migrationen erfolgreich?)
+- [ ] Nach Merge: Railway-Deploy-Log prüfen (Pre-Deploy Migration erfolgreich?)
 - [ ] Production-App testen
 
 ---
@@ -166,7 +181,9 @@ Wenn du Schema-Änderungen machst:
 
 1. **IMMER** `prisma migrate dev` verwenden, nicht `db push`
 2. **IMMER** die Migration-Dateien committen
-3. **PRÜFEN** ob `.github/workflows/deploy.yml` existiert und `prisma migrate deploy` ausführt
+3. **NICHT** auf einen GitHub-Actions-Deploy-Job vertrauen — die Migration läuft als
+   Railway **Pre-Deploy Command** (`prisma migrate deploy`); nach dem Merge den
+   Railway-Deploy-Log prüfen
 4. **DOKUMENTIEREN** Schema-Änderungen in der Commit-Message
 
 Beispiel-Workflow:
@@ -206,8 +223,7 @@ npx prisma migrate status
 npx prisma migrate deploy
 ```
 
-Oder über GitHub Actions:
-1. Gehe zu Actions → Deploy
-2. Klicke "Run workflow"
-3. Wähle `main` Branch
-4. Prüfe Logs für Erfolg/Fehler
+Oder über Railway:
+1. Service `@doewe/web` → **Redeploy** auslösen
+2. Das Pre-Deploy Command führt `prisma migrate deploy` aus
+3. Deploy-Log auf Erfolg/Fehler prüfen (bei Fehler bleibt der alte Container aktiv)

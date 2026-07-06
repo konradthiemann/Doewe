@@ -61,6 +61,104 @@ NextAuth handler for sign-in, sign-out, and session management. Follows the Next
 
 **Success:** Sets session cookie, redirects or returns session JSON depending on `callbackUrl`.
 
+Sessions are **JWT** (no database session table). Each JWT is stamped with the user's
+`passwordChangedAt`; the `jwt` callback re-reads that value from the DB on every request
+and rejects tokens issued before the last password change. A password reset or change
+therefore **evicts all other active sessions**.
+
+> Only email/password (Credentials) sign-in is available in this build. There is **no**
+> OAuth/Google provider wired up (`authOptions.ts` registers `CredentialsProvider` only).
+
+---
+
+### `POST /api/auth/forgot-password`
+
+Starts the "forgot password" flow. Always returns a generic `200` — it never reveals
+whether an account exists (anti-enumeration), and the outbound email is sent
+fire-and-forget so response timing does not leak account existence.
+
+**Auth required:** No
+
+**Request body:**
+```json
+{ "email": "anna@example.de", "locale": "de" }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `email` | string | Valid email format |
+| `locale` | `"de" \| "en"` | Optional — email language |
+
+**Success response — `200 OK`:** `{ "ok": true }` (same answer for unknown/invalid emails)
+
+**Rate limits:** 5/15 min per IP, 5/60 min per email (`429` on exceed).
+
+When the email exists, a single-use reset token (only its SHA-256 hash is stored) is
+created with a limited TTL, any previous tokens are invalidated, and a link to
+`/reset-password?token=…` is emailed. The link's base URL comes from `NEXTAUTH_URL`
+(never the request `Host` header in production — prevents host-header injection).
+
+---
+
+### `GET /api/auth/reset-password?token=…`
+
+Pre-checks a reset link before showing the form.
+
+**Auth required:** No
+
+**Success response — `200 OK`:** `{ "valid": true }` (false if missing, used, or expired)
+
+**Rate limit:** 30/15 min per IP.
+
+---
+
+### `POST /api/auth/reset-password`
+
+Completes the reset with a valid token. Consumes the token (single-use), drops the
+user's other reset tokens, sets `passwordChangedAt` (evicting old sessions).
+
+**Auth required:** No
+
+**Request body:**
+```json
+{ "token": "…", "newPassword": "min8chars" }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `token` | string | Non-empty; must be unused and unexpired |
+| `newPassword` | string | Minimum 8 characters |
+
+**Success response — `200 OK`:** `{ "ok": true }`
+
+| Status | Reason |
+|---|---|
+| `400` | Missing/invalid fields, or `INVALID_OR_EXPIRED_TOKEN` |
+| `429` | Rate limit (10/15 min per IP) |
+
+---
+
+### `POST /api/auth/change-password`
+
+Authenticated password change from Settings. Verifies the current password, rejects an
+unchanged password, sets `passwordChangedAt` (evicting other sessions), and invalidates
+outstanding reset links.
+
+**Auth required:** Yes
+
+**Request body:**
+```json
+{ "currentPassword": "…", "newPassword": "min8chars" }
+```
+
+**Success response — `200 OK`:** `{ "ok": true }`
+
+| Status | Reason |
+|---|---|
+| `400` | Invalid fields, `INVALID_CURRENT_PASSWORD`, or `SAME_PASSWORD` |
+| `401` | Unauthorized |
+| `429` | Rate limit (10/15 min per user) |
+
 ---
 
 ## Accounts

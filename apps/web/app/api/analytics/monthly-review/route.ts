@@ -11,6 +11,7 @@
  * - `balanceAtEndCents`        — Kontostand am Monatsende
  * - `savingsRatePct`           — Sparquote in % (savingsCents / incomeCents)
  * - `categories`               — Ausgaben je Kategorie inkl. Budget-Vergleich
+ * - `incomeCategories`         — Einnahmen je Quelle/Kategorie (größte zuerst)
  * - `topExpenses`              — Die 5 größten Einzelausgaben des Monats
  * - `completedGoals`           — In diesem Monat als erledigt markierte Sparziele
  * - `completedGoalsSpentCents` — Summe der dafür entnommenen Beträge
@@ -107,6 +108,7 @@ export async function GET(request: Request) {
   let prevOutcomeCents = 0;
   let prevSavingsCents = 0;
   const byCategoryCents: Record<string, { spentCents: number; count: number }> = {};
+  const incomeByCategoryCents: Record<string, { amountCents: number; count: number }> = {};
 
   for (const tx of txs) {
     const tMs = tx.occurredAt.getTime();
@@ -121,6 +123,10 @@ export async function GET(request: Request) {
         savingsCents += -amt;
       } else if (amt >= 0) {
         incomeCents += amt;
+        const key = tx.categoryId ?? "uncategorized";
+        if (!incomeByCategoryCents[key]) incomeByCategoryCents[key] = { amountCents: 0, count: 0 };
+        incomeByCategoryCents[key].amountCents += amt;
+        incomeByCategoryCents[key].count += 1;
       } else {
         outcomeCents += -amt;
         const key = tx.categoryId ?? "uncategorized";
@@ -161,6 +167,7 @@ export async function GET(request: Request) {
   const catIds = Array.from(
     new Set([
       ...Object.keys(byCategoryCents).filter((id) => id !== "uncategorized"),
+      ...Object.keys(incomeByCategoryCents).filter((id) => id !== "uncategorized"),
       ...Object.keys(budgetMap)
     ])
   );
@@ -210,6 +217,21 @@ export async function GET(request: Request) {
       transactionCount: byCategoryCents["uncategorized"].count
     });
   }
+
+  // Income breakdown by source (category), largest first
+  const incomeCategoryList: Array<{
+    id: string;
+    name: string;
+    amountCents: number;
+    transactionCount: number;
+  }> = Object.entries(incomeByCategoryCents)
+    .map(([id, v]) => ({
+      id,
+      name: id === "uncategorized" ? "Uncategorized" : (catNameMap[id] ?? id),
+      amountCents: v.amountCents,
+      transactionCount: v.count
+    }))
+    .sort((a, b) => b.amountCents - a.amountCents);
 
   // Top 5 individual expenses — txs is pre-sorted by amountCents ASC (most negative first)
   const topExpenses = txs
@@ -288,6 +310,7 @@ export async function GET(request: Request) {
     balanceAtEndCents,
     savingsRatePct,
     categories: categoryList,
+    incomeCategories: incomeCategoryList,
     topExpenses,
     completedGoals,
     completedGoalsSpentCents,
