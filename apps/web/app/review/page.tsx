@@ -270,7 +270,7 @@ function ReviewPage() {
       {!loading && data && (
         <>
           <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
           {/* Verdict + KPI card */}
           <section aria-labelledby="review-verdict">
             <div
@@ -438,7 +438,7 @@ function ReviewPage() {
             </div>
           </section>
           </div>
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
 
           {/* MoM comparison */}
           {momDeltas ? (
