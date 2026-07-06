@@ -398,6 +398,8 @@ export const en: Record<string, string> = {
   "review.balanceAtEnd": "Balance at end",
   "review.categoriesTitle": "Expenses by category",
   "review.categoriesEmpty": "No expenses this month.",
+  "review.incomeCategoriesTitle": "Income by source",
+  "review.incomeCategoriesEmpty": "No income this month.",
   "review.overBudget": "{amount} over budget",
   "review.underBudget": "{amount} under budget",
   "review.noBudget": "No budget set",

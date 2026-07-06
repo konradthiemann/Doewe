@@ -22,6 +22,12 @@ type ReviewData = {
     budgetCents: number | null;
     transactionCount: number;
   }>;
+  incomeCategories: Array<{
+    id: string;
+    name: string;
+    amountCents: number;
+    transactionCount: number;
+  }>;
   topExpenses: Array<{
     description: string;
     amountCents: number;
@@ -363,6 +369,53 @@ function ReviewPage() {
                   </span>
                 </span>
               </div>
+            </div>
+          </section>
+
+          {/* Income breakdown by source */}
+          <section aria-labelledby="review-income-categories">
+            <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
+              <h2 id="review-income-categories" className="text-lg font-medium mb-4">
+                {t("review.incomeCategoriesTitle")}
+              </h2>
+              {data.incomeCategories.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-neutral-400">
+                  {t("review.incomeCategoriesEmpty")}
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {data.incomeCategories.map((cat) => {
+                    const sharePct =
+                      data.incomeCents > 0
+                        ? Math.round((cat.amountCents / data.incomeCents) * 100)
+                        : 0;
+                    return (
+                      <li
+                        key={cat.id}
+                        className="rounded-md border border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800 p-3"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-900 dark:text-neutral-100">
+                            {cat.name}
+                          </span>
+                          <div className="flex items-center gap-2 text-xs tabular-nums">
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(cat.amountCents)}
+                            </span>
+                            <span className="text-gray-400 dark:text-neutral-500">{sharePct}%</span>
+                          </div>
+                        </div>
+                        <div className="relative h-2 w-full rounded bg-gray-200 dark:bg-neutral-700 overflow-hidden" aria-hidden="true">
+                          <div
+                            className="absolute inset-y-0 left-0 rounded bg-emerald-500 transition-all"
+                            style={{ width: `${sharePct}%` }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           </section>
 

@@ -199,6 +199,39 @@ class ImportPlan:
 
 # ---------- Plan builder ----------
 
+def _reconcile_to_cell(plan: ImportPlan, start_index: int, target_cents: int, label: str):
+    """Make the txs added since start_index net to the authoritative cell value
+    WITHOUT ever creating a wrong-signed transaction.
+
+    Analytics classifies income vs. expense purely by amount SIGN (not by
+    Category.isIncome). A reduction booked as an opposite-signed tx in the same
+    category would therefore be miscounted on the wrong ledger side (a phantom
+    income/expense). So:
+      - if the correction is on the category's own ledger side (adds income to an
+        income row / adds expense to an expense row) → append a same-signed
+        "(Anpassung)" tx;
+      - otherwise the correction REDUCES the total → fold it into the largest
+        same-side line item instead of emitting a wrong-signed tx.
+    target_cents is signed: positive for income rows, negative for expense rows.
+    """
+    items = plan.transactions[start_index:]
+    if not items:
+        return
+    diff = target_cents - sum(t.amount_cents for t in items)
+    if diff == 0:
+        return
+    income_side = target_cents >= 0
+    if (diff > 0) == income_side:
+        plan.transactions.append(PlannedTx(
+            month=items[0].month, day=DEFAULT_DAY, category=items[0].category,
+            is_income=income_side, description=f"{label} (Anpassung)", amount_cents=diff,
+        ))
+        return
+    same_side = [t for t in items if (t.amount_cents >= 0) == income_side]
+    target_tx = max(same_side, key=lambda t: abs(t.amount_cents))
+    target_tx.amount_cents += diff
+
+
 def _add_tx_from_note(plan: ImportPlan, note: str, month: int, category: str | None,
                       is_income: bool, label: str, prefix: str | None,
                       cell_ref: str):
@@ -238,13 +271,7 @@ def build_plan(wb_path: str) -> ImportPlan:
             if note and cell_cents:
                 before = len(plan.transactions)
                 _add_tx_from_note(plan, note, month, cat, is_income, label, prefix, f"{col}{row}")
-                parsed_sum = sum(t.amount_cents for t in plan.transactions[before:])
-                if parsed_sum != cell_cents:
-                    diff = cell_cents - parsed_sum
-                    plan.transactions.append(PlannedTx(
-                        month=month, day=DEFAULT_DAY, category=cat, is_income=is_income,
-                        description=f"{label} (Anpassung)", amount_cents=diff,
-                    ))
+                _reconcile_to_cell(plan, before, cell_cents, label)
             elif cell_cents:
                 plan.transactions.append(PlannedTx(
                     month=month, day=DEFAULT_DAY, category=cat, is_income=is_income,
@@ -263,14 +290,7 @@ def build_plan(wb_path: str) -> ImportPlan:
             if note and cell_cents:
                 before = len(plan.transactions)
                 _add_tx_from_note(plan, note, month, cat, is_income, label, prefix, f"{col}{row}")
-                parsed_sum = sum(t.amount_cents for t in plan.transactions[before:])
-                expected = -cell_cents  # expenses are negative
-                if parsed_sum != expected:
-                    diff = expected - parsed_sum
-                    plan.transactions.append(PlannedTx(
-                        month=month, day=DEFAULT_DAY, category=cat, is_income=False,
-                        description=f"{label} (Anpassung)", amount_cents=diff,
-                    ))
+                _reconcile_to_cell(plan, before, -cell_cents, label)
             elif note and not cell_cents:
                 # Comment exists but cell value is 0 → skip (cell is authoritative)
                 pass

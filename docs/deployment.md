@@ -58,11 +58,19 @@ dieser Gründe:
 > **nicht** einfach „neu deployt" werden – es braucht einen frischen Deploy (siehe
 > Troubleshooting).
 
-## Datenbank-Migrationen (`.github/workflows/deploy.yml`)
+## Datenbank-Migrationen (Railway Pre-Deploy Command)
 
-Bei Push auf `main` (außer reinen Docs-Änderungen) führt ein GitHub-Actions-Job
-`prisma migrate deploy` gegen die Produktions-DB aus. Dieser Job **deployt die App nicht** –
-das übernimmt Railway. Details: [Database Management](database_management).
+Migrationen laufen als **Pre-Deploy Command** direkt im Railway-Service `@doewe/web`
+(*Settings → Deploy → Pre-Deploy Command*):
+
+```
+npm --workspace @doewe/web run prisma:migrate:deploy
+```
+
+Der Befehl läuft zwischen Build und Start im privaten Railway-Netz und nutzt die interne
+`DATABASE_URL`-Referenz (`postgres.railway.internal`). Schlägt er fehl, wird **nicht deployt**.
+Dadurch entfällt der frühere GitHub-Actions-Job samt `DATABASE_URL`-Secret (Public-Proxy),
+der bei Passwort-Rotation brach. Details: [Database Management](database_management).
 
 ## Docs-Deploy (`.github/workflows/docs.yml`)
 
