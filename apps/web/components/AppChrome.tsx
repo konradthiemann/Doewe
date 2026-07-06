@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { isAuthRoute } from "../lib/authRoutes";
 import { useI18n } from "../lib/i18n";
 
 import BackToTopButton from "./BackToTopButton";
@@ -30,7 +31,8 @@ export default function AppChrome() {
     return () => document.removeEventListener("keydown", handleKey);
   }, [menuOpen]);
 
-  if (pathname === "/login") {
+  // Auth pages are shown to signed-out users — no app nav/sidebar chrome.
+  if (isAuthRoute(pathname)) {
     return null;
   }
 

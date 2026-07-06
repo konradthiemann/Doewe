@@ -3,6 +3,7 @@
 import { signOut, useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import ChangePasswordCard from "../../components/ChangePasswordCard";
 import PageContainer from "../../components/PageContainer";
 import { useI18n } from "../../lib/i18n";
 import { useTheme, type Theme } from "../../lib/ThemeContext";
@@ -211,6 +212,9 @@ export default function SettingsPage() {
         </div>
       </div>
       </div>
+
+      {/* Change Password Section */}
+      <ChangePasswordCard />
 
       {/* Theme Section */}
       <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">

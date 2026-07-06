@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Inter } from "next/font/google";
 
 import AppChrome from "../components/AppChrome";
+import MainContainer from "../components/MainContainer";
 
 import Providers from "./providers";
 
@@ -48,9 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main
         </a>
         <Providers>
-          <div className="flex-1 w-full pt-12 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pl-56 md:pt-0 md:pb-10 lg:pl-64">
-            {children}
-          </div>
+          <MainContainer>{children}</MainContainer>
           <AppChrome />
         </Providers>
         {/* Vercel Analytics — no cookie banner required, privacy-friendly */}
