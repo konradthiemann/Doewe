@@ -44,8 +44,20 @@ export const env = createEnv({
     RESEND_API_KEY: z.string().optional(),
     /** Sender address for outgoing mail, e.g. `Doewe <konrad.thiemann@gmail.com>`. */
     EMAIL_FROM: z.string().optional(),
+    /**
+     * Google OAuth credentials. When BOTH are set, the "Sign in with Google"
+     * option is enabled; otherwise it is hidden and only email/password works.
+     */
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
   },
-  client: {},
+  client: {
+    /**
+     * Mirrors whether Google OAuth is configured server-side, so the login page
+     * can conditionally render the Google button. Set to "1" when enabled.
+     */
+    NEXT_PUBLIC_GOOGLE_ENABLED: z.string().optional(),
+  },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
@@ -62,6 +74,9 @@ export const env = createEnv({
     SMTP_PASS: process.env.SMTP_PASS,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    NEXT_PUBLIC_GOOGLE_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_ENABLED,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

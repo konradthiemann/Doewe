@@ -111,7 +111,9 @@ model Budget {
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
-  password  String
+  // Null for accounts created via an OAuth provider (e.g. Google) that never
+  // set a local password. Credentials sign-in rejects users without a password.
+  password  String?
   name      String?
   createdAt DateTime  @default(now())
   // Bumped on every password change/reset. JWTs issued before this instant are

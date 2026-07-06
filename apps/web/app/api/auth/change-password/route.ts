@@ -34,6 +34,12 @@ export async function POST(request: Request) {
   const record = await prisma.user.findUnique({ where: { id: user.id } });
   if (!record) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Accounts created via an OAuth provider (e.g. Google) have no local password
+  // to verify against — they must use the "forgot password" flow to set one.
+  if (!record.password) {
+    return NextResponse.json({ error: "NO_PASSWORD_SET" }, { status: 400 });
+  }
+
   const currentOk = await compare(currentPassword, record.password);
   if (!currentOk) {
     return NextResponse.json({ error: "INVALID_CURRENT_PASSWORD" }, { status: 400 });

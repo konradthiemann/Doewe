@@ -88,8 +88,8 @@ describe("POST /api/auth/change-password", () => {
     expect((await res.json()).ok).toBe(true);
 
     const user = await prisma.user.findUnique({ where: { id: TEST_USER_ID } });
-    expect(await compare("brandnew123", user!.password)).toBe(true);
-    expect(await compare(ORIGINAL_PASSWORD, user!.password)).toBe(false);
+    expect(await compare("brandnew123", user!.password!)).toBe(true);
+    expect(await compare(ORIGINAL_PASSWORD, user!.password!)).toBe(false);
     // passwordChangedAt is stamped so existing JWT sessions are evicted.
     expect(user!.passwordChangedAt).not.toBeNull();
   });
@@ -175,7 +175,7 @@ describe("reset-password", () => {
     expect(res.status).toBe(200);
 
     const user = await prisma.user.findUnique({ where: { id: TEST_USER_ID } });
-    expect(await compare("resetpass123", user!.password)).toBe(true);
+    expect(await compare("resetpass123", user!.password!)).toBe(true);
     // passwordChangedAt is stamped so existing JWT sessions are evicted.
     expect(user!.passwordChangedAt).not.toBeNull();
 
