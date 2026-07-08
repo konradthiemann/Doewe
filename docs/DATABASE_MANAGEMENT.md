@@ -12,6 +12,10 @@ Dieses Dokument beschreibt den Workflow für Datenbankänderungen zwischen lokal
 
 ## Wichtige Befehle
 
+> Alle `npx prisma …`-Befehle müssen aus **`apps/web/`** heraus laufen (dort liegt
+> `prisma/schema.prisma`) — oder alternativ als Workspace-Script aus dem Root,
+> z. B. `npm --workspace @doewe/web run prisma:migrate:deploy`.
+
 ```bash
 # Schema ändern und Migration erstellen (lokal)
 npx prisma migrate dev --name <migration_name>
@@ -77,7 +81,7 @@ Wenn Code auf `main` gepusht wird:
 > Es gibt **keinen** GitHub-Actions-Deploy-Job mehr. Der frühere `deploy.yml`-Job
 > (mit `DATABASE_URL`-Secret über den Public-Proxy) wurde entfernt, weil er bei jeder
 > Passwort-Rotation brach. Migrationen laufen jetzt ausschließlich als Railway
-> Pre-Deploy Command. Details: [Deployment](deployment).
+> Pre-Deploy Command. Details: [Deployment & CI](./deployment.md).
 
 ---
 
@@ -102,6 +106,9 @@ Wenn Code auf `main` gepusht wird:
 
 **Lösung**:
 ```bash
+# Aus apps/web/ heraus ausführen (dort liegt das Prisma-Schema)
+cd apps/web
+
 # 1. Prüfen welche Migrationen fehlen
 DATABASE_URL="<production_url>" npx prisma migrate status
 
@@ -168,7 +175,7 @@ npm --workspace @doewe/web run prisma:migrate:deploy
 - [ ] `npx prisma migrate dev --name <name>` lokal ausgeführt
 - [ ] Neue Migration in `prisma/migrations/` vorhanden
 - [ ] Migration-Datei committed
-- [ ] Code auf `develop` getestet
+- [ ] Feature-Branch getestet (`npm run lint && npm run typecheck && npm run test`)
 - [ ] PR nach `main` erstellt
 - [ ] Nach Merge: Railway-Deploy-Log prüfen (Pre-Deploy Migration erfolgreich?)
 - [ ] Production-App testen
@@ -202,8 +209,10 @@ git commit -m "feat(db): add newColumn to Table
 - Migration: add_new_column
 - Adds column for feature XYZ"
 
-# 5. Push (auf develop zuerst, dann main)
-git push
+# 5. Feature-Branch pushen und PR nach main erstellen
+#    (es gibt keinen develop-Branch — Feature-Branches werden per PR direkt
+#     nach main gemerged)
+git push -u origin <feature-branch>
 ```
 
 ---
@@ -213,7 +222,8 @@ git push
 Falls die automatische Migration fehlschlägt:
 
 ```bash
-# Mit Production DATABASE_URL
+# Aus apps/web/ heraus, mit Production DATABASE_URL
+cd apps/web
 export DATABASE_URL="postgresql://..."
 
 # Status prüfen

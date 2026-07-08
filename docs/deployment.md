@@ -36,8 +36,21 @@ Läuft bei **Push auf alle Branches** und bei **Pull Requests**. Jeder Job insta
 
 1. **Lint** – `npm run lint -ws`
 2. **Typecheck** – `npm run typecheck -ws` (inkl. `astro check` für die Docs)
-3. **Test** – `npm run test -ws` (gegen einen ephemeren Postgres-Service)
+3. **Test** – `npm run test -ws` (gegen einen ephemeren Postgres-Service; vor dem
+   Testlauf wird das Prisma-Schema per `db:push` frisch in den Service gepusht —
+   die Tests laufen also gegen das Schema, nicht gegen die Migrations-History)
 4. **Build** – `npm run build -ws` (startet erst, wenn 1–3 grün sind)
+
+Weitere Eigenschaften:
+
+- **Concurrency:** `group: ci-${{ github.ref }}` mit `cancel-in-progress: true` — ein
+  neuer Push auf denselben Branch bricht laufende CI-Runs ab. Relevant im Zusammenspiel
+  mit dem Railway-Tor „Wait for CI to pass".
+- **`workflow_dispatch`:** CI und Docs-Deploy lassen sich manuell aus der GitHub-UI
+  (oder per `gh workflow run`) starten — z. B. um die Docs ohne neuen Commit neu zu
+  deployen.
+- **`postinstall`:** Jedes `npm ci` (CI **und** Railway-Build) generiert automatisch den
+  Prisma-Client (`npm --workspace @doewe/web run prisma:generate`, root `package.json`).
 
 ## Auto-Deploy der Web-App (Railway)
 
@@ -70,7 +83,7 @@ npm --workspace @doewe/web run prisma:migrate:deploy
 Der Befehl läuft zwischen Build und Start im privaten Railway-Netz und nutzt die interne
 `DATABASE_URL`-Referenz (`postgres.railway.internal`). Schlägt er fehl, wird **nicht deployt**.
 Dadurch entfällt der frühere GitHub-Actions-Job samt `DATABASE_URL`-Secret (Public-Proxy),
-der bei Passwort-Rotation brach. Details: [Database Management](database_management).
+der bei Passwort-Rotation brach. Details: [Database Management](./DATABASE_MANAGEMENT.md).
 
 ## Docs-Deploy (`.github/workflows/docs.yml`)
 

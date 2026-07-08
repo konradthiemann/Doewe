@@ -3,6 +3,22 @@
 Analysiert am 2026-04-23 anhand von Code-Review der Analytics-Routen und des Datenmodells.
 Umgesetzt am 2026-04-23.
 
+> **Status (geprüft 2026-07-08):** Historisches Analyse-Dokument — die Kernaussagen
+> (Aggregation statt `findMany`, Integer-Cents, Division durch 100 erst im Response)
+> gelten weiterhin, aber der Code hat sich seither weiterentwickelt:
+>
+> - **Zeilennummern sind verschoben** — alle `Zeile N`-Angaben beziehen sich auf den
+>   Stand vom 2026-04-23 und stimmen heute nicht mehr.
+> - **Abschnitt 2:** Beide Routen sind weiterhin case-insensitive, verwenden aber
+>   inzwischen *unterschiedliche* Implementierungen: `quarterly` löst die Spar-Kategorie
+>   per `findFirst` mit `mode: "insensitive"` auf (eine Kategorie), `summary` per
+>   `findMany` + `toLowerCase().trim()` (mehrere möglich).
+> - **Abschnitt 5 / Snippet in 1.1:** Der DB-Filter `amountCents: { lt: 0 }` für
+>   Spareinzahlungen wurde später wieder entfernt — seit dem Undated-Goals-/Withdraw-Feature
+>   zählt die **Netto**-Summe der Spar-Kategorie (Einzahlungen negativ, Entnahmen positiv).
+> - **Abschnitt 3:** Die Klassifikation verzweigt heute pro Transaktion **zuerst** auf die
+>   Spar-Kategorie, dann aufs Vorzeichen (siehe `docs/flows.md`, Flow 5).
+
 ---
 
 ## 1. Performance-Probleme in den Analytics-Routen
