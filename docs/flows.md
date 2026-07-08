@@ -23,7 +23,7 @@ sequenceDiagram
     User->>UI: Opens TransactionForm modal
     User->>UI: Enters: amount=42.50, description=Rewe, category=Lebensmittel, type=expense
 
-    UI->>Shared: parseCents("42.50") → 4250; UI negates for expense → -4250
+    UI->>Shared: parseCents("42.50") → 4250, UI negates for expense → -4250
     UI->>API: POST /api/transactions\nbody: { accountId, categoryId, amountCents: -4250, description, occurredAt: now }
 
     API->>Auth: getSessionUser()
@@ -45,7 +45,7 @@ sequenceDiagram
     API-->>UI: 201 Created + Transaction JSON
 
     UI->>Page: onSuccess() → page re-fetches lists via GET /api/*
-    Page-->>User: Transaction appears in list; modal closes
+    Page-->>User: Transaction appears in list, modal closes
 ```
 
 The form has an income/expense toggle instead of a signed input: `parseCents` returns the positive cent value and the UI applies the sign (42.50 as expense becomes −4250 cents). There is no date field on creation — `occurredAt` is set to the current timestamp (editing an existing transaction keeps its original date). The auth check happens before any database access — if the session is missing, the request never touches Prisma. After the API returns 201, the form calls its `onSuccess` callback and the transactions page re-fetches its lists via the GET endpoints (the page is a client component; there is no `router.refresh()` / Server-Component cache involved).
