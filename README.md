@@ -93,15 +93,14 @@ npm run db:down:local
 ```
 
 ### Environment Variables
-Create `.env.local` (not committed). Example:
+Create `.env.local` (not committed). Example matching the local Docker Postgres:
 ```
-DATABASE_URL="postgresql://user:pass@localhost:5432/doewe_local"
+DATABASE_URL="postgresql://doewe:doewe@localhost:5432/doewe_local"
 NEXTAUTH_SECRET="set-a-strong-random-secret"
 NEXTAUTH_URL="http://localhost:3000"
-SEED_USER_EMAIL="demo@doewe.test"
-SEED_USER_PASSWORD="demo1234"
-SEED_USER_NAME="Demo User"
 ```
+The seed user is hardcoded (not configurable via env): log in with
+`demo@doewe.test` / `demo1234` after seeding.
 After changing schema run:
 ```bash
 npm --workspace @doewe/web run prisma:generate

@@ -1,15 +1,18 @@
 # Doewe — API Reference
 
-All routes are HTTP JSON APIs served under `/api`. Every route requires an active session unless noted otherwise. Authentication is enforced via `requireSessionUser()` (throws `401`) or `getSessionUser()` (returns null). All monetary values are integer euro cents.
+All routes are HTTP JSON APIs served under `/api`. Every route requires an active session unless noted otherwise. Each route handler enforces authentication itself: it calls `getSessionUser()` (from `apps/web/lib/auth.ts`) and returns `401 { "error": "Unauthorized" }` when there is no session.
 
 **Base URL:** `https://<your-domain>/api`
 
 **Auth mechanism:** Session cookie set by NextAuth on successful login. Include credentials in fetch calls (`credentials: "include"` or `same-origin`).
 
-**Error format (all routes):**
+**Money units:** CRUD endpoints (transactions, budgets, saving plan, …) accept and return **integer euro cents** (`amountCents`). Exception: `GET /api/analytics/summary` divides by 100 at the output step and returns **euro** values; `GET /api/analytics/quarterly` and `GET /api/analytics/monthly-review` return cents (fields suffixed `…Cents`).
+
+**Error format:**
 ```json
 { "error": "Human-readable message" }
 ```
+Exception: when Zod validation fails, `error` is not a string but the object produced by `error.flatten()` (with `fieldErrors` / `formErrors`).
 
 ---
 
@@ -17,7 +20,7 @@ All routes are HTTP JSON APIs served under `/api`. Every route requires an activ
 
 ### `POST /api/auth/register`
 
-Register a new user account.
+Register a new user account. Also bootstraps the new user: a default account named `"Main Account"` plus a default category set (income: Salary, Bonus, Other income; expenses: Groceries, Rent, Utilities, Transport, Entertainment, Health, Misc; plus the protected `Savings` category).
 
 **Auth required:** No
 
@@ -25,7 +28,8 @@ Register a new user account.
 ```json
 {
   "email": "anna@example.de",
-  "password": "min8chars"
+  "password": "min8chars",
+  "name": "Anna"
 }
 ```
 
@@ -33,18 +37,19 @@ Register a new user account.
 |---|---|---|
 | `email` | string | Valid email format, unique |
 | `password` | string | Minimum 8 characters |
+| `name` | string | Optional display name (trimmed; empty → stored as `null`) |
 
 **Success response — `201 Created`:**
 ```json
-{ "id": "usr_01", "email": "anna@example.de" }
+{ "id": "usr_01", "email": "anna@example.de", "account": { "id": "acc_01", "name": "Main Account" } }
 ```
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
-| `400` | Missing or invalid fields |
-| `409` | Email already registered |
+| `400` | Missing or invalid fields (Zod `flatten()` object) |
+| `409` | Email already registered (`"User already exists"`) |
 
 ---
 
@@ -165,7 +170,7 @@ outstanding reset links.
 
 ### `GET /api/accounts`
 
-List all accounts belonging to the authenticated user.
+List all accounts belonging to the authenticated user, newest first (`createdAt desc`).
 
 **Auth required:** Yes
 
@@ -186,15 +191,45 @@ List all accounts belonging to the authenticated user.
 
 ---
 
+### `POST /api/accounts`
+
+Create a new account for the authenticated user.
+
+**Auth required:** Yes
+
+**Request body:**
+```json
+{ "name": "Tagesgeldkonto" }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `name` | string | Required; non-empty |
+
+**Success response — `201 Created`:** Full account object.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Validation failed (Zod `flatten()` object) |
+| `401` | Not authenticated |
+
+---
+
 ## Categories
 
 ### `GET /api/categories`
 
-List all categories belonging to the authenticated user.
+List all categories belonging to the authenticated user. Default order: `createdAt desc`.
 
 **Auth required:** Yes
 
-**Request body:** None
+**Query parameters (optional):**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `sortByUsage` | `"true"` | Sort by usage count (number of linked transactions) descending, ties by name. Each item then also includes a `usageCount` field |
 
 **Success response — `200 OK`:**
 ```json
@@ -228,8 +263,8 @@ Create a new category.
 
 | Field | Type | Constraints |
 |---|---|---|
-| `name` | string | Non-empty; unique per user |
-| `isIncome` | boolean | `true` for income, `false` for expense |
+| `name` | string | Non-empty; unique per user; the reserved names `"savings"` / `"sparen"` (case-insensitive) are rejected |
+| `isIncome` | boolean | Optional, defaults to `false`. `true` for income, `false` for expense |
 
 **Success response — `201 Created`:**
 ```json
@@ -242,26 +277,80 @@ Create a new category.
 |---|---|
 | `400` | Missing or invalid fields |
 | `401` | Not authenticated |
+| `403` | Name is reserved (`"This category name is reserved"`) |
 | `409` | Category name already exists for this user |
+| `500` | Unexpected failure while creating |
 
 ---
 
-### `DELETE /api/categories/[id]`
+### `PATCH /api/categories/[id]`
 
-Delete a category by ID. The category must belong to the authenticated user.
+Rename a category **or** merge it into another one. The protected savings category (`"savings"` / `"sparen"`) cannot be modified.
 
 **Auth required:** Yes
 
-**Request body:** None
+**Request body (at least one field required):**
+```json
+{ "name": "Supermarkt" }
+```
+or
+```json
+{ "mergeIntoCategoryId": "cat_09" }
+```
 
-**Success response — `204 No Content`**
+| Field | Type | Constraints |
+|---|---|---|
+| `name` | string | Optional; new name (unique per user) |
+| `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted |
+
+**Success response — `200 OK`:** The updated category (rename) or the merge target category (merge).
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
+| `400` | No update fields, or merge target equals source |
 | `401` | Not authenticated |
-| `404` | Category not found or not owned by user |
+| `403` | Category is protected (`savings`/`sparen`) |
+| `404` | Category (or merge target) not found or not owned by user |
+| `409` | Rename/merge would violate a unique constraint (duplicate name or budget) |
+
+---
+
+### `DELETE /api/categories/[id]`
+
+Delete a category. A **fallback category is mandatory**: all transactions, recurring transactions, and budgets of the deleted category are reassigned to it. The protected savings category cannot be deleted.
+
+**Auth required:** Yes
+
+**Request body (exactly one of the two fields required):**
+```json
+{ "fallbackCategoryId": "cat_09" }
+```
+or
+```json
+{ "fallbackName": "Sonstiges" }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `fallbackCategoryId` | string | Existing category to reassign records to (must not be the deleted one) |
+| `fallbackName` | string | Name for a new fallback category, created with the same `isIncome` as the deleted one |
+
+**Success response — `200 OK`:**
+```json
+{ "success": true, "fallbackCategoryId": "cat_09" }
+```
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Fallback missing, or fallback equals the deleted category |
+| `401` | Not authenticated |
+| `403` | Category is protected (`savings`/`sparen`) |
+| `404` | Category or fallback category not found / not owned by user |
+| `409` | Fallback name already exists, or reassignment would create duplicates |
 
 ---
 
@@ -269,18 +358,9 @@ Delete a category by ID. The category must belong to the authenticated user.
 
 ### `GET /api/transactions`
 
-List all transactions for the authenticated user across all accounts.
+List **all** transactions for the authenticated user across all accounts, ordered by `occurredAt` descending. There are no query parameters — filtering happens client-side.
 
 **Auth required:** Yes
-
-**Query parameters (optional):**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `accountId` | string | Filter by account |
-| `categoryId` | string | Filter by category |
-| `from` | ISO date string | Start date filter (inclusive) |
-| `to` | ISO date string | End date filter (inclusive) |
 
 **Success response — `200 OK`:**
 ```json
@@ -317,7 +397,6 @@ Create a new transaction.
 {
   "accountId": "acc_01",
   "categoryId": "cat_02",
-  "savingGoalId": null,
   "amountCents": -6340,
   "description": "Rewe",
   "occurredAt": "2026-04-05T00:00:00.000Z"
@@ -327,9 +406,9 @@ Create a new transaction.
 | Field | Type | Constraints |
 |---|---|---|
 | `accountId` | string | Required; must belong to user |
-| `categoryId` | string or null | Optional category reference |
-| `savingGoalId` | string or null | Optional saving goal reference |
-| `amountCents` | integer | Required; non-zero; negative for expense |
+| `categoryId` | string | Optional. **Omit** the field entirely — an explicit `null` fails validation |
+| `savingGoalId` | string | Optional; ID of a saving goal (`Budget` row). Omit rather than sending `null` |
+| `amountCents` | integer | Required; negative for expense, positive for income (no non-zero check — `0` is accepted) |
 | `description` | string | Required; non-empty |
 | `occurredAt` | ISO date string | Required |
 
@@ -339,24 +418,25 @@ Create a new transaction.
 
 | Status | Reason |
 |---|---|
-| `400` | Validation failed (Zod error) |
+| `400` | Validation failed (Zod `flatten()` object) |
 | `401` | Not authenticated |
-| `403` | `accountId` does not belong to authenticated user |
+| `404` | Account, category, or saving goal not found / not owned by user |
 
 ---
 
 ### `PATCH /api/transactions/[id]`
 
-Update an existing transaction. Send only the fields to change (partial update).
+Update an existing transaction. **Not a partial update** — the request is validated against the same schema as `POST`, so `accountId`, `amountCents`, `description`, and `occurredAt` are required; `categoryId`/`savingGoalId` stay optional (omit instead of `null`).
 
 **Auth required:** Yes
 
-**Request body (all fields optional):**
+**Request body:**
 ```json
 {
+  "accountId": "acc_01",
+  "categoryId": "cat_02",
   "amountCents": -7000,
   "description": "Rewe updated",
-  "categoryId": "cat_02",
   "occurredAt": "2026-04-06T00:00:00.000Z"
 }
 ```
@@ -396,7 +476,7 @@ Delete a transaction by ID.
 
 ### `GET /api/recurring-transactions`
 
-List all recurring transactions for the authenticated user.
+List all recurring transactions for the authenticated user. Skip records are **not** included — fetch them via `GET /api/recurring-transactions/skips`.
 
 **Auth required:** Yes
 
@@ -411,11 +491,11 @@ List all recurring transactions for the authenticated user.
     "categoryId": "cat_03",
     "amountCents": -85000,
     "description": "Miete",
-    "frequency": "monthly",
+    "frequency": "MONTHLY",
     "intervalMonths": 1,
     "dayOfMonth": 1,
     "nextOccurrence": "2026-05-01T00:00:00.000Z",
-    "skips": []
+    "createdAt": "2026-01-01T00:00:00.000Z"
   }
 ]
 ```
@@ -430,7 +510,7 @@ List all recurring transactions for the authenticated user.
 
 ### `POST /api/recurring-transactions`
 
-Create a new recurring transaction template.
+Create a new recurring transaction template. `frequency` is set server-side to `"MONTHLY"`; the actual cadence is controlled by `intervalMonths`. `nextOccurrence` is computed from `dayOfMonth` — it cannot be supplied.
 
 **Auth required:** Yes
 
@@ -441,25 +521,21 @@ Create a new recurring transaction template.
   "categoryId": "cat_03",
   "amountCents": -85000,
   "description": "Miete",
-  "frequency": "monthly",
   "intervalMonths": 1,
-  "dayOfMonth": 1,
-  "nextOccurrence": "2026-05-01T00:00:00.000Z"
+  "dayOfMonth": 1
 }
 ```
 
 | Field | Type | Constraints |
 |---|---|---|
 | `accountId` | string | Required; must belong to user |
-| `categoryId` | string or null | Optional |
-| `amountCents` | integer | Required; non-zero |
+| `categoryId` | string | Optional |
+| `amountCents` | integer | Required |
 | `description` | string | Required; non-empty |
-| `frequency` | string | Required (e.g., `"monthly"`, `"quarterly"`) |
-| `intervalMonths` | integer | Required; >= 1 |
-| `dayOfMonth` | integer | Required; 1–31 |
-| `nextOccurrence` | ISO date string | Required |
+| `intervalMonths` | integer | Optional; 1–24, defaults to `1` (e.g., `3` = quarterly) |
+| `dayOfMonth` | integer | Optional; 1–31, defaults to `1` |
 
-**Success response — `201 Created`:** Full recurring transaction object.
+**Success response — `201 Created`:** Full recurring transaction object (with computed `nextOccurrence` and `frequency: "MONTHLY"`).
 
 **Error responses:**
 
@@ -467,7 +543,7 @@ Create a new recurring transaction template.
 |---|---|
 | `400` | Validation failed |
 | `401` | Not authenticated |
-| `403` | Account not owned by user |
+| `404` | Account or category not found / not owned by user |
 
 ---
 
@@ -491,7 +567,7 @@ Update a recurring transaction template. Partial update — send only changed fi
 
 ### `DELETE /api/recurring-transactions/[id]`
 
-Delete a recurring transaction template and all its skip records.
+Delete a recurring transaction template and all its skip records (cascading delete).
 
 **Auth required:** Yes
 
@@ -508,24 +584,23 @@ Delete a recurring transaction template and all its skip records.
 
 ## Recurring Transaction Skips
 
-### `GET /api/recurring-transactions/skips`
+### `GET /api/recurring-transactions/skips?year=…&month=…`
 
-List all skips for all recurring transactions belonging to the authenticated user.
+List the skips of **one calendar month** across all recurring transactions belonging to the authenticated user.
 
 **Auth required:** Yes
 
-**Query parameters (optional):**
+**Query parameters (required):**
 
 | Parameter | Type | Description |
 |---|---|---|
-| `recurringId` | string | Filter to one recurring transaction |
-| `year` | integer | Filter by year |
-| `month` | integer | Filter by month (1–12) |
+| `year` | integer | Calendar year |
+| `month` | integer | Calendar month (1–12) |
 
 **Success response — `200 OK`:**
 ```json
 [
-  { "id": "skp_01", "recurringId": "rec_01", "year": 2026, "month": 5 }
+  { "recurringId": "rec_01", "year": 2026, "month": 5 }
 ]
 ```
 
@@ -533,13 +608,14 @@ List all skips for all recurring transactions belonging to the authenticated use
 
 | Status | Reason |
 |---|---|
+| `400` | `Missing year or month` |
 | `401` | Not authenticated |
 
 ---
 
 ### `POST /api/recurring-transactions/skips`
 
-Skip a specific month for a recurring transaction.
+Skip a specific month for a recurring transaction. **Idempotent** — the route upserts, so skipping an already-skipped month simply returns the existing record with `201`.
 
 **Auth required:** Yes
 
@@ -567,15 +643,15 @@ Skip a specific month for a recurring transaction.
 
 | Status | Reason |
 |---|---|
-| `400` | Validation failed or skip already exists |
+| `400` | Validation failed |
 | `401` | Not authenticated |
-| `403` | Recurring transaction not owned by user |
+| `404` | Recurring transaction not found or not owned by user |
 
 ---
 
 ### `DELETE /api/recurring-transactions/skips`
 
-Remove a skip (un-skip a month).
+Remove a skip (un-skip a month). Uses `deleteMany` — the response is `204` whether or not a matching skip record existed.
 
 **Auth required:** Yes
 
@@ -596,7 +672,7 @@ Remove a skip (un-skip a month).
 |---|---|
 | `400` | Validation failed |
 | `401` | Not authenticated |
-| `404` | Skip record not found |
+| `404` | Recurring transaction not found or not owned by user |
 
 ---
 
@@ -604,17 +680,9 @@ Remove a skip (un-skip a month).
 
 ### `GET /api/budgets`
 
-List all budgets for the authenticated user.
+List **all** budget rows of the authenticated user — including saving goals (`categoryId = null`) — ordered by `year desc, month desc`. There are no query parameters.
 
 **Auth required:** Yes
-
-**Query parameters (optional):**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `month` | integer | Filter by month (1–12) |
-| `year` | integer | Filter by year |
-| `accountId` | string | Filter by account |
 
 **Success response — `200 OK`:**
 ```json
@@ -623,10 +691,12 @@ List all budgets for the authenticated user.
     "id": "bud_01",
     "accountId": "acc_01",
     "categoryId": "cat_02",
-    "title": "Lebensmittel",
+    "title": "",
     "month": 4,
     "year": 2026,
     "amountCents": 20000,
+    "completedAt": null,
+    "spentCents": null,
     "createdAt": "2026-04-01T00:00:00.000Z"
   }
 ]
@@ -642,7 +712,7 @@ List all budgets for the authenticated user.
 
 ### `POST /api/budgets`
 
-Create a new budget for a category and month.
+Create a new category budget for a month. (Saving goals are created via `POST /api/saving-plan` instead.)
 
 **Auth required:** Yes
 
@@ -651,7 +721,6 @@ Create a new budget for a category and month.
 {
   "accountId": "acc_01",
   "categoryId": "cat_02",
-  "title": "Lebensmittel",
   "month": 4,
   "year": 2026,
   "amountCents": 20000
@@ -661,11 +730,12 @@ Create a new budget for a category and month.
 | Field | Type | Constraints |
 |---|---|---|
 | `accountId` | string | Required; must belong to user |
-| `categoryId` | string or null | Optional; unique per (account, category, month, year) |
-| `title` | string | Required; non-empty |
-| `month` | integer | 1–12 |
-| `year` | integer | Four-digit year |
-| `amountCents` | integer | Required; positive |
+| `categoryId` | string | Optional (omitting it creates a saving-goal-like row); unique per (account, category, month, year) |
+| `month` | integer | Required; 1–12 |
+| `year` | integer | Required; 1970–9999 |
+| `amountCents` | integer | Required (no positivity check) |
+
+There is **no `title` field** in the schema — the DB default `""` is used.
 
 **Success response — `201 Created`:** Full budget object.
 
@@ -675,7 +745,8 @@ Create a new budget for a category and month.
 |---|---|
 | `400` | Validation failed |
 | `401` | Not authenticated |
-| `409` | Budget for this (account, category, month, year) already exists |
+| `404` | Account or category not found / not owned by user |
+| `500` | Duplicate (account, category, month, year) — the unique-constraint violation is not caught explicitly |
 
 ---
 
@@ -683,7 +754,7 @@ Create a new budget for a category and month.
 
 ### `GET /api/saving-plan`
 
-List saving goals for the authenticated user, split into active and completed, plus the computed plan totals. Saving goals are stored as `Budget` rows with `categoryId = null`.
+List saving goals for the authenticated user plus the computed plan totals. Saving goals are stored as `Budget` rows with `categoryId = null`.
 
 **Auth required:** Yes
 
@@ -706,22 +777,8 @@ List saving goals for the authenticated user, split into active and completed, p
       "createdAt": "2026-01-01T00:00:00.000Z"
     }
   ],
-  "completedGoals": [
-    {
-      "id": "bud_05",
-      "accountId": "acc_01",
-      "categoryId": null,
-      "categoryName": null,
-      "title": "Laptop",
-      "month": 3,
-      "year": 2026,
-      "amountCents": 120000,
-      "transactionSpentCents": 0,
-      "completedAt": "2026-03-20T10:00:00.000Z",
-      "spentCents": 115000,
-      "createdAt": "2026-01-01T00:00:00.000Z"
-    }
-  ],
+  "undatedGoals": [],
+  "completedGoals": [],
   "totals": {
     "rawAvailableCents": 200000,
     "withdrawnForCompletedCents": 115000,
@@ -732,9 +789,9 @@ List saving goals for the authenticated user, split into active and completed, p
 }
 ```
 
-- `goals` contains only **active** goals (`completedAt == null`); `completedGoals` contains closed goals (same fields).
+- `goals` contains active goals **with** a target date (`month`/`year` set); `undatedGoals` contains active goals **without** one (idea backlog, same fields); `completedGoals` contains closed goals.
 - `transactionSpentCents` is the absolute sum of transactions linked to the goal via `savingGoalId`.
-- `totals.rawAvailableCents` is the raw savings balance; `availableCents = max(rawAvailableCents − withdrawnForCompletedCents, 0)` is the pool for the remaining active goals. `totalTargetCents` and `suggestedMonthlyCents` consider only active goals. See `docs/calculations/07-sparziele.md`.
+- `totals.rawAvailableCents` is the raw savings balance; `availableCents = max(rawAvailableCents − withdrawnForCompletedCents, 0)` is the pool for the remaining active goals. `totalTargetCents` and `suggestedMonthlyCents` consider only active **dated** goals — undated goals are excluded from the forward-looking plan. See `docs/calculations/07-sparziele.md`.
 
 **Error responses:**
 
@@ -747,7 +804,7 @@ List saving goals for the authenticated user, split into active and completed, p
 
 ### `POST /api/saving-plan`
 
-Create a new saving goal.
+Create a new saving goal. Target date and amount are optional — a goal without `targetMonth`/`targetYear` is an **undated** goal (idea backlog).
 
 **Auth required:** Yes
 
@@ -766,9 +823,9 @@ Create a new saving goal.
 |---|---|---|
 | `accountId` | string | Required; must belong to user |
 | `title` | string | Required; non-empty (trimmed) |
-| `targetMonth` | integer | Required; 1–12. Aliases accepted: `month`, `dueMonth` |
-| `targetYear` | integer | Required; 1970–9999. Aliases accepted: `year`, `dueYear` |
-| `amountCents` | integer | Required; `>= 1` |
+| `targetMonth` | integer | Optional; 1–12. Aliases accepted: `month`, `dueMonth`. Must be set/omitted **together with** `targetYear` |
+| `targetYear` | integer | Optional; 1970–9999. Aliases accepted: `year`, `dueYear` |
+| `amountCents` | integer | Optional; `>= 1` when present |
 
 **Success response — `201 Created`:** The created `Budget` row (`id`, `accountId`, `categoryId: null`, `title`, `month`, `year`, `amountCents`, `completedAt: null`, `spentCents: null`, `createdAt`).
 
@@ -778,6 +835,7 @@ Create a new saving goal.
 |---|---|
 | `400` | Validation failed |
 | `401` | Not authenticated |
+| `404` | Account not found / not owned by user |
 
 ---
 
@@ -794,13 +852,14 @@ Get a single saving goal by ID.
 | Status | Reason |
 |---|---|
 | `401` | Not authenticated |
-| `404` | Not found or not owned by user |
+| `403` | Goal belongs to another user (`"Forbidden"`) |
+| `404` | Goal does not exist |
 
 ---
 
 ### `PATCH /api/saving-plan/[id]`
 
-Update a saving goal. Partial update.
+Update a saving goal. Partial update with **null-clearing semantics**: omitting a field leaves it unchanged; sending `null` clears it (e.g., `targetMonth: null, targetYear: null` makes the goal undated; `amountCents: null` removes the target amount).
 
 **Auth required:** Yes
 
@@ -817,9 +876,9 @@ Update a saving goal. Partial update.
 | Field | Type | Constraints |
 |---|---|---|
 | `title` | string | Optional; non-empty (trimmed) |
-| `targetMonth` | integer | Optional; 1–12. Alias accepted: `month` |
-| `targetYear` | integer | Optional; 1970–9999. Alias accepted: `year` |
-| `amountCents` | integer | Optional; `>= 1` |
+| `targetMonth` | integer or null | Optional; 1–12. Alias: `month`. Must be changed **together with** `targetYear` and share its null-ness |
+| `targetYear` | integer or null | Optional; 1970–9999. Alias: `year` |
+| `amountCents` | integer or null | Optional; `>= 1` or `null` to clear |
 
 **Success response — `200 OK`:** Updated saving goal object (`id`, `accountId`, `categoryId`, `categoryName`, `title`, `month`, `year`, `amountCents`, `createdAt`).
 
@@ -829,7 +888,8 @@ Update a saving goal. Partial update.
 |---|---|
 | `400` | Validation failed |
 | `401` | Not authenticated |
-| `404` | Not found or not owned by user |
+| `403` | Goal belongs to another user (`"Forbidden"`) |
+| `404` | Goal does not exist |
 
 ---
 
@@ -846,7 +906,8 @@ Delete a saving goal. Linked transactions lose their `savingGoalId` (set to null
 | Status | Reason |
 |---|---|
 | `401` | Not authenticated |
-| `404` | Not found or not owned by user |
+| `403` | Goal belongs to another user (`"Forbidden"`) |
+| `404` | Goal does not exist |
 
 ---
 
@@ -914,72 +975,133 @@ Reopen a completed saving goal. Resets `completedAt = null` and `spentCents = nu
 
 ---
 
+### `POST /api/saving-plan/withdraw`
+
+Withdraw money from the savings pool back into everyday spending. Creates a **positive** transaction in the savings category (money returns from the pool to the account); analytics treat it as a reduction of net savings, not as income.
+
+**Auth required:** Yes
+
+**Request body:**
+```json
+{
+  "amountCents": 25000,
+  "description": "Urlaubskasse"
+}
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `accountId` | string | Optional — defaults to the user's first account |
+| `amountCents` | integer | Required; positive; must not exceed the available savings balance |
+| `description` | string | Optional (trimmed, max 200); defaults to `"Savings withdrawal"` |
+
+**Success response — `201 Created`:** The created transaction object.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Validation failed |
+| `401` | Not authenticated |
+| `404` | Account not found / not owned by user |
+| `409` | No savings category exists, nothing available to withdraw, or amount exceeds the available balance (response includes `availableCents`) |
+
+---
+
 ## Analytics
 
 ### `GET /api/analytics/summary`
 
-Return the current-month financial summary for the authenticated user's dashboard.
+Current-month financial summary for the dashboard — backward-looking actuals plus forward-looking projections from recurring transactions. **No query parameters** — the route always evaluates the current calendar month and the user's **first account** (multi-account scoping is a known future extension).
 
 **Auth required:** Yes
 
-**Query parameters (optional):**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `month` | integer | Month to query (default: current month) |
-| `year` | integer | Year to query (default: current year) |
-| `accountId` | string | Scope to one account (default: all accounts) |
+> **Units:** all monetary fields are **euros** (already divided by 100) — except `recurringTransactions[].amountCents`, which stays in cents.
 
 **Success response — `200 OK`:**
 ```json
 {
-  "income": 320000,
-  "outcome": 94440,
-  "savings": 50000,
-  "budgets": [
-    {
-      "categoryId": "cat_02",
-      "categoryName": "Lebensmittel",
-      "budgetCents": 20000,
-      "actualCents": 6340,
-      "remainingCents": 13660
-    }
+  "totalBalance": 12500.5,
+  "carryoverFromLastMonth": 1200,
+  "incomeTotal": 3200,
+  "outcomeTotal": 941.4,
+  "outcomeTotalExclSavings": 941.4,
+  "monthlySavingsActual": 500,
+  "remaining": 1758.6,
+  "plannedSavings": 500,
+  "completedGoals": [],
+  "completedGoalsSpent": 0,
+  "projectedIncomeTotal": 3200,
+  "projectedOutcomeTotal": 1791.4,
+  "projectedRemaining": 908.6,
+  "outgoingByCategory": { "Lebensmittel": 63.4, "Miete": 850 },
+  "categoryBudgets": [
+    { "categoryId": "cat_02", "name": "Lebensmittel", "budget": 200, "spent": 63.4, "diff": -136.6 }
   ],
-  "recurring": [
-    {
-      "id": "rec_01",
-      "description": "Miete",
-      "amountCents": -85000,
-      "skipped": false
-    }
+  "recurringTransactions": [
+    { "id": "rec_01", "description": "Miete", "amountCents": -85000, "categoryId": "cat_03", "dayOfMonth": 1 }
   ],
-  "dailyChart": [
-    { "date": "2026-04-01", "incomeCents": 320000, "expenseCents": 0 },
-    { "date": "2026-04-02", "incomeCents": 0, "expenseCents": 85000 }
-  ]
+  "recurringIncomeTotal": 0,
+  "recurringOutcomeTotal": 850,
+  "recurringPlannedSavings": 500,
+  "projectedSavingsTotal": 500,
+  "daily": {
+    "labels": ["1", "2", "3"],
+    "income": [0, 0, 3200],
+    "outcome": [0, 850, 913.4],
+    "savings": [1000, 1000, 1500]
+  }
 }
 ```
 
-| Field | Description |
-|---|---|
-| `income` | Sum of positive `amountCents` for the month (excluding savings category) |
-| `outcome` | Absolute sum of negative `amountCents` for the month (excluding savings category) |
-| `savings` | Absolute sum of `amountCents` in the savings category for the month |
-| `budgets` | Budget vs. actual breakdown per category that has a budget this month |
-| `recurring` | Recurring transactions expected this month, with skip status |
-| `dailyChart` | Day-by-day income and expense totals for chart rendering |
+Notable semantics:
+
+- `categoryBudgets[].diff` = `spent − budget` (positive = over budget).
+- `recurringTransactions` contains only recurring items **not skipped** this month — skipped ones are filtered out server-side.
+- `daily` series are **cumulative running totals** per day of month (including recurring projections and the savings baseline), ready for chart rendering.
+- Savings classification happens **before** sign classification: transactions in the savings category count as savings (deposits negative, withdrawals positive → net savings), never as income/expenses.
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
 | `401` | Not authenticated |
+| `404` | No account found for user |
 
 ---
 
 ### `GET /api/analytics/quarterly`
 
-Return a 3-month rolling view of income, expenses, and savings.
+Rolling 3-month view (the two previous months plus the current one) of income, expenses, savings, and cumulative balance. **No query parameters**; uses the user's first account.
+
+**Auth required:** Yes
+
+**Success response — `200 OK`:**
+```json
+{
+  "quarters": [
+    { "month": 2, "year": 2026, "incomeCents": 320000, "outcomeCents": 88000, "savingsCents": 50000, "balanceCents": 182000 },
+    { "month": 3, "year": 2026, "incomeCents": 320000, "outcomeCents": 91000, "savingsCents": 50000, "balanceCents": 361000 },
+    { "month": 4, "year": 2026, "incomeCents": 320000, "outcomeCents": 94140, "savingsCents": 50000, "balanceCents": 536860 }
+  ],
+  "totals": { "incomeCents": 960000, "outcomeCents": 273140, "savingsCents": 150000 }
+}
+```
+
+All values are **integer cents**. `balanceCents` is cumulative across the window. Income/outcome/savings use the same classification rules as the summary endpoint (savings category first, then sign).
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `404` | No account found for user |
+
+---
+
+### `GET /api/analytics/monthly-review?month=…&year=…`
+
+Deep review of a **completed** past month: KPIs, carryover, expense breakdown by category, income by source, top expenses, and completed saving goals. Uses the user's first account.
 
 **Auth required:** Yes
 
@@ -987,23 +1109,68 @@ Return a 3-month rolling view of income, expenses, and savings.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `endMonth` | integer | Last month of the 3-month window (default: current month) |
-| `endYear` | integer | Year of the last month |
-| `accountId` | string | Scope to one account |
+| `month` | integer | 1–12. Default: last completed month. Current/future months are clamped back to the last completed month |
+| `year` | integer | Calendar year (same clamping rule) |
 
 **Success response — `200 OK`:**
 ```json
-[
-  { "month": 2, "year": 2026, "income": 320000, "outcome": 88000, "savings": 50000 },
-  { "month": 3, "year": 2026, "income": 320000, "outcome": 91000, "savings": 50000 },
-  { "month": 4, "year": 2026, "income": 320000, "outcome": 94440, "savings": 50000 }
-]
+{
+  "month": 6,
+  "year": 2026,
+  "incomeCents": 320000,
+  "outcomeCents": 94140,
+  "savingsCents": 50000,
+  "balanceAtStartCents": 120000,
+  "balanceAtEndCents": 295860,
+  "savingsRatePct": 16,
+  "categories": [
+    { "id": "cat_02", "name": "Lebensmittel", "spentCents": 6340, "budgetCents": 20000, "transactionCount": 3 }
+  ],
+  "incomeCategories": [
+    { "id": "cat_01", "name": "Gehalt", "amountCents": 320000, "transactionCount": 1 }
+  ],
+  "topExpenses": [
+    { "description": "Miete Juni", "amountCents": 85000, "categoryName": "Miete", "occurredAt": "2026-06-01T00:00:00.000Z" }
+  ],
+  "completedGoals": [
+    { "title": "Laptop", "amountCents": 120000, "spentCents": 115000 }
+  ],
+  "completedGoalsSpentCents": 115000,
+  "prevMonth": { "month": 5, "year": 2026, "incomeCents": 320000, "outcomeCents": 90000, "savingsCents": 50000 },
+  "availableMonths": [ { "month": 6, "year": 2026 }, { "month": 5, "year": 2026 } ]
+}
 ```
 
-Each array item covers one calendar month with aggregated totals using the same income/outcome/savings definitions as the summary endpoint.
+Notable semantics:
+
+- All monetary values are **integer cents**.
+- Income/expense classification is by **amount sign** (`amountCents >= 0` = income), not by `Category.isIncome` — except the savings category, which is classified first.
+- `categories` (expenses) is sorted over-budget first, then by spend descending; an `"uncategorized"` entry is appended when uncategorized spend exists. `incomeCategories` is sorted by amount descending.
+- `topExpenses` are the 5 largest single non-savings expenses (amounts reported positive).
+- `availableMonths` lists every month from the earliest transaction up to (excluding) the current month, most recent first.
+- `prevMonth` is `null` when the preceding month has no data.
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
 | `401` | Not authenticated |
+| `404` | No account found for user |
+
+---
+
+## Demo
+
+### `POST /api/demo/seed`
+
+Public (deliberately **unauthenticated**) endpoint used by the login page's demo mode. Ensures the shared demo user (`demo@doewe.test`) exists with 36 months of example data. Idempotent — a versioned check skips the reseed when the data is current. The operation is hard-wired to the demo account and accepts no request body.
+
+**Auth required:** No
+
+**Success response — `200 OK`:** `{ "ok": true, "refreshed": false }` (`refreshed: true` when data was (re)seeded)
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `500` | Demo seed failed |

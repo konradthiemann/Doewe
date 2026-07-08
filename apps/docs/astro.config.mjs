@@ -2,11 +2,12 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
+import { SITE, BASE, REPO_URL } from './site.config.mjs';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://konradthiemann.github.io',
-  base: '/Doewe/',
+  site: SITE,
+  base: BASE,
   integrations: [
     // astro-mermaid MUST be registered before Starlight so it claims ```mermaid
     // code blocks before Starlight's own code-block handling. autoTheme + client-
@@ -20,7 +21,7 @@ export default defineConfig({
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/konradthiemann/Doewe',
+          href: REPO_URL,
         },
       ],
       // Sidebar derived from the real top-level docs/*.md files. Slugs are the
@@ -29,6 +30,7 @@ export default defineConfig({
         {
           label: 'Übersicht',
           items: [
+            { label: 'Getting Started', slug: 'getting-started' },
             { label: 'Architecture', slug: 'architecture' },
             { label: 'Project Requirements', slug: 'project-requirements-document' },
           ],

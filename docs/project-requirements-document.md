@@ -1,6 +1,6 @@
 # Project Requirements – Doewe
 
-Version: 0.1 (living document)
+Version: 0.2 (living document — status claims updated 2026-07 to match the implemented state; for current technical details see [Architecture](./architecture.md), [Data Model](./data-model.md), and [API Reference](./api-reference.md))
 
 ## 1. Overview
 - Purpose: A family management app to quickly capture finances, set goals, and earmark potential expenses. Based on collected data, detect patterns and behaviors that hinder goal achievement.
@@ -8,7 +8,7 @@ Version: 0.1 (living document)
 - Status: Learning project driven by one developer.
 
 ## 2. Personas
-- Primary: Parents aged 20–40 who manage household budgets and expenses (per [README.md](README.md)).
+- Primary: Parents aged 20–40 who manage household budgets and expenses.
 
 ## 3. Goals (MVP)
 - Manage accounts and categories.
@@ -19,7 +19,7 @@ Version: 0.1 (living document)
 Non‑goals (MVP)
 - No mobile apps.
 - No multi‑tenancy.
-- No production deployment initially.
+- ~~No production deployment initially~~ — superseded: the app is deployed on Railway (see [Deployment & CI](./deployment.md)).
 
 ## 4. Functional Requirements
 - Accounts: CRUD, link to transactions.
@@ -27,16 +27,16 @@ Non‑goals (MVP)
 - Transactions:
   - Create with accountId, optional categoryId, amount in cents, description, occurredAt.
   - List, sort by occurredAt desc.
-  - Later: recurring rules (frequency, next occurrence).
-- Budgets/Goals: Define target amounts and timeframes (future iteration).
-- Insights: Summaries by category/time, basic trend indicators (future iteration).
+  - Recurring rules — **implemented** (`RecurringTransaction` with `intervalMonths`, `dayOfMonth`, `nextOccurrence`, plus per-month skips).
+- Budgets/Goals — **implemented** (category budgets per month; saving goals as `Budget` rows with `categoryId = null`, dated or undated, with complete/reopen and withdraw).
+- Insights — **implemented** (`/api/analytics/summary`, `/api/analytics/quarterly`, `/api/analytics/monthly-review`; dashboard + `/review` page).
 
 ## 5. Non‑Functional Requirements
-- Accessibility: WCAG 2.2 AA (see [.github/a11y-instructions.md](.github/a11y-instructions.md)).
+- Accessibility: WCAG 2.2 AA (see [.github/prompts/a11y.instructions.md](../.github/prompts/a11y.instructions.md)).
 - Performance: Fast TTI on mobile; minimize client JS (favor Server Components); responsive images/fonts later.
 - Security: Input validation (Zod), sanitize outputs, no secrets in VCS.
 - Privacy: Local dev DB; later data retention/export policy.
-- i18n/l10n: German first; extensible to English later.
+- i18n/l10n: German first; English is implemented (runtime switch, `lib/locales/de.ts` + `en.ts`).
 - Reliability: CI gates (lint/typecheck/tests/build).
 - DX: Monorepo with shared types/utilities, strict TypeScript and ESLint baseline.
 
@@ -44,58 +44,52 @@ Non‑goals (MVP)
 - Monorepo (npm workspaces): `apps/web` (Next.js App Router), `packages/shared` (domain/types/utils).
 - UI: Next.js 14 (App Router), React 18, Tailwind CSS, mobile‑first.
 - API: Next.js Route Handlers at `app/api/*` with Zod validation.
-- Domain (shared): Money value object and transaction model in [`packages/shared`](packages/shared).
-  - Money: [`packages/shared/src/money.ts`](packages/shared/src/money.ts)
-  - Transaction: [`packages/shared/src/domain.ts`](packages/shared/src/domain.ts)
-- Data: Prisma + SQLite (dev).
-  - Schema: [`apps/web/prisma/schema.prisma`](apps/web/prisma/schema.prisma)
-  - Seed: [`apps/web/prisma/seed.js`](apps/web/prisma/seed.js)
-  - Client singleton: [`apps/web/lib/prisma.ts`](apps/web/lib/prisma.ts)
-- Testing: Vitest root config [`vitest.config.ts`](vitest.config.ts), tests in shared.
+- Domain (shared): Money value object and transaction model in [`packages/shared`](../packages/shared).
+  - Money: [`packages/shared/src/money.ts`](../packages/shared/src/money.ts)
+  - Transaction: [`packages/shared/src/domain.ts`](../packages/shared/src/domain.ts)
+- Data: Prisma + PostgreSQL everywhere (local: Docker `postgres:16`, CI: GitHub Actions service, prod: Railway).
+  - Schema: [`apps/web/prisma/schema.prisma`](../apps/web/prisma/schema.prisma)
+  - Seed: [`apps/web/prisma/seed.js`](../apps/web/prisma/seed.js)
+  - Client singleton: [`apps/web/lib/prisma.ts`](../apps/web/lib/prisma.ts)
+- Testing: Vitest root config [`vitest.config.ts`](../vitest.config.ts) — domain tests in `packages/shared/src`, API integration tests in `apps/web/tests`.
 
 ## 7. Current Routes & Screens
-- `/` – Home.
-- `/transactions` – List + form to create; aligned with API.
-- `/budgets` – List + form to create monthly budgets.
-- API:
-  - `GET /api/transactions` – list.
-  - `POST /api/transactions` – create with body: `{ accountId, amountCents, description, occurredAt, categoryId? }` implemented in [`apps/web/app/api/transactions/route.ts`](apps/web/app/api/transactions/route.ts).
-   - `GET /api/accounts` / `POST /api/accounts` – list/create accounts.
-   - `GET /api/categories` / `POST /api/categories` – list/create categories.
-   - `GET /api/budgets` / `POST /api/budgets` – list/create budgets.
-   - `GET /api/recurring-transactions` / `POST /api/recurring-transactions` – list/create recurring transactions.
+- Screens: `/` (dashboard), `/transactions`, `/saving-plan`, `/review`, `/settings`, `/login`, `/forgot-password`, `/reset-password`, `/impressum`, `/datenschutz`. (`/budgets` is a redirect to `/saving-plan`.)
+- API: transactions, recurring-transactions (+ skips), budgets, saving-plan (+ complete/withdraw), categories, accounts, analytics (summary/quarterly/monthly-review), auth (register, password flows), demo seed — see the [API Reference](./api-reference.md) for the complete, authoritative list.
 
 ## 8. Data Model
-- Account: id (cuid or fixed for seed), name, createdAt.
-- Category: id (cuid), name (unique), createdAt.
-- Transaction: id (cuid), accountId (FK), optional categoryId (FK), amountCents (Int), description (String), occurredAt (DateTime), createdAt (DateTime). See schema.
+The schema has grown well beyond the MVP sketch (user scoping with `userId` on Account/Category, `isIncome`, saving-goal linking, recurring transactions with skips, password-reset tokens). The authoritative description lives in [Data Model](./data-model.md) and `apps/web/prisma/schema.prisma`.
 
 ## 9. Validation
-- Zod schemas in API (see [`apps/web/app/api/transactions/route.ts`](apps/web/app/api/transactions/route.ts)).
+- Zod schemas in API (see [`apps/web/app/api/transactions/route.ts`](../apps/web/app/api/transactions/route.ts)).
 - Domain helpers in shared:
-  - `ensureNonEmpty` in [`packages/shared/src/strings.ts`](packages/shared/src/strings.ts)
-  - Money parse/format in [`packages/shared/src/money.ts`](packages/shared/src/money.ts)
+  - `ensureNonEmpty` in [`packages/shared/src/strings.ts`](../packages/shared/src/strings.ts)
+  - Money parse/format in [`packages/shared/src/money.ts`](../packages/shared/src/money.ts)
 
 ## 10. Tooling & CI/CD
-- Node 20 (see [.nvmrc](.nvmrc)).
-- Lint/Typecheck/Test/Build scripts at root [`package.json`](package.json).
-- CI: GitHub Actions running lint, typecheck, tests (with `db:push`), build in [.github/workflows/ci.yml](.github/workflows/ci.yml).
+- Node 22 (pinned via [.nvmrc](../.nvmrc), currently 22.14.0).
+- Lint/Typecheck/Test/Build scripts at root [`package.json`](../package.json).
+- CI: GitHub Actions running lint, typecheck, tests (with `db:push`), build in [.github/workflows/ci.yml](../.github/workflows/ci.yml).
 
 ## 11. Styling
-- Tailwind CSS to be used for styling with a utility‑first approach.
-- Adopt mobile‑first responsive patterns using Tailwind breakpoints.
-- Maintain consistent spacing, typography, and color scales via Tailwind config (to be added).
+- Tailwind CSS with a utility‑first approach (config: `apps/web/tailwind.config.ts` + `@tailwindcss/forms`).
+- Mobile‑first responsive patterns using Tailwind breakpoints (persistent sidebar at `md`+, bottom tab bar below).
 
 ## 14. Dashboard & Visualization
-- Dashboard (landing page) provides a visual overview using Chart.js via `react-chartjs-2`.
-- Initial charts:
-   - Pie (doughnut): Outgoings distribution by category for current month plus slices for (a) remaining liquid funds, (b) actual savings moved this month, (c) remaining planned savings for the month.
-   - Line (daily): Income (green), Outcome (red), Adjusted global savings (blue) across days of the current month. If cumulative outcome exceeds income, the deficit reduces displayed savings.
-- Demo categories used for outgoings: clothing, hobbies, eating out, food order, cosmetics, drugstore, presents, mobility, special, health, interior, misc, and a dedicated "Savings" category for monthly savings transfers.
-- Demo income sources: salary1, salary2, child benefit, misc.
+- Dashboard (landing page) provides a visual overview using Chart.js via `react-chartjs-2` (`Doughnut` + `Bar`).
+- Implemented charts (see `apps/web/app/page.tsx`):
+   - Doughnut: outgoings distribution by **expense category** for the current month (savings/remaining funds are shown separately, e.g. as a segmented progress bar — not as doughnut slices).
+   - Daily chart: cumulative income/outcome/savings series across the days of the current month (from `summary.daily`).
+- Demo data (36 deterministic months) is defined in `apps/web/lib/demoData.js` — categories and income sources live there, not in this document.
 - Accessibility: Chart sections include headings and descriptive text, with accessible progress bar semantics; consider data table equivalents for screen readers in future iterations.
 
 ### Dynamic Planned Savings & Predictive Outcomes
+
+> **Status:** implemented with a different design than sketched below. There are no
+> `PredictiveOutcome`/`Allocation` models — saving goals are `Budget` rows with
+> `categoryId = null` (dated or undated), and the monthly suggestion is computed
+> on the fly in `apps/web/app/api/saving-plan/compute.ts`. The section below is
+> kept as the original design sketch.
 
 Users can define upcoming large expenses (predictive outcomes), e.g., "Christmas presents (1000€ by Dec)", "New wheels (600€ by Nov)".
 
@@ -127,10 +121,16 @@ This dynamic plan feeds future UI components (e.g., progress bars per outcome) a
 
 ## 12. Risks & Assumptions
 - Single‑developer velocity; scope must remain focused.
-- SQLite fits dev; migration to Postgres later may be required.
-- No auth yet; multi‑user support out of scope for MVP.
+- ~~SQLite fits dev; migration to Postgres later may be required~~ — done: PostgreSQL is used in dev, CI, and prod.
+- ~~No auth yet~~ — done: NextAuth (Credentials) with per-user data scoping is implemented.
 
 ## 13. Open Questions (to decide)
+
+> Several of these have since been decided in code: **Q1** auth = NextAuth
+> CredentialsProvider with its own `User` model; **Q3** recurrence =
+> `intervalMonths` + `dayOfMonth` with per-month skips; **Q10** hosting = Railway
+> (see [Deployment & CI](./deployment.md)); **Q11** Tailwind config exists.
+
 1) Authentication/Users
    - Do we need user accounts in MVP (local only vs. hosted later)? If so, what auth provider/flow?
 2) Budget & Goals
