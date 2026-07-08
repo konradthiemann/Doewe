@@ -131,7 +131,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     User->>Form: Enters amount, description, category, income/expense toggle
-    Form->>Form: parseCents(rawInput) → Cents; sign from toggle; occurredAt = now
+    Form->>Form: parseCents(rawInput) → Cents, sign from toggle, occurredAt = now
     Form->>API: POST /api/transactions\n{ accountId, categoryId?, amountCents, description, occurredAt }
     API->>AuthLib: getSessionUser()
     AuthLib-->>API: user or null
