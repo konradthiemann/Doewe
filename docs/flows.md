@@ -201,3 +201,45 @@ flowchart TD
 The endpoint runs its Prisma queries and performs all aggregation and joining in TypeScript application code — there is no single SQL query that computes everything. Classification happens per transaction with the **savings check first**: a transaction in the savings category counts toward net savings regardless of sign (a withdrawal reduces savings rather than counting as income). Only then are the remaining transactions split by sign into income and expenses. The `daily` object contains **cumulative running totals** per calendar day (including recurring projections and the savings baseline), so the client can render the month chart without additional processing. All monetary values in the response are euros (divided by 100) except `recurringTransactions[].amountCents`.
 
 For reviewing **completed past months**, the `/review` page calls `GET /api/analytics/monthly-review?month=…&year=…` instead — a separate endpoint returning cent values with expense-by-category and income-by-source breakdowns (see the API reference).
+
+---
+
+## Flow 6: Tax Preparation (Steuervorbereitung)
+
+A user earmarks a transaction for the German tax return, attaches a receipt photo, and later reviews the tax year on `/tax`. Receipts follow the **Belegvorhaltepflicht**: they are archived for the Finanzamt on request, not submitted.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as TransactionForm (Client)
+    participant AM as AttachmentManager (Client)
+    participant TxAPI as POST /api/transactions
+    participant UpAPI as POST /api/transactions/[id]/attachments
+    participant TaxAPI as GET /api/tax?year=
+    participant ORM as Prisma
+    participant DB as PostgreSQL
+
+    User->>UI: Selects category "Handwerker" (isTaxRelevant)
+    UI->>UI: Tax toggle auto-enables (user can override)
+    User->>AM: "Foto aufnehmen" — camera capture on mobile
+    AM->>AM: compressImage() — canvas downscale to JPEG (~1 MB)
+    User->>UI: Submit
+
+    UI->>TxAPI: POST body incl. taxRelevant true
+    TxAPI->>ORM: transaction.create(...)
+    ORM->>DB: INSERT INTO Transaction ...
+    TxAPI-->>UI: 201 Created + id
+
+    UI->>UpAPI: POST multipart field "file" (queued receipt)
+    UpAPI->>UpAPI: Validate MIME whitelist, max 5 MB, max 5 per transaction
+    UpAPI->>ORM: attachment.create({ data: bytes })
+    ORM->>DB: INSERT INTO Attachment (BYTEA)
+    UpAPI-->>UI: 201 + metadata (never the bytes)
+
+    User->>TaxAPI: Opens /tax, picks year
+    TaxAPI->>ORM: findMany taxRelevant true, UTC year bounds
+    ORM->>DB: SELECT ... incl. attachment metadata
+    TaxAPI-->>User: transactions + categorySums with receipt ratio
+```
+
+Key rules: the tax toggle only ever auto-**enables** (never silently disables) and respects a manual override. Marking a **category** as tax-relevant (Settings) retroactively earmarks all of its existing transactions and becomes the server-side default for new ones — an explicit `taxRelevant: false` on a single transaction always wins. Receipt bytes live in the `Attachment.data` BYTEA column and are only ever selected by the binary download endpoint `GET /api/attachments/[id]` — every list endpoint returns metadata only. Deleting a transaction cascades to its receipts. If a receipt upload fails after the transaction was created, the transaction is kept and the form shows a warning so the user can re-attach the file via edit.
