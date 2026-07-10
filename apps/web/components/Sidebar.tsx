@@ -88,6 +88,18 @@ export default function Sidebar() {
       )
     },
     {
+      href: "/tax",
+      label: t("nav.tax"),
+      icon: (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 14.25l6-6" />
+          <path d="M19.5 4.757v16.993l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0c1.1.128 1.907 1.077 1.907 2.185Z" />
+          <path d="M9.75 9h.008v.008H9.75V9Z" />
+          <path d="M14.25 13.5h.008v.008h-.008V13.5Z" />
+        </svg>
+      )
+    },
+    {
       href: "/impressum",
       label: t("legal.impressum"),
       icon: (

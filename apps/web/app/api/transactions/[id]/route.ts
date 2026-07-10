@@ -43,7 +43,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         categoryId: data.categoryId ?? null,
         amountCents: data.amountCents,
         description: data.description,
-        occurredAt
+        occurredAt,
+        // Fallback auf den Bestandswert, damit Clients ohne das Feld das Flag
+        // nicht stillschweigend zurücksetzen (PATCH mit Voll-Body-Semantik).
+        taxRelevant: data.taxRelevant ?? existing.taxRelevant
       }
     });
 

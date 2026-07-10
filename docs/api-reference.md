@@ -265,10 +265,11 @@ Create a new category.
 |---|---|---|
 | `name` | string | Non-empty; unique per user; the reserved names `"savings"` / `"sparen"` (case-insensitive) are rejected |
 | `isIncome` | boolean | Optional, defaults to `false`. `true` for income, `false` for expense |
+| `isTaxRelevant` | boolean | Optional, defaults to `false`. Selecting the category in the transaction form pre-enables the tax toggle |
 
 **Success response — `201 Created`:**
 ```json
-{ "id": "cat_02", "name": "Lebensmittel", "isIncome": false, "userId": "usr_01" }
+{ "id": "cat_02", "name": "Lebensmittel", "isIncome": false, "isTaxRelevant": false, "userId": "usr_01" }
 ```
 
 **Error responses:**
@@ -285,7 +286,7 @@ Create a new category.
 
 ### `PATCH /api/categories/[id]`
 
-Rename a category **or** merge it into another one. The protected savings category (`"savings"` / `"sparen"`) cannot be modified.
+Rename a category, toggle its tax relevance, **or** merge it into another one. The protected savings category (`"savings"` / `"sparen"`) cannot be modified.
 
 **Auth required:** Yes
 
@@ -295,13 +296,18 @@ Rename a category **or** merge it into another one. The protected savings catego
 ```
 or
 ```json
+{ "isTaxRelevant": true }
+```
+or
+```json
 { "mergeIntoCategoryId": "cat_09" }
 ```
 
 | Field | Type | Constraints |
 |---|---|---|
 | `name` | string | Optional; new name (unique per user) |
-| `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted |
+| `isTaxRelevant` | boolean | Optional; marks the category as tax-relevant (pre-enables the tax toggle in the transaction form) |
+| `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted. Takes precedence over the other fields |
 
 **Success response — `200 OK`:** The updated category (rename) or the merge target category (merge).
 
@@ -373,6 +379,7 @@ List **all** transactions for the authenticated user across all accounts, ordere
     "amountCents": 320000,
     "description": "Gehalt April",
     "occurredAt": "2026-04-01T00:00:00.000Z",
+    "taxRelevant": false,
     "createdAt": "2026-04-01T08:00:00.000Z"
   }
 ]
@@ -411,6 +418,7 @@ Create a new transaction.
 | `amountCents` | integer | Required; negative for expense, positive for income (no non-zero check — `0` is accepted) |
 | `description` | string | Required; non-empty |
 | `occurredAt` | ISO date string | Required |
+| `taxRelevant` | boolean | Optional, defaults to `false`. Earmarks the transaction for the tax return (see [Attachments](#attachments-receipts)) |
 
 **Success response — `201 Created`:** Full transaction object (same shape as GET list item).
 
@@ -426,7 +434,7 @@ Create a new transaction.
 
 ### `PATCH /api/transactions/[id]`
 
-Update an existing transaction. **Not a partial update** — the request is validated against the same schema as `POST`, so `accountId`, `amountCents`, `description`, and `occurredAt` are required; `categoryId`/`savingGoalId` stay optional (omit instead of `null`).
+Update an existing transaction. **Not a partial update** — the request is validated against the same schema as `POST`, so `accountId`, `amountCents`, `description`, and `occurredAt` are required; `categoryId`/`savingGoalId` stay optional (omit instead of `null`). `taxRelevant` is optional; when omitted, the stored value is kept (the flag is never silently cleared).
 
 **Auth required:** Yes
 
@@ -469,6 +477,153 @@ Delete a transaction by ID.
 |---|---|
 | `401` | Not authenticated |
 | `404` | Transaction not found or not owned by user |
+
+---
+
+## Attachments (Receipts)
+
+Receipt files (photos/PDFs) attached to transactions as evidence for the German tax return (Belegvorhaltepflicht — receipts are archived, not submitted). Files are stored as bytes in PostgreSQL. Limits: allowed types `image/jpeg`, `image/png`, `image/webp`, `application/pdf`; max. **5 MB** per file; max. **5 attachments** per transaction. List/metadata responses never contain the file bytes.
+
+### `GET /api/transactions/[id]/attachments`
+
+List attachment metadata for one transaction, ordered by `createdAt` ascending.
+
+**Auth required:** Yes
+
+**Success response — `200 OK`:**
+```json
+[
+  {
+    "id": "att_01",
+    "fileName": "quittung.jpg",
+    "mimeType": "image/jpeg",
+    "sizeBytes": 482113,
+    "createdAt": "2026-07-10T10:00:00.000Z"
+  }
+]
+```
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `404` | Transaction not found or not owned by user |
+
+---
+
+### `POST /api/transactions/[id]/attachments`
+
+Upload a receipt as `multipart/form-data` with a single field named `file`.
+
+**Auth required:** Yes
+
+**Request body:** multipart form data
+
+| Field | Type | Constraints |
+|---|---|---|
+| `file` | file | Required; type in the whitelist; ≤ 5 MB (validated against the actual bytes, not the client-reported size) |
+
+**Success response — `201 Created`:** Attachment metadata (same shape as the list item above, no bytes).
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Missing/empty file, body is not multipart, or the 5-attachments-per-transaction limit is reached |
+| `401` | Not authenticated |
+| `404` | Transaction not found or not owned by user |
+| `413` | File larger than 5 MB |
+| `415` | File type not in the whitelist |
+
+---
+
+### `GET /api/attachments/[id]`
+
+Download the receipt file. Responds with the raw bytes, `Content-Type` set to the stored MIME type, `Content-Disposition: inline; filename="…"`, and `Cache-Control: private, no-store` (content is auth-gated).
+
+**Auth required:** Yes
+
+**Success response — `200 OK`:** Binary file body.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `404` | Attachment not found or not owned by user (ownership via transaction → account → user) |
+
+---
+
+### `DELETE /api/attachments/[id]`
+
+Delete a receipt.
+
+**Auth required:** Yes
+
+**Request body:** None
+
+**Success response — `204 No Content`**
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `404` | Attachment not found or not owned by user |
+
+---
+
+## Tax
+
+### `GET /api/tax?year=…`
+
+All tax-earmarked transactions (`taxRelevant: true`) of one calendar year (UTC boundaries on `occurredAt`), with category info, attachment metadata, and per-category sums. Backs the `/tax` page.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Parameter | Type | Constraints |
+|---|---|---|
+| `year` | integer | Optional, defaults to the current year. Must be 2000–2100, otherwise `400` |
+
+**Success response — `200 OK`:**
+```json
+{
+  "year": 2026,
+  "transactions": [
+    {
+      "id": "txn_07",
+      "amountCents": -18900,
+      "description": "Fachbuch",
+      "occurredAt": "2026-03-12T00:00:00.000Z",
+      "category": { "id": "cat_05", "name": "Weiterbildung" },
+      "attachments": [
+        { "id": "att_01", "fileName": "quittung.jpg", "mimeType": "image/jpeg", "sizeBytes": 482113 }
+      ]
+    }
+  ],
+  "categorySums": [
+    {
+      "categoryId": "cat_05",
+      "categoryName": "Weiterbildung",
+      "totalCents": -18900,
+      "count": 1,
+      "withReceiptCount": 1
+    }
+  ]
+}
+```
+
+`categorySums` is sorted by `|totalCents|` descending; transactions without a category are grouped under `categoryId: null`. Attachment entries contain metadata only, never bytes.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Invalid `year` parameter |
+| `401` | Not authenticated |
 
 ---
 

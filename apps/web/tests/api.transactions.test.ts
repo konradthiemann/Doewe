@@ -116,4 +116,88 @@ describe("/api/transactions", () => {
     const listAfterDelete: Array<{ id: string }> = await listAfterDeleteRes.json();
     expect(listAfterDelete.some((t) => t.id === created.id)).toBe(false);
   }, 20000);
+
+  it("handles the taxRelevant flag on create and update", async () => {
+    const routes = await import("../app/api/transactions/route");
+    const detailRoutes = await import("../app/api/transactions/[id]/route");
+
+    // Default: ohne Feld → false
+    const defaultRes = await routes.POST(
+      new Request("http://localhost/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: testAccountId,
+          amountCents: -900,
+          description: "No tax flag",
+          occurredAt: new Date().toISOString()
+        })
+      })
+    );
+    expect(defaultRes.status).toBe(201);
+    const defaultTx: { id: string; taxRelevant: boolean } = await defaultRes.json();
+    expect(defaultTx.taxRelevant).toBe(false);
+
+    // Explizit true
+    const res = await routes.POST(
+      new Request("http://localhost/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: testAccountId,
+          categoryId: testCategoryId,
+          amountCents: -4200,
+          description: "Tax relevant",
+          occurredAt: new Date().toISOString(),
+          taxRelevant: true
+        })
+      })
+    );
+    expect(res.status).toBe(201);
+    const created: { id: string; taxRelevant: boolean; occurredAt: string } = await res.json();
+    expect(created.taxRelevant).toBe(true);
+
+    // PATCH ohne das Feld darf das Flag nicht zurücksetzen
+    const patchWithoutFlag = await detailRoutes.PATCH(
+      new Request(`http://localhost/api/transactions/${created.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: testAccountId,
+          amountCents: -4200,
+          description: "Tax relevant edited",
+          occurredAt: created.occurredAt
+        })
+      }),
+      { params: { id: created.id } }
+    );
+    expect(patchWithoutFlag.status).toBe(200);
+    const stillFlagged: { taxRelevant: boolean } = await patchWithoutFlag.json();
+    expect(stillFlagged.taxRelevant).toBe(true);
+
+    // PATCH mit false setzt zurück
+    const patchRes = await detailRoutes.PATCH(
+      new Request(`http://localhost/api/transactions/${created.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: testAccountId,
+          amountCents: -4200,
+          description: "Tax relevant edited",
+          occurredAt: created.occurredAt,
+          taxRelevant: false
+        })
+      }),
+      { params: { id: created.id } }
+    );
+    expect(patchRes.status).toBe(200);
+    const unflagged: { taxRelevant: boolean } = await patchRes.json();
+    expect(unflagged.taxRelevant).toBe(false);
+
+    // GET-Liste enthält das Feld
+    const listRes = await routes.GET();
+    const list: Array<{ id: string; taxRelevant: boolean }> = await listRes.json();
+    const match = list.find((t) => t.id === created.id);
+    expect(match?.taxRelevant).toBe(false);
+  }, 20000);
 });

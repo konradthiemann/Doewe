@@ -13,7 +13,8 @@ function isProtectedCategoryName(name: string): boolean {
 
 const CategoryInput = z.object({
   name: z.string().min(1, "Name is required"),
-  isIncome: z.boolean().optional().default(false)
+  isIncome: z.boolean().optional().default(false),
+  isTaxRelevant: z.boolean().optional().default(false)
 });
 
 export async function GET(req: Request) {
@@ -52,6 +53,7 @@ export async function GET(req: Request) {
         id: c.id,
         name: c.name,
         isIncome: c.isIncome,
+        isTaxRelevant: c.isTaxRelevant,
         createdAt: c.createdAt,
         usageCount: c._count.transactions
       }))
@@ -90,7 +92,12 @@ export async function POST(req: Request) {
   
   try {
     const created = await prisma.category.create({
-      data: { name: parsed.data.name, isIncome: parsed.data.isIncome, userId: user.id }
+      data: {
+        name: parsed.data.name,
+        isIncome: parsed.data.isIncome,
+        isTaxRelevant: parsed.data.isTaxRelevant,
+        userId: user.id
+      }
     });
     return NextResponse.json(created, { status: 201 });
   } catch (err) {

@@ -8,7 +8,7 @@ import PageContainer from "../../components/PageContainer";
 import { useI18n } from "../../lib/i18n";
 import { useTheme, type Theme } from "../../lib/ThemeContext";
 
-type Category = { id: string; name: string; isIncome: boolean };
+type Category = { id: string; name: string; isIncome: boolean; isTaxRelevant: boolean };
 
 // Protected category names that cannot be modified or deleted
 const PROTECTED_CATEGORY_NAMES = ["savings", "sparen"];
@@ -102,6 +102,27 @@ export default function SettingsPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name })
+      });
+      if (!res.ok) {
+        setCatError(t("settings.categories.errorUpdate", { status: res.status }));
+        return;
+      }
+      setCatMessage(t("settings.categories.messageUpdated"));
+      await refreshCategories();
+    } finally {
+      setBusy(id, false);
+    }
+  };
+
+  const handleTaxToggle = async (id: string, isTaxRelevant: boolean) => {
+    setBusy(id, true);
+    setCatError(null);
+    setCatMessage(null);
+    try {
+      const res = await fetch(`/api/categories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isTaxRelevant })
       });
       if (!res.ok) {
         setCatError(t("settings.categories.errorUpdate", { status: res.status }));
@@ -316,6 +337,11 @@ export default function SettingsPage() {
                   }`}>
                     {category.isIncome ? t("settings.categories.badgeIncome") : t("settings.categories.badgeOutcome")}
                   </span>
+                  {category.isTaxRelevant && (
+                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">
+                      {t("settings.categories.badgeTax")}
+                    </span>
+                  )}
                   {isProtected && (
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
                       {t("settings.categories.badgeProtected")}
@@ -344,6 +370,25 @@ export default function SettingsPage() {
                 {isProtected ? (
                   <p className="text-sm text-gray-500 dark:text-neutral-400">{t("settings.categories.protectedHint")}</p>
                 ) : (
+              <>
+              <div className="mt-3 flex items-start gap-2">
+                <input
+                  id={`tax-${category.id}`}
+                  type="checkbox"
+                  checked={category.isTaxRelevant}
+                  disabled={isBusy(category.id)}
+                  onChange={(event) => handleTaxToggle(category.id, event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-800"
+                />
+                <label htmlFor={`tax-${category.id}`} className="flex flex-col">
+                  <span className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+                    {t("settings.categories.taxToggleLabel")}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-neutral-400">
+                    {t("settings.categories.taxToggleHint")}
+                  </span>
+                </label>
+              </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-700 dark:text-neutral-200" htmlFor={`rename-${category.id}`}>
@@ -433,6 +478,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.deleteHint")}</p>
                 </div>
               </div>
+              </>
               )}
               </div>
             </div>

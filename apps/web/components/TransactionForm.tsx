@@ -11,6 +11,7 @@ import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
 import { transactionFormSchema, type TransactionFormValues } from "../lib/schemas/forms";
 
+import AttachmentManager, { uploadAttachment } from "./AttachmentManager";
 import SearchableSelect from "./SearchableSelect";
 import { Button } from "./ui/Button";
 
@@ -21,13 +22,14 @@ type TransactionDetails = {
   description: string;
   occurredAt: string;
   categoryId?: string | null;
+  taxRelevant?: boolean;
 };
 
 type Props = {
   mode?: "create" | "edit";
   transaction?: TransactionDetails;
   headingId?: string;
-  onSuccess?: (message?: string) => void;
+  onSuccess?: (message?: string, options?: { keepOpen?: boolean }) => void;
   onClose?: () => void;
   onDelete?: (message?: string) => void;
 };
@@ -46,7 +48,7 @@ export default function TransactionForm({
     transaction ? (transaction.amountCents >= 0 ? "income" : "outcome") : "outcome"
   );
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>>([]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean; isTaxRelevant?: boolean; usageCount?: number }>>([]);
   const [_loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
@@ -61,6 +63,12 @@ export default function TransactionForm({
   const [isSavingGoal, setIsSavingGoal] = useState(false);
   const [selectedSavingGoalId, setSelectedSavingGoalId] = useState("");
   const [savingGoals, setSavingGoals] = useState<Array<{ id: string; title: string; month: number; year: number }>>([]);
+  const [taxRelevant, setTaxRelevant] = useState(transaction?.taxRelevant ?? false);
+  const [taxTouched, setTaxTouched] = useState(false);
+  const [taxHintOpen, setTaxHintOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [attachmentUploadError, setAttachmentUploadError] = useState<string | null>(null);
+  const initialCategoryIdRef = useRef(transaction?.categoryId ?? null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -155,8 +163,23 @@ export default function TransactionForm({
         categoryId: transaction.categoryId ?? "",
       });
       setTxType(transaction.amountCents >= 0 ? "income" : "outcome");
+      setTaxRelevant(transaction.taxRelevant ?? false);
+      setTaxTouched(false);
+      initialCategoryIdRef.current = transaction.categoryId ?? null;
     }
   }, [mode, transaction, reset]);
+
+  // Steuer-Schalter automatisch aktivieren, wenn eine steuerrelevante Kategorie
+  // gewählt wird. Setzt nur auf true (nie zurück), respektiert manuelle
+  // Übersteuerung und überspringt im Edit-Mode die initiale Kategorie, damit
+  // bestehende Transaktionen beim Öffnen nicht stillschweigend umgeflaggt werden.
+  useEffect(() => {
+    if (taxTouched) return;
+    if (!categoryId || categoryId === "__new__") return;
+    if (mode === "edit" && categoryId === initialCategoryIdRef.current) return;
+    const category = categories.find((c) => c.id === categoryId);
+    if (category?.isTaxRelevant) setTaxRelevant(true);
+  }, [categoryId, categories, taxTouched, mode]);
 
   useEffect(() => {
     if (showNewCategory) {
@@ -192,6 +215,7 @@ export default function TransactionForm({
     setSubmitError(null);
     setInlineSuccess(null);
     setRecurringError(null);
+    setAttachmentUploadError(null);
 
     let rawCents: number;
     try {
@@ -212,6 +236,7 @@ export default function TransactionForm({
     }
 
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
+    let uploadWarning: string | null = null;
     const endpoint = mode === "edit" && transaction ? `/api/transactions/${transaction.id}` : "/api/transactions";
     const method = mode === "edit" ? "PATCH" : "POST";
     const payload = {
@@ -221,6 +246,7 @@ export default function TransactionForm({
       occurredAt: mode === "edit" && transaction ? transaction.occurredAt : new Date().toISOString(),
       categoryId: values.categoryId && values.categoryId !== "__new__" ? values.categoryId : undefined,
       savingGoalId: isSavingGoal && selectedSavingGoalId ? selectedSavingGoalId : undefined,
+      taxRelevant: isRecurring ? undefined : taxRelevant,
     };
 
     try {
@@ -244,6 +270,27 @@ export default function TransactionForm({
           setSubmitError(t("transactionForm.errorSaveFailed", { status: res.status }));
           return;
         }
+
+        // Im Create-Mode gequeuete Belege nach dem Anlegen hochladen. Schlägt
+        // ein Upload fehl, bleibt die Transaktion bestehen — der Nutzer kann
+        // den Beleg über "Bearbeiten" nachreichen.
+        if (mode === "create" && pendingFiles.length > 0) {
+          const created: { id: string } = await res.json();
+          const failed: File[] = [];
+          for (const file of pendingFiles) {
+            try {
+              const uploadRes = await uploadAttachment(created.id, file);
+              if (!uploadRes.ok) failed.push(file);
+            } catch {
+              failed.push(file);
+            }
+          }
+          setPendingFiles([]);
+          if (failed.length > 0) {
+            uploadWarning = t("transactionForm.attachmentsUploadFailedAfterSave", { count: String(failed.length) });
+            setAttachmentUploadError(uploadWarning);
+          }
+        }
       }
 
       const message = mode === "edit"
@@ -252,10 +299,12 @@ export default function TransactionForm({
           ? t("transactionForm.recurringSaved")
           : t("transactionForm.saved");
       setInlineSuccess(message);
-      onSuccess?.(message);
+      onSuccess?.(message, uploadWarning ? { keepOpen: true } : undefined);
 
       if (mode === "create") {
         reset((current) => ({ ...current, description: "", amount: "" }));
+        setTaxRelevant(false);
+        setTaxTouched(false);
       }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : t("transactionForm.errorSave"));
@@ -573,6 +622,60 @@ export default function TransactionForm({
           )}
         </div>
 
+        {!isRecurring && (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-amber-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-amber-900/20 dark:text-neutral-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">
+                    {t("transactionForm.taxToggleTitle")}
+                    <button
+                      type="button"
+                      onClick={() => setTaxHintOpen((open) => !open)}
+                      aria-expanded={taxHintOpen}
+                      aria-controls="tx-tax-hint"
+                      aria-label={t("transactionForm.taxHintToggle")}
+                      className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400 text-xs font-semibold text-amber-700 hover:bg-amber-100 focus:outline-none focus-visible:ring focus-visible:ring-amber-500 dark:border-amber-500 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                    >
+                      i
+                    </button>
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                    {t("transactionForm.taxToggleDescription")}
+                  </p>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={taxRelevant}
+                    onChange={(event) => {
+                      setTaxRelevant(event.target.checked);
+                      setTaxTouched(true);
+                    }}
+                    aria-checked={taxRelevant}
+                  />
+                  <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-600 dark:bg-neutral-700" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                </label>
+              </div>
+              {taxHintOpen && (
+                <p id="tx-tax-hint" className="mt-2 text-xs text-gray-600 dark:text-neutral-300">
+                  {t("transactionForm.taxHint")}
+                </p>
+              )}
+            </div>
+            {taxRelevant && (
+              <AttachmentManager
+                mode={mode}
+                transactionId={transaction?.id}
+                pendingFiles={pendingFiles}
+                onPendingFilesChange={setPendingFiles}
+              />
+            )}
+          </div>
+        )}
+
         {mode === "create" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between rounded-lg bg-indigo-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-indigo-900/20 dark:text-neutral-200">
@@ -709,6 +812,12 @@ export default function TransactionForm({
         {inlineSuccess && (
           <p role="status" className="text-sm text-green-600">
             {inlineSuccess}
+          </p>
+        )}
+
+        {attachmentUploadError && (
+          <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">
+            {attachmentUploadError}
           </p>
         )}
 

@@ -35,6 +35,7 @@ type Tx = {
   description: string;
   occurredAt: string;
   categoryId?: string | null;
+  taxRelevant?: boolean;
 };
 
 type RecurringTx = {
@@ -213,11 +214,15 @@ function TransactionsPage() {
     showFeedback(message ?? t("recurringForm.deleted"));
   };
 
-  const handleCreateSuccess = async (message?: string) => {
+  const handleCreateSuccess = async (message?: string, options?: { keepOpen?: boolean }) => {
     await refresh();
     await refreshRecurring();
-    closeCreateDialog();
-    showFeedback(message ?? t("transactionForm.saved"));
+    // keepOpen: Beleg-Upload schlug nach dem Anlegen fehl — Dialog offen
+    // lassen, damit die Warnung im Formular sichtbar bleibt.
+    if (!options?.keepOpen) {
+      closeCreateDialog();
+      showFeedback(message ?? t("transactionForm.saved"));
+    }
   };
 
   async function loadSkips(year: number, month: number, setter: (value: Set<string>) => void) {

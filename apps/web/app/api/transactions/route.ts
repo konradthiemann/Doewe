@@ -12,6 +12,7 @@
  *   occurredAt   string   — ISO-Datum-String
  *   categoryId?  string   — Optional, muss dem Nutzer gehören
  *   savingGoalId? string  — Optional, verknüpft mit einem Budget-Ziel
+ *   taxRelevant? boolean  — Optional, für die Steuererklärung vorgemerkt (Default false)
  */
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -72,7 +73,8 @@ export async function POST(req: Request) {
         savingGoalId: data.savingGoalId ?? null,
         amountCents: data.amountCents,
         description: data.description,
-        occurredAt
+        occurredAt,
+        taxRelevant: data.taxRelevant ?? false
       }
     });
 
