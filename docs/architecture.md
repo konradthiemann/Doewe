@@ -2,7 +2,7 @@
 
 ## Overview
 
-Doewe is a personal finance management application designed for individual users who want to track income and expenses, manage recurring payments, set monthly budgets per category, and plan savings goals. It runs as a web application and provides a dashboard with analytics, a transaction log, a savings plan, and a monthly review page (`/review`) with income/expense breakdowns. All data is scoped strictly to the authenticated user — multiple users can share the same instance without seeing each other's data (every query filters by `userId` or an account-ownership relation).
+Doewe is a personal finance management application designed for individual users who want to track income and expenses, manage recurring payments, set monthly budgets per category, and plan savings goals. It runs as a web application and provides a dashboard with analytics, a transaction log, a savings plan, a monthly review page (`/review`) with income/expense breakdowns, and a tax preparation page (`/tax`) that collects tax-earmarked transactions and their receipt attachments per year. All data is scoped strictly to the authenticated user — multiple users can share the same instance without seeing each other's data (every query filters by `userId` or an account-ownership relation).
 
 ---
 
@@ -50,6 +50,7 @@ Doewe/
 │   │   │   ├── budgets/              # Redirect stub → /saving-plan
 │   │   │   ├── saving-plan/          # /saving-plan page
 │   │   │   ├── review/               # /review — monthly review (KPIs, breakdowns)
+│   │   │   ├── tax/                  # /tax — tax preparation (year list, sums, receipt status)
 │   │   │   ├── settings/             # /settings page
 │   │   │   ├── login/                # /login page (public, with demo mode)
 │   │   │   ├── forgot-password/      # /forgot-password (public)
@@ -60,7 +61,10 @@ Doewe/
 │   │   │   └── api/
 │   │   │       ├── auth/             # NextAuth [...nextauth], /register,
 │   │   │       │                     # change-password, forgot-password, reset-password
-│   │   │       ├── transactions/     # GET, POST, PATCH [id], DELETE [id]
+│   │   │       ├── transactions/     # GET, POST, PATCH [id], DELETE [id],
+│   │   │       │                     # [id]/attachments (GET list, POST multipart upload)
+│   │   │       ├── attachments/      # GET [id] (binary receipt download), DELETE [id]
+│   │   │       ├── tax/              # GET ?year= — tax-earmarked transactions + category sums
 │   │   │       ├── recurring-transactions/  # CRUD + skips sub-resource
 │   │   │       ├── budgets/          # GET, POST
 │   │   │       ├── saving-plan/      # GET, POST, GET/PATCH/DELETE [id],
@@ -77,7 +81,8 @@ Doewe/
 │   │   │   │                         # sidebar ≥ md, mobile top bar + drawer, bottom nav
 │   │   │   ├── Sidebar.tsx           # Persistent left sidebar at md+ breakpoints
 │   │   │   ├── Header.tsx            # Mobile bottom tab bar (fixed bottom, md:hidden) + FAB
-│   │   │   ├── TransactionForm.tsx   # Add/edit transaction modal
+│   │   │   ├── TransactionForm.tsx   # Add/edit transaction modal (incl. tax toggle)
+│   │   │   ├── AttachmentManager.tsx # Receipt upload/list/delete inside the form
 │   │   │   ├── RecurringTransactionForm.tsx  # Edit recurring transaction (PATCH only)
 │   │   │   ├── SearchableSelect.tsx  # Accessible combobox for categories
 │   │   │   └── ...                   # Charts, saving widgets, PageContainer, ...
@@ -179,7 +184,7 @@ sequenceDiagram
 
 ### 3. Client-component pages over an SPA framework
 
-**Decision:** The app uses the Next.js 14 App Router, but the main pages (`/`, `/transactions`, `/saving-plan`, `/review`, `/settings`, `/login`) are **client components** (`"use client"`) that fetch their data from the API route handlers.
+**Decision:** The app uses the Next.js 14 App Router, but the main pages (`/`, `/transactions`, `/saving-plan`, `/review`, `/tax`, `/settings`, `/login`) are **client components** (`"use client"`) that fetch their data from the API route handlers.
 
 **Rationale:** The pages are highly interactive (forms, charts, optimistic list updates), so a client-side data flow with explicit `fetch` + state keeps the mental model simple and consistent: one REST API serves both reads and writes. Server Components render only the static shell. The trade-off — a larger client bundle and an extra round-trip for the initial data — is acceptable at this app's size.
 

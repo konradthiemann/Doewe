@@ -173,6 +173,7 @@ Current implemented features include:
 - Categories management (`app/api/categories`).
 - Recurring transactions handling.
 - Analytics summary endpoint (`app/api/analytics/summary`) for aggregated insights.
+- Tax preparation (German Belegvorhaltepflicht): earmark transactions for the tax return, attach receipt photos/PDFs (stored in PostgreSQL, `app/api/transactions/[id]/attachments`), mark whole categories as tax-relevant (retroactive), and review per-year sums with receipt status on `/tax`.
 - Domain utilities (money formatting, numeric handling, string helpers) in `@doewe/shared`.
 - Chart visualization using Chart.js to display spending patterns.
 - Accessible, mobile‑first UI components styled with Tailwind.
