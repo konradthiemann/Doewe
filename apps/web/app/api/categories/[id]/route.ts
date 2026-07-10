@@ -15,9 +15,10 @@ function isProtectedCategory(name: string): boolean {
 const UpdateInput = z
   .object({
     name: z.string().min(1).optional(),
-    mergeIntoCategoryId: z.string().min(1).optional()
+    mergeIntoCategoryId: z.string().min(1).optional(),
+    isTaxRelevant: z.boolean().optional()
   })
-  .refine((data) => Boolean(data.name || data.mergeIntoCategoryId), {
+  .refine((data) => Boolean(data.name || data.mergeIntoCategoryId) || data.isTaxRelevant !== undefined, {
     message: "No update fields provided"
   });
 
@@ -48,7 +49,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { name, mergeIntoCategoryId } = parsed.data;
+  const { name, mergeIntoCategoryId, isTaxRelevant } = parsed.data;
 
   if (mergeIntoCategoryId) {
     if (mergeIntoCategoryId === sourceCategory.id) {
@@ -76,9 +77,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
   }
 
-  if (name) {
+  if (name || isTaxRelevant !== undefined) {
     try {
-      const updated = await prisma.category.update({ where: { id: sourceCategory.id }, data: { name } });
+      const updated = await prisma.category.update({
+        where: { id: sourceCategory.id },
+        data: {
+          ...(name ? { name } : {}),
+          ...(isTaxRelevant !== undefined ? { isTaxRelevant } : {})
+        }
+      });
       return NextResponse.json(updated);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

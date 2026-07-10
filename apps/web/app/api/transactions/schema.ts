@@ -7,5 +7,6 @@ export const TransactionInput = z.object({
   savingGoalId: z.string().min(1).optional(),
   amountCents: z.number().int(),
   description: z.string().transform((s) => ensureNonEmpty(s)),
-  occurredAt: z.union([z.string(), z.date()])
+  occurredAt: z.union([z.string(), z.date()]),
+  taxRelevant: z.boolean().optional()
 });

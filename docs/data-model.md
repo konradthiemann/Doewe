@@ -31,6 +31,7 @@ erDiagram
         String userId FK
         String name
         Boolean isIncome
+        Boolean isTaxRelevant
         DateTime createdAt
     }
     Transaction {
@@ -41,6 +42,16 @@ erDiagram
         Int amountCents
         String description
         DateTime occurredAt
+        Boolean taxRelevant
+        DateTime createdAt
+    }
+    Attachment {
+        String id PK
+        String transactionId FK
+        String fileName
+        String mimeType
+        Int sizeBytes
+        Bytes data
         DateTime createdAt
     }
     RecurringTransaction {
@@ -86,6 +97,7 @@ erDiagram
     Category ||--o{ Budget : "scopes"
     RecurringTransaction ||--o{ RecurringTransactionSkip : "skipped by"
     Budget ||--o{ Transaction : "funds (saving goal)"
+    Transaction ||--o{ Attachment : "documented by"
 ```
 
 > There is **no separate `SavingGoal` model** — a saving goal is a `Budget` row
@@ -154,6 +166,7 @@ A user-defined label used to classify transactions and recurring transactions. C
 | `userId` | String | FK → User.id |
 | `name` | String | Label (e.g., "Lebensmittel", "Miete", "Gehalt") |
 | `isIncome` | Boolean | `true` for income categories, `false` for expense categories |
+| `isTaxRelevant` | Boolean | Default `false`. When set, choosing this category in the transaction form pre-enables the tax toggle (user can override) |
 | `createdAt` | DateTime | Creation timestamp |
 
 **Relationships:** A category belongs to one `User`. It can classify many `Transaction`s, `RecurringTransaction`s, and `Budget`s.
@@ -177,11 +190,30 @@ A single, one-time financial event: money coming in or going out on a specific d
 | `amountCents` | Int | Monetary value in euro cents; positive = income, negative = expense |
 | `description` | String | Free-text note |
 | `occurredAt` | DateTime | When the money moved (user-specified date) |
+| `taxRelevant` | Boolean | Default `false`. Earmarks the transaction for the German tax return; the `/tax` page lists all flagged transactions per year |
 | `createdAt` | DateTime | Record creation timestamp |
 
-**Relationships:** Belongs to one `Account`. Optionally classified by one `Category`. Optionally linked to one saving goal (`Budget`).
+**Relationships:** Belongs to one `Account`. Optionally classified by one `Category`. Optionally linked to one saving goal (`Budget`). Has many `Attachment`s (receipts).
 
 **Key rule:** `amountCents` carries the sign. A grocery purchase of €42.50 is stored as `-4250`. A salary of €3 200 is stored as `320000`.
+
+---
+
+### Attachment
+
+A receipt file (photo or PDF) attached to a transaction as evidence for the tax return (Belegvorhaltepflicht — receipts are archived, not submitted to the tax office). The file bytes are stored directly in PostgreSQL.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | String (CUID) | Primary key |
+| `transactionId` | String | FK → Transaction.id; `onDelete: Cascade` — deleting the transaction removes its receipts |
+| `fileName` | String | Sanitized original file name |
+| `mimeType` | String | One of `image/jpeg`, `image/png`, `image/webp`, `application/pdf` (enforced in the API) |
+| `sizeBytes` | Int | File size; max. 5 MB (enforced in the API) |
+| `data` | Bytes | Raw file content. **Never selected in list queries** — only `GET /api/attachments/[id]` loads it |
+| `createdAt` | DateTime | Upload timestamp |
+
+**Constraints:** Max. 5 attachments per transaction (enforced in the API). Indexed on `transactionId`.
 
 ---
 

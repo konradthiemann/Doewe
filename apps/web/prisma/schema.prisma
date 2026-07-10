@@ -22,11 +22,13 @@ model Account {
 }
 
 model Category {
-  id          String        @id @default(cuid())
-  name        String
-  userId      String
-  isIncome    Boolean       @default(false)
-  createdAt   DateTime      @default(now())
+  id            String        @id @default(cuid())
+  name          String
+  userId        String
+  isIncome      Boolean       @default(false)
+  // Selecting this category in the transaction form pre-enables the tax toggle.
+  isTaxRelevant Boolean       @default(false)
+  createdAt     DateTime      @default(now())
   transactions Transaction[]
   recurring    RecurringTransaction[]
   budgets      Budget[]
@@ -45,11 +47,32 @@ model Transaction {
   amountCents   Int
   description   String
   occurredAt    DateTime
+  // Marked for the German tax return (Belegvorhaltepflicht: receipts are
+  // archived as attachments and kept for the Finanzamt on request).
+  taxRelevant   Boolean  @default(false)
   createdAt     DateTime @default(now())
 
   account     Account  @relation(fields: [accountId], references: [id])
   category    Category? @relation(fields: [categoryId], references: [id])
   savingGoal  Budget?   @relation(fields: [savingGoalId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+}
+
+// Receipt files (photos/PDFs) attached to a transaction as tax evidence.
+// `data` holds the raw bytes — never select it in list queries; only
+// GET /api/attachments/[id] may load it.
+model Attachment {
+  id            String   @id @default(cuid())
+  transactionId String
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  data          Bytes
+  createdAt     DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
 }
 
 // Note: SQLite does not support Prisma enums; use a string field with app-level validation.
