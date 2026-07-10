@@ -166,7 +166,7 @@ A user-defined label used to classify transactions and recurring transactions. C
 | `userId` | String | FK → User.id |
 | `name` | String | Label (e.g., "Lebensmittel", "Miete", "Gehalt") |
 | `isIncome` | Boolean | `true` for income categories, `false` for expense categories |
-| `isTaxRelevant` | Boolean | Default `false`. When set, choosing this category in the transaction form pre-enables the tax toggle (user can override) |
+| `isTaxRelevant` | Boolean | Default `false`. Enabling it retroactively earmarks all existing transactions of the category and becomes the default for new ones (form pre-enables the toggle; API inherits when the flag is omitted). Individual transactions can still be unmarked |
 | `createdAt` | DateTime | Creation timestamp |
 
 **Relationships:** A category belongs to one `User`. It can classify many `Transaction`s, `RecurringTransaction`s, and `Budget`s.

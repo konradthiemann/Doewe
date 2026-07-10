@@ -79,12 +79,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   if (name || isTaxRelevant !== undefined) {
     try {
-      const updated = await prisma.category.update({
-        where: { id: sourceCategory.id },
-        data: {
-          ...(name ? { name } : {}),
-          ...(isTaxRelevant !== undefined ? { isTaxRelevant } : {})
+      const updated = await prisma.$transaction(async (tx) => {
+        const category = await tx.category.update({
+          where: { id: sourceCategory.id },
+          data: {
+            ...(name ? { name } : {}),
+            ...(isTaxRelevant !== undefined ? { isTaxRelevant } : {})
+          }
+        });
+        // Kategorie steuerrelevant markiert → alle bestehenden Transaktionen
+        // rückwirkend vormerken. Beim Abwählen bleiben die Flags erhalten,
+        // damit manuelle Markierungen nicht still verloren gehen.
+        if (isTaxRelevant === true) {
+          await tx.transaction.updateMany({
+            where: { categoryId: sourceCategory.id },
+            data: { taxRelevant: true }
+          });
         }
+        return category;
       });
       return NextResponse.json(updated);
     } catch (error) {
