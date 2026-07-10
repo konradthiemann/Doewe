@@ -515,5 +515,6 @@ export const de: Record<string, string> = {
   "transactionForm.attachmentsError": "Beleg konnte nicht verarbeitet werden.",
   "settings.categories.badgeTax": "Steuer",
   "settings.categories.taxToggleLabel": "Für Steuer relevant",
-  "settings.categories.taxToggleHint": "Alle bestehenden und künftigen Transaktionen dieser Kategorie werden für die Steuer vorgemerkt. Einzelne Transaktionen lassen sich weiterhin manuell abwählen."
+  "settings.categories.taxToggleHint": "Alle bestehenden und künftigen Transaktionen dieser Kategorie werden für die Steuer vorgemerkt. Einzelne Transaktionen lassen sich weiterhin manuell abwählen.",
+  "nav.categories": "Kategorien"
 };
