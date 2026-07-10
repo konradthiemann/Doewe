@@ -515,5 +515,6 @@ export const en: Record<string, string> = {
   "transactionForm.attachmentsError": "Couldn't process the receipt.",
   "settings.categories.badgeTax": "Tax",
   "settings.categories.taxToggleLabel": "Tax-relevant",
-  "settings.categories.taxToggleHint": "All existing and future transactions in this category are earmarked for tax. Individual transactions can still be unmarked manually."
+  "settings.categories.taxToggleHint": "All existing and future transactions in this category are earmarked for tax. Individual transactions can still be unmarked manually.",
+  "nav.categories": "Categories"
 };
