@@ -200,4 +200,54 @@ describe("/api/transactions", () => {
     const match = list.find((t) => t.id === created.id);
     expect(match?.taxRelevant).toBe(false);
   }, 20000);
+
+  it("inherits taxRelevant from a tax-relevant category on create", async () => {
+    const routes = await import("../app/api/transactions/route");
+
+    const taxCategory = await prisma.category.upsert({
+      where: { userId_name: { userId: testUserId, name: "TX Tax Category" } },
+      update: { isTaxRelevant: true },
+      create: { name: "TX Tax Category", userId: testUserId, isTaxRelevant: true }
+    });
+
+    // Ohne Flag → erbt true von der Kategorie
+    const inheritRes = await routes.POST(
+      new Request("http://localhost/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: testAccountId,
+          categoryId: taxCategory.id,
+          amountCents: -1100,
+          description: "Inherits tax flag",
+          occurredAt: new Date().toISOString()
+        })
+      })
+    );
+    expect(inheritRes.status).toBe(201);
+    const inherited: { taxRelevant: boolean } = await inheritRes.json();
+    expect(inherited.taxRelevant).toBe(true);
+
+    // Explizites false gewinnt gegen den Kategorie-Default
+    const explicitRes = await routes.POST(
+      new Request("http://localhost/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: testAccountId,
+          categoryId: taxCategory.id,
+          amountCents: -1200,
+          description: "Explicitly not tax",
+          occurredAt: new Date().toISOString(),
+          taxRelevant: false
+        })
+      })
+    );
+    expect(explicitRes.status).toBe(201);
+    const explicit: { taxRelevant: boolean } = await explicitRes.json();
+    expect(explicit.taxRelevant).toBe(false);
+
+    await prisma.transaction.deleteMany({ where: { categoryId: taxCategory.id } });
+    await prisma.category.delete({ where: { id: taxCategory.id } });
+  }, 20000);
 });

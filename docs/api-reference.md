@@ -306,7 +306,7 @@ or
 | Field | Type | Constraints |
 |---|---|---|
 | `name` | string | Optional; new name (unique per user) |
-| `isTaxRelevant` | boolean | Optional; marks the category as tax-relevant (pre-enables the tax toggle in the transaction form) |
+| `isTaxRelevant` | boolean | Optional. `true` marks the category as tax-relevant **and retroactively earmarks all existing transactions of the category** (`taxRelevant: true`); new transactions inherit the flag by default. `false` unmarks only the category — transaction flags are kept |
 | `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted. Takes precedence over the other fields |
 
 **Success response — `200 OK`:** The updated category (rename) or the merge target category (merge).
@@ -418,7 +418,7 @@ Create a new transaction.
 | `amountCents` | integer | Required; negative for expense, positive for income (no non-zero check — `0` is accepted) |
 | `description` | string | Required; non-empty |
 | `occurredAt` | ISO date string | Required |
-| `taxRelevant` | boolean | Optional, defaults to `false`. Earmarks the transaction for the tax return (see [Attachments](#attachments-receipts)) |
+| `taxRelevant` | boolean | Optional. Earmarks the transaction for the tax return (see [Attachments](#attachments-receipts)). When omitted, defaults to the category's `isTaxRelevant` (else `false`); an explicit value always wins |
 
 **Success response — `201 Created`:** Full transaction object (same shape as GET list item).
 

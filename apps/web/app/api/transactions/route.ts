@@ -12,7 +12,8 @@
  *   occurredAt   string   — ISO-Datum-String
  *   categoryId?  string   — Optional, muss dem Nutzer gehören
  *   savingGoalId? string  — Optional, verknüpft mit einem Budget-Ziel
- *   taxRelevant? boolean  — Optional, für die Steuererklärung vorgemerkt (Default false)
+ *   taxRelevant? boolean  — Optional, für die Steuererklärung vorgemerkt.
+ *                           Default: isTaxRelevant der Kategorie, sonst false.
  */
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -51,8 +52,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
+  let category: { isTaxRelevant: boolean } | null = null;
   if (data.categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: data.categoryId, userId: user.id } });
+    category = await prisma.category.findFirst({ where: { id: data.categoryId, userId: user.id } });
     if (!category) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
@@ -74,7 +76,9 @@ export async function POST(req: Request) {
         amountCents: data.amountCents,
         description: data.description,
         occurredAt,
-        taxRelevant: data.taxRelevant ?? false
+        // Ohne explizites Flag erbt die Transaktion die Steuer-Markierung der
+        // Kategorie — so greifen auch API-Clients ohne Formular (z. B. Importe).
+        taxRelevant: data.taxRelevant ?? category?.isTaxRelevant ?? false
       }
     });
 
