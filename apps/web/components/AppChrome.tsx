@@ -72,7 +72,13 @@ export default function AppChrome() {
 
       {/* Drawer overlay */}
       {menuOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={t("menu.title")}>
+        <div
+          /* z-[60]: must stack above the bottom pill nav (Header.tsx, z-50), which follows in DOM order */
+          className="fixed inset-0 z-[60] flex justify-end"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("menu.title")}
+        >
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40 dark:bg-black/60"
