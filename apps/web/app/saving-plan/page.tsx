@@ -6,6 +6,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import PageContainer from "../../components/PageContainer";
 import PlannedSavingForm from "../../components/PlannedSavingForm";
+import { Spinner } from "../../components/ui/Spinner";
+import { useToast } from "../../components/ui/Toast";
 import { useI18n } from "../../lib/i18n";
 
 type SavingGoal = {
@@ -49,11 +51,11 @@ function formatCurrency(cents: number) {
 
 function SavingPlanPage() {
   const { locale, t } = useI18n();
+  const toast = useToast();
   const [plan, setPlan] = useState<SavingPlanResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [editGoal, setEditGoal] = useState<SavingGoal | null>(null);
   const [scheduleIntent, setScheduleIntent] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<SavingGoal | null>(null);
@@ -137,7 +139,6 @@ function SavingPlanPage() {
     const shouldOpen = searchParams.get("new") === "1";
     setDialogOpen(shouldOpen);
     if (shouldOpen) {
-      setFeedback(null);
       setEditGoal(null);
       setScheduleIntent(false);
     }
@@ -165,7 +166,6 @@ function SavingPlanPage() {
     setEditGoal(goal);
     setScheduleIntent(withScheduleIntent);
     setDialogOpen(true);
-    setFeedback(null);
   }, []);
 
   const handleDelete = useCallback(async () => {
@@ -177,20 +177,19 @@ function SavingPlanPage() {
         throw new Error(t("savingPlan.errorDeleteFailed", { status: res.status }));
       }
       await fetchPlan();
-      setFeedback(t("savingPlan.feedbackDeleted"));
+      toast.success(t("savingPlan.feedbackDeleted"));
       setDeleteConfirm(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : t("savingPlan.errorDelete"));
     } finally {
       setDeleting(false);
     }
-  }, [deleteConfirm, fetchPlan, t]);
+  }, [deleteConfirm, fetchPlan, t, toast]);
 
   const openCompleteDialog = useCallback((goal: GoalWithProgress) => {
     setCompleteTarget(goal);
     setCompleteSpent(toDecimalString(fromCents(goal.achievedCents)));
     setCompleteError(null);
-    setFeedback(null);
   }, []);
 
   const closeCompleteDialog = useCallback(() => {
@@ -223,14 +222,14 @@ function SavingPlanPage() {
         throw new Error(t("savingPlan.errorComplete"));
       }
       await fetchPlan();
-      setFeedback(t("savingPlan.feedbackCompleted"));
+      toast.success(t("savingPlan.feedbackCompleted"));
       closeCompleteDialog();
     } catch (completeErr) {
       setCompleteError(completeErr instanceof Error ? completeErr.message : t("savingPlan.errorComplete"));
     } finally {
       setCompleting(false);
     }
-  }, [closeCompleteDialog, completeSpent, completeTarget, fetchPlan, t]);
+  }, [closeCompleteDialog, completeSpent, completeTarget, fetchPlan, t, toast]);
 
   const handleReopen = useCallback(
     async (goal: SavingGoal) => {
@@ -241,20 +240,19 @@ function SavingPlanPage() {
           throw new Error(t("savingPlan.errorReopen"));
         }
         await fetchPlan();
-        setFeedback(t("savingPlan.feedbackReopened"));
+        toast.success(t("savingPlan.feedbackReopened"));
       } catch (reopenErr) {
         setError(reopenErr instanceof Error ? reopenErr.message : t("savingPlan.errorReopen"));
       } finally {
         setReopeningId(null);
       }
     },
-    [fetchPlan, t]
+    [fetchPlan, t, toast]
   );
 
   const openWithdrawDialog = useCallback(() => {
     setWithdrawAmount("");
     setWithdrawError(null);
-    setFeedback(null);
     setWithdrawOpen(true);
   }, []);
 
@@ -294,14 +292,14 @@ function SavingPlanPage() {
         throw new Error(t("savingPlan.withdraw.errorFailed"));
       }
       await fetchPlan();
-      setFeedback(t("savingPlan.withdraw.success", { amount: formatCurrency(amountCents) }));
+      toast.success(t("savingPlan.withdraw.success", { amount: formatCurrency(amountCents) }));
       closeWithdrawDialog();
     } catch (withdrawErr) {
       setWithdrawError(withdrawErr instanceof Error ? withdrawErr.message : t("savingPlan.withdraw.errorFailed"));
     } finally {
       setWithdrawing(false);
     }
-  }, [availableCents, closeWithdrawDialog, fetchPlan, t, withdrawAmount]);
+  }, [availableCents, closeWithdrawDialog, fetchPlan, t, toast, withdrawAmount]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -348,10 +346,10 @@ function SavingPlanPage() {
   const handleSuccess = useCallback(
     async (message?: string) => {
       await fetchPlan();
-      setFeedback(message ?? t("savingPlan.feedbackAdded"));
+      toast.success(message ?? t("savingPlan.feedbackAdded"));
       closeDialog();
     },
-    [closeDialog, fetchPlan, t]
+    [closeDialog, fetchPlan, t, toast]
   );
 
   const timelineEmpty = !loading && goalsWithProgress.length === 0;
@@ -359,12 +357,6 @@ function SavingPlanPage() {
   return (
     <main id="maincontent" className="py-6 md:py-8">
       <PageContainer className="space-y-8">
-      {feedback && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200">
-          {feedback}
-        </div>
-      )}
-
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-200">
           {error}
@@ -709,6 +701,7 @@ function SavingPlanPage() {
                         disabled={reopeningId === goal.id}
                         className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
                       >
+                        {reopeningId === goal.id && <Spinner size="sm" className="mr-2" />}
                         {reopeningId === goal.id ? t("savingPlan.reopening") : t("savingPlan.reopen")}
                       </button>
                     </div>
@@ -783,6 +776,7 @@ function SavingPlanPage() {
                 disabled={deleting}
                 className="inline-flex items-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
               >
+                {deleting && <Spinner size="sm" className="mr-2" />}
                 {deleting ? t("savingPlan.deleting") : t("savingPlan.confirmDeleteConfirm")}
               </button>
             </div>
@@ -840,6 +834,7 @@ function SavingPlanPage() {
                 disabled={completing}
                 className="inline-flex items-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:opacity-50"
               >
+                {completing && <Spinner size="sm" className="mr-2" />}
                 {completing ? t("savingPlan.completing") : t("savingPlan.completeConfirm")}
               </button>
             </div>
@@ -911,6 +906,7 @@ function SavingPlanPage() {
                 disabled={withdrawing}
                 className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50"
               >
+                {withdrawing && <Spinner size="sm" className="mr-2" />}
                 {withdrawing ? t("savingPlan.withdraw.submitting") : t("savingPlan.withdraw.confirm")}
               </button>
             </div>

@@ -1,5 +1,6 @@
 export const de: Record<string, string> = {
   "common.close": "Schließen",
+  "common.notifications": "Benachrichtigungen",
   "common.scrollTop": "Nach oben",
   "nav.dashboard": "Übersicht",
   "nav.transactions": "Transaktionen",

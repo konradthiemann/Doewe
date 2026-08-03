@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { useI18n } from "../lib/i18n";
 
+import { Button } from "./ui/Button";
+
 const MIN_PASSWORD_LENGTH = 8;
 
 const inputClass =
@@ -118,13 +120,9 @@ export default function ChangePasswordCard() {
         </div>
 
         <div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-          >
+          <Button type="submit" loading={loading}>
             {loading ? t("settings.password.submitting") : t("settings.password.submit")}
-          </button>
+          </Button>
         </div>
 
         {/* Persistent live regions so screen readers announce status changes. */}

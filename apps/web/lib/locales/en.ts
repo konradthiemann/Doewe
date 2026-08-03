@@ -1,5 +1,6 @@
 export const en: Record<string, string> = {
   "common.close": "Close",
+  "common.notifications": "Notifications",
   "common.scrollTop": "Scroll to top",
   "nav.dashboard": "Dashboard",
   "nav.transactions": "Transactions",

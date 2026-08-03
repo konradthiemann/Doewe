@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import LegalFooter from "../../components/LegalFooter";
+import { Spinner } from "../../components/ui/Spinner";
 import { useI18n } from "../../lib/i18n";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -161,6 +162,7 @@ function ResetPasswordForm() {
             disabled={loading}
             className="flex w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
           >
+            {loading && <Spinner size="sm" className="mr-2" />}
             {loading ? t("resetPassword.submitting") : t("resetPassword.submit")}
           </button>
 

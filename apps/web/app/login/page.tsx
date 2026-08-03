@@ -6,6 +6,7 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 
 import LegalFooter from "../../components/LegalFooter";
+import { Spinner } from "../../components/ui/Spinner";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "../../lib/demoConstants";
 
 // Only render the Google button when the server has Google OAuth configured.
@@ -243,6 +244,7 @@ export default function LoginPage() {
             disabled={loading}
             className="flex w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
           >
+            {loading && <Spinner size="sm" className="mr-2" />}
             {loading ? "Please wait…" : mode === "login" ? "Login" : "Create account"}
           </button>
 
@@ -295,6 +297,7 @@ export default function LoginPage() {
           disabled={loading}
           className="mt-4 flex w-full items-center justify-center rounded-md border border-indigo-600 px-4 py-2 text-sm font-semibold text-indigo-600 transition hover:bg-indigo-50 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-indigo-400 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
         >
+          {loading && <Spinner size="sm" className="mr-2" />}
           {loading ? "Bitte warten…" : "Im Demo-Modus testen"}
         </button>
         <p className="mt-2 text-center text-xs text-gray-500 dark:text-neutral-400">

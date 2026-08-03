@@ -5,6 +5,8 @@ import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 import { cn } from "../../lib/cn";
 
+import { Spinner } from "./Spinner";
+
 const buttonVariants = cva(
   "inline-flex items-center justify-center rounded-md text-sm font-semibold shadow-sm transition focus:outline-none focus-visible:ring focus-visible:ring-offset-2 disabled:opacity-50",
   {
@@ -34,16 +36,28 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+    VariantProps<typeof buttonVariants> {
+  /**
+   * Shows a leading spinner and disables the button while an action is in flight.
+   * Marks the button `aria-busy`; the visible label (children) should switch to a
+   * progress phrasing (e.g. "Saving…") to reinforce the state.
+   */
+  loading?: boolean;
+}
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ className, variant, size, loading = false, disabled, children, ...props }, ref) => {
     return (
       <button
         ref={ref}
         className={cn(buttonVariants({ variant, size }), className)}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
         {...props}
-      />
+      >
+        {loading && <Spinner size={size === "sm" ? "sm" : "md"} className="-ml-0.5 mr-2 shrink-0" />}
+        {children}
+      </button>
     );
   }
 );
