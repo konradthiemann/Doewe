@@ -1,25 +1,39 @@
-# Doewe Monorepo
+# 💰 Doewe
+
+**Personal & family finance tracking and insights** — record transactions, categorize spending, monitor budgets, manage recurring entries and saving goals, and surface analytics that reveal the patterns blocking your financial goals.
+
+📖 **Documentation:** <https://konradthiemann.github.io/Doewe/>
 
 [![CI](https://github.com/konradthiemann/Doewe/actions/workflows/ci.yml/badge.svg)](https://github.com/konradthiemann/Doewe/actions/workflows/ci.yml)
-![Node >=18.18.0](https://img.shields.io/badge/node-%3E=18.18.0-339933?logo=node.js)
-![Next.js 14.2.5](https://img.shields.io/badge/Next.js-14.2.5-black?logo=next.js)
-![TypeScript 5.6.3](https://img.shields.io/badge/TypeScript-5.6.3-3178C6?logo=typescript)
+![Next.js 14.2.5](https://img.shields.io/badge/Next.js-14.2.5-black?logo=nextdotjs&logoColor=white)
+![TypeScript 5.6.3](https://img.shields.io/badge/TypeScript-5.6.3-3178C6?logo=typescript&logoColor=white)
+![React 18.3](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white)
+![Prisma 5.19](https://img.shields.io/badge/Prisma-5.19-2D3748?logo=prisma&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Tailwind CSS 3.4](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?logo=tailwindcss&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-## Project Name and Description
+---
+
+## 🎯 About
+
 Doewe is a personal finance tracking and insights platform. It helps you record transactions, categorize spending, define and monitor budgets, manage recurring transactions, and surface analytics summaries so you can spot patterns that block financial goals.
 
-Primary goals:
+**Primary goals:**
 - Strong developer experience (DX) with strict types, linting, testing, and CI.
 - Learn and apply modern monorepo + Next.js + TypeScript practices.
 - Provide a foundation for future goal‑oriented financial coaching features.
 
-## Technology Stack
+---
+
+## 🧰 Technology Stack
+
 Core technologies (derived from workspace manifests and config):
-- Runtime: Node.js (>= 18.18.0)
+- Runtime: Node.js (>= 22.12.0, pinned in `.nvmrc`)
 - Framework: Next.js 14.2.5 (App Router)
 - Language: TypeScript (strict) / React 18.3.1
 - Styling: Tailwind CSS 3.4.x + @tailwindcss/forms
-- Data Layer: Prisma ORM 5.19.x with SQLite/PostgreSQL (configurable) & generated client
+- Data Layer: Prisma ORM 5.19.x with PostgreSQL & generated client
 - Validation: Zod
 - Charts/Visualization: chart.js + react-chartjs-2 + chartjs-plugin-datalabels
 - Testing: Vitest 1.6.x (unit + integration) & custom test config
@@ -27,7 +41,10 @@ Core technologies (derived from workspace manifests and config):
 - Monorepo: npm workspaces (apps/*, packages/*)
 - Shared Library: `@doewe/shared` for domain primitives (money, strings, domain logic)
 
-## Project Architecture
+---
+
+## 🏗️ Project Architecture
+
 High-level overview:
 ```
 root
@@ -56,13 +73,16 @@ Architectural principles:
 - Strict typing + domain primitives (e.g., Money) to reduce runtime errors.
 - Mobile‑first responsive UI with accessibility guardrails baked into component patterns.
 
-## Getting Started
-### Prerequisites
+---
+
+## 🚀 Getting Started
+
+### 🔧 Prerequisites
 - Node.js >= 22.12.0 (pinned in `.nvmrc`, currently 22.14.0; install via nvm recommended)
 - npm (comes with Node)
 - PostgreSQL database for Prisma (local Docker is fine)
 
-### Installation & Setup
+### 📦 Installation & Setup
 ```bash
 # Clone
 git clone https://github.com/konradthiemann/Doewe.git
@@ -82,7 +102,7 @@ npm --workspace @doewe/web run db:seed
 npm run dev:web
 ```
 
-### Local dev with Docker Postgres
+### 🐳 Local dev with Docker Postgres
 If you have Docker Desktop installed, you can run a local database only for local dev:
 ```bash
 # Start local Postgres, migrate + seed, then run the app
@@ -92,7 +112,7 @@ npm run dev:web:local
 npm run db:down:local
 ```
 
-### Environment Variables
+### 🔑 Environment Variables
 Create `.env.local` (not committed). Example matching the local Docker Postgres:
 ```
 DATABASE_URL="postgresql://doewe:doewe@localhost:5432/doewe_local"
@@ -106,7 +126,7 @@ After changing schema run:
 npm --workspace @doewe/web run prisma:generate
 ```
 
-### Migration troubleshooting (non-empty/prod DB)
+### 🩺 Migration troubleshooting (non-empty/prod DB)
 If a production or Railway database is already populated, Prisma can refuse to apply migrations (P3005) or the schema may drift from the Prisma model (missing columns or incorrect casing like `recurringId` vs `recurringid`). Use this checklist to recover quickly:
 
 1. **Point Prisma at the target DB**
@@ -134,7 +154,7 @@ If a production or Railway database is already populated, Prisma can refuse to a
 
 Tip: PostgreSQL is case-sensitive for quoted identifiers. If a column was created as `recurringid` (lowercase), Prisma will still look for `"recurringId"`. The fix migration above normalizes this.
 
-### Local database (Docker)
+### 🐘 Local database (Docker)
 If you don’t have Postgres locally, run a disposable container:
 ```bash
 docker run --name doewe-postgres -e POSTGRES_USER=doewe -e POSTGRES_PASSWORD=doewe -e POSTGRES_DB=doewe_local -p 5432:5432 -d postgres:16
@@ -149,7 +169,7 @@ npm --workspace @doewe/web run db:push
 npm --workspace @doewe/web run db:seed
 ```
 
-### Scripts (root)
+### 📜 Scripts (root)
 - `npm run dev:web` – Next.js dev server
 - `npm run dev:web:local` – Starts local Postgres (Docker), pushes schema, seeds, then runs dev server
 - `npm run db:up:local` / `npm run db:down:local` – Start/stop the local Postgres container
@@ -158,46 +178,60 @@ npm --workspace @doewe/web run db:seed
 - `npm run test` – Vitest tests (monorepo filter)
 - `npm run build` – Build all workspaces (web app + stub others)
 
-## Project Structure
+---
+
+## 🗂️ Project Structure
+
 See architecture tree above. Monorepo uses npm workspaces:
 - Apps reside in `apps/`
 - Shared libraries in `packages/`
 - Central config baselines under `shared/`
 - Global test config at root; tests colocated per workspace.
 
-## Key Features
+---
+
+## ✨ Key Features
+
 Current implemented features include:
 - Transaction management (create, edit, delete, list) via `app/api/transactions`.
 - Recurring transactions with monthly cadence and skips for upcoming runs.
 - Budget endpoints for tracking planned vs actual spending.
 - Categories management (`app/api/categories`).
-- Recurring transactions handling.
+- Saving plans & goals with progress timeline, withdrawals, and completion.
 - Analytics summary endpoint (`app/api/analytics/summary`) for aggregated insights.
 - Tax preparation (German Belegvorhaltepflicht): earmark transactions for the tax return, attach receipt photos/PDFs (stored in PostgreSQL, `app/api/transactions/[id]/attachments`), mark whole categories as tax-relevant (retroactive), and review per-year sums with receipt status on `/tax`.
 - Domain utilities (money formatting, numeric handling, string helpers) in `@doewe/shared`.
 - Chart visualization using Chart.js to display spending patterns.
-- Accessible, mobile‑first UI components styled with Tailwind.
+- Accessible, mobile‑first UI components styled with Tailwind, with reusable toast + spinner feedback primitives.
 
 Planned / extensible areas:
 - Goal tracking & alerts.
 - Advanced anomaly detection across spending categories.
 - Multi-user authentication & role-based access (future enhancement).
 
-## Development Workflow
+---
+
+## 🔄 Development Workflow
+
 - Conventional Commits for clarity (e.g., `feat: add transaction API`)
 - Each commit body includes Goal / Why / How.
 - Update `monorepoTimeline.md` and `CHANGELOG.md` with notable changes (newest entries on top).
 - CI pipeline (`.github/workflows/ci.yml`) runs: lint → typecheck → test → build with concurrency control.
 - Prefer small, incremental PRs; keep quality gates green locally before pushing.
-- Branching: flexible (CI runs on all branches); recommend feature branches named `feat/<short-name>` or `chore/<short-name>`.
+- Branching: `main` is protected (PR + green CI required); use feature branches named `feat/<short-name>` or `chore/<short-name>`.
 
-## Deployment & CI
+---
+
+## 🚢 Deployment & CI
+
 - The web app deploys to **Railway** (EU region `europe-west4`) on push to `main` — but only when the **CI is green** *and* the push changes files under the **watch path `apps/web/**`**. Otherwise Railway marks the deploy `SKIPPED`.
 - Node version for CI **and** Railway comes from `.nvmrc` (`engine-strict=true` makes a wrong version fail `npm ci`).
-- Docs deploy to **GitHub Pages** via `.github/workflows/docs.yml`.
+- Docs deploy to **GitHub Pages** via `.github/workflows/docs.yml` → <https://konradthiemann.github.io/Doewe/>.
 - Full details, skip reasons, and how to fix "prod is not on main's state": see [docs/deployment.md](docs/deployment.md).
 
-## Claude AI Agents
+---
+
+## 🤖 Claude AI Agents
 
 This project ships a suite of specialised Claude Code sub-agents in [.claude/agents/](.claude/agents/). They are invoked from within a Claude Code session with `@agent-name` and each one has deep knowledge of the Doewe stack.
 
@@ -284,20 +318,27 @@ In any Claude Code session, prefix your request with the agent name:
 - **Agent Quality nach Stack-Updates:** Wenn Dependencies, Konventionen oder Dateistrukturen sich ändern, den `agent-quality`-Agent laufen lassen damit die anderen Agents nicht mit veralteten Annahmen arbeiten.
 - **Agents kombinieren:** Du kannst in einer Session mehrere Agents hintereinander nutzen — z.B. erst `@planner` für den Plan, dann `@implementer` mit dem Plan als Input.
 
-## Coding Standards
+---
+
+## 📐 Coding Standards
+
 - TypeScript strict everywhere; domain types first.
 - Tailwind for styling (avoid inline styles by merge-time).
 - Accessibility: follow WCAG 2.2 AA; leverage semantic HTML & ARIA where necessary (see a11y instructions).
 - Next.js best practices: App Router, server components by default, isolate client logic in `'use client'` components, avoid `next/dynamic` with `ssr:false` in server components.
 - Shared ESLint baseline in `shared/eslint/eslint.base.cjs`; extend in workspaces.
 - DRY: prefer pulling common utilities into `@doewe/shared`.
-- Secure defaults: no secrets committed; use `.env.example` (to be added) for reference.
+- Secure defaults: no secrets committed; use `.env.example` for reference.
 
-## Testing
+---
+
+## 🧪 Testing
+
 - Test runner: Vitest (configured globally in `vitest.config.ts`).
 - Test locations:
 	- Domain tests: `packages/shared/src/*.test.ts`
 	- API tests: `apps/web/tests/*.test.ts`
+	- Component tests: `apps/web/components/**/*.test.tsx` (jsdom, via `apps/web/vitest.config.ts`)
 - Strategy: Focus on domain correctness (money/math), API contract validation (status codes, payload shapes), and regression protection for critical logic.
 - Run tests:
 ```bash
@@ -305,7 +346,10 @@ npm run test
 ```
 - Type safety acts as first defense; add tests for complex calculations, parsing, and error paths.
 
-## Contributing
+---
+
+## 🤝 Contributing
+
 Guidelines:
 1. Create a branch (`feat/`, `fix/`, `chore/`).
 2. Implement change with focus on accessibility, DX, and performance.
@@ -317,21 +361,17 @@ Guidelines:
 	 ```
 4. Update `CHANGELOG.md` and `monorepoTimeline.md` (top‑append newest change).
 5. Ensure commit body has Goal / Why / How.
-6. Open PR; CI must pass before merge.
+6. Open PR; CI must pass before merge (`main` is protected).
 
 Reference Docs:
 - Next.js Best Practices: [.github/prompts/nextjs.instructions.md](.github/prompts/nextjs.instructions.md)
 - Accessibility Guidelines: [.github/prompts/a11y.instructions.md](.github/prompts/a11y.instructions.md)
 - Project Requirements: [docs/project-requirements-document.md](docs/project-requirements-document.md)
 
-## License
-Released under the [MIT License](LICENSE) — © 2026 Konrad Thiemann.
+---
 
-## Suggested Badges (Add After Setup)
-- Code Coverage (enable Vitest coverage first)
-- Security scan (e.g., Dependabot / Snyk)
+## ⚡ Quick Reference
 
-## Quick Reference
 ```bash
 # Install & bootstrap
 npm ci && npm --workspace @doewe/web run db:push && npm --workspace @doewe/web run db:seed
@@ -346,15 +386,28 @@ npm --workspace @doewe/web run prisma:generate
 npm run lint && npm run typecheck && npm run test
 ```
 
-## Roadmap (High-Level)
+---
+
+## 🗺️ Roadmap
+
 - Authentication & user accounts
 - Budget goal alerts via scheduled jobs
 - Enhanced analytics (trend lines, category forecasts)
 - Export/import (CSV, OFX)
 - Performance budget & bundle size tracking
 
-## Acknowledgements
-Built with modern Next.js & TypeScript standards, emphasizing accessibility and clean domain modeling.
+---
+
+## 📄 License
+
+Released under the [MIT License](LICENSE) — © 2026 Konrad Thiemann.
+
+## 🔒 Security
+
+Found a vulnerability? Please report it privately — see [SECURITY.md](.github/SECURITY.md).
 
 ---
-Generated with accessibility, clarity, and maintainability in mind. Please review and adapt as the project evolves.
+
+## 🙏 Acknowledgements
+
+Built with modern Next.js & TypeScript standards, emphasizing accessibility and clean domain modeling.
