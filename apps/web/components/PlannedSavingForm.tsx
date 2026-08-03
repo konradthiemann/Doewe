@@ -50,7 +50,6 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const dfLocale = locale === "de" ? de : enUS;
 
@@ -118,7 +117,6 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
 
   async function onSubmit(values: PlannedSavingFormValues) {
     setSubmitError(null);
-    setInlineSuccess(null);
 
     // Amount is optional — an undated idea may not have a concrete target yet.
     let amountCents: number | null = null;
@@ -174,7 +172,6 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
       }
 
       const message = isEditMode ? t("savingPlan.form.updated") : t("savingPlan.form.added");
-      setInlineSuccess(message);
       if (!isEditMode) {
         resetField("amount");
       }
@@ -337,7 +334,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" loading={isSubmitting}>
           {submitLabel}
         </Button>
         {onClose && (
@@ -350,12 +347,6 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
       {displayError && (
         <p id="saving-plan-error" role="alert" className="text-sm text-red-600">
           {displayError}
-        </p>
-      )}
-
-      {inlineSuccess && (
-        <p role="status" className="text-sm text-emerald-600">
-          {inlineSuccess}
         </p>
       )}
     </form>

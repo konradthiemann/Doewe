@@ -45,7 +45,6 @@ export default function RecurringTransactionForm({
   const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean }>>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -131,7 +130,6 @@ export default function RecurringTransactionForm({
 
   async function onSubmit(values: RecurringTransactionFormValues) {
     setSubmitError(null);
-    setInlineSuccess(null);
 
     let rawCents: number;
     try {
@@ -164,7 +162,6 @@ export default function RecurringTransactionForm({
       }
 
       const message = t("recurringForm.updated");
-      setInlineSuccess(message);
       onSuccess?.(message);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : t("recurringForm.errorSave"));
@@ -392,7 +389,7 @@ export default function RecurringTransactionForm({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={isSubmitting} className="flex-1">
+          <Button type="submit" loading={isSubmitting} className="flex-1">
             {submitLabel}
           </Button>
           {onClose && (
@@ -405,12 +402,6 @@ export default function RecurringTransactionForm({
         {(submitError ?? loadError) && (
           <p id="form-error" role="alert" className="text-sm text-red-600">
             {submitError ?? loadError}
-          </p>
-        )}
-
-        {inlineSuccess && (
-          <p role="status" className="text-sm text-green-600">
-            {inlineSuccess}
           </p>
         )}
 
@@ -432,7 +423,7 @@ export default function RecurringTransactionForm({
                   variant="danger"
                   size="sm"
                   onClick={handleDelete}
-                  disabled={deleteLoading}
+                  loading={deleteLoading}
                 >
                   {deleteLoading ? t("recurringForm.deleteLoading") : t("recurringForm.deleteConfirm")}
                 </Button>

@@ -24,6 +24,7 @@ import PageContainer from "../../components/PageContainer";
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
 import { Dialog } from "../../components/ui/Dialog";
+import { useToast } from "../../components/ui/Toast";
 import { useI18n } from "../../lib/i18n";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -62,6 +63,7 @@ type FilterType = "all" | "income" | "outcome";
 
 function TransactionsPage() {
   const { locale, t } = useI18n();
+  const toast = useToast();
   const [items, setItems] = useState<Tx[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
@@ -69,8 +71,6 @@ function TransactionsPage() {
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTx | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
-  const [feedback, setFeedback] = useState<{ message: string; variant: "success" | "error" } | null>(null);
-  const feedbackDismissRef = useRef<HTMLButtonElement | null>(null);
   const [categoriesById, setCategoriesById] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [recurringQuery, setRecurringQuery] = useState("");
@@ -187,7 +187,8 @@ function TransactionsPage() {
   // Radix Dialog handles Escape key, focus trapping, and scroll lock automatically.
 
   const showFeedback = (message: string, variant: "success" | "error" = "success") => {
-    setFeedback({ message, variant });
+    if (variant === "error") toast.error(message);
+    else toast.success(message);
   };
 
   const handleEditSuccess = async (message?: string) => {
@@ -261,13 +262,6 @@ function TransactionsPage() {
 
   const dialogTitleId = editingTx ? `edit-transaction-${editingTx.id}` : undefined;
   const createDialogTitleId = creating ? "create-transaction" : undefined;
-
-  useEffect(() => {
-    if (feedback) {
-      feedbackDismissRef.current?.focus({ preventScroll: true });
-    }
-  }, [feedback]);
-
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredItems = useMemo(() => {
@@ -1046,33 +1040,6 @@ function TransactionsPage() {
         )}
       </Dialog>
 
-      {feedback && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center" role="presentation">
-          <div className="absolute inset-0 bg-black/30" aria-hidden="true" />
-          <div
-            role="alertdialog"
-            aria-live="assertive"
-            aria-modal="true"
-            aria-labelledby="feedback-title"
-            className="relative z-10 w-full max-w-xs rounded-lg border border-indigo-200 bg-white p-4 text-sm shadow-lg focus:outline-none dark:border-indigo-500/40 dark:bg-neutral-900"
-          >
-            <h3 id="feedback-title" className="text-base font-semibold text-gray-900 dark:text-neutral-100">
-              {feedback.variant === "success" ? t("transactions.successTitle") : t("transactions.noticeTitle")}
-            </h3>
-            <p className="mt-2 text-sm text-gray-700 dark:text-neutral-300">{feedback.message}</p>
-            <div className="mt-4 flex justify-end">
-              <button
-                ref={feedbackDismissRef}
-                type="button"
-                onClick={() => setFeedback(null)}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
-              >
-                {t("transactions.ok")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       </PageContainer>
     </main>
   );

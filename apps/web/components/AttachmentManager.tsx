@@ -11,6 +11,8 @@ import {
 import { useI18n } from "../lib/i18n";
 import { compressImage, UnsupportedAttachmentError } from "../lib/imageCompression";
 
+import { Spinner } from "./ui/Spinner";
+
 type Props = {
   mode: "create" | "edit";
   transactionId?: string;
@@ -207,7 +209,8 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
         </button>
       </div>
       {busy && (
-        <p className="text-xs text-gray-500 dark:text-neutral-400" role="status">
+        <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400" role="status">
+          <Spinner size="sm" />
           {t("transactionForm.attachmentsUploading")}
         </p>
       )}

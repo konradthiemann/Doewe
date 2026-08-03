@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import LegalFooter from "../../components/LegalFooter";
+import { Spinner } from "../../components/ui/Spinner";
 import { useI18n } from "../../lib/i18n";
 
 export default function ForgotPasswordPage() {
@@ -79,6 +80,7 @@ export default function ForgotPasswordPage() {
               disabled={loading}
               className="flex w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
             >
+              {loading && <Spinner size="sm" className="mr-2" />}
               {loading ? t("forgotPassword.submitting") : t("forgotPassword.submit")}
             </button>
 

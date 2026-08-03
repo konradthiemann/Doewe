@@ -51,7 +51,6 @@ export default function TransactionForm({
   const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean; isTaxRelevant?: boolean; usageCount?: number }>>([]);
   const [_loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryLoading, setNewCategoryLoading] = useState(false);
@@ -213,7 +212,6 @@ export default function TransactionForm({
 
   async function onSubmit(values: TransactionFormValues) {
     setSubmitError(null);
-    setInlineSuccess(null);
     setRecurringError(null);
     setAttachmentUploadError(null);
 
@@ -298,7 +296,6 @@ export default function TransactionForm({
         : isRecurring
           ? t("transactionForm.recurringSaved")
           : t("transactionForm.saved");
-      setInlineSuccess(message);
       onSuccess?.(message, uploadWarning ? { keepOpen: true } : undefined);
 
       if (mode === "create") {
@@ -555,7 +552,7 @@ export default function TransactionForm({
                   type="button"
                   size="sm"
                   onClick={handleAddCategory}
-                  disabled={newCategoryLoading}
+                  loading={newCategoryLoading}
                 >
                   {newCategoryLoading ? t("transactionForm.saving") : t("transactionForm.categoryAddButton")}
                 </Button>
@@ -793,7 +790,7 @@ export default function TransactionForm({
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={isSubmitting} className="flex-1">
+          <Button type="submit" loading={isSubmitting} className="flex-1">
             {submitLabel}
           </Button>
           {onClose && (
@@ -806,12 +803,6 @@ export default function TransactionForm({
         {submitError && (
           <p id="form-error" role="alert" className="text-sm text-red-600">
             {submitError}
-          </p>
-        )}
-
-        {inlineSuccess && (
-          <p role="status" className="text-sm text-green-600">
-            {inlineSuccess}
           </p>
         )}
 
@@ -849,7 +840,7 @@ export default function TransactionForm({
                     type="button"
                     variant="danger"
                     onClick={handleDelete}
-                    disabled={deleteLoading}
+                    loading={deleteLoading}
                     className="flex-1"
                   >
                     {deleteLoading ? t("transactionForm.deleteLoading") : t("transactionForm.delete")}
