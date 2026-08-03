@@ -31,3 +31,10 @@ pnpm-debug.log*
 
 # Coverage
 coverage/
+
+# Python (bytecode cache from scripts/*.py)
+__pycache__/
+*.py[cod]
+
+# Claude Code local preview launch config (machine-local, not shared)
+.claude/launch.json
