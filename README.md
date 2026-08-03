@@ -325,7 +325,7 @@ Reference Docs:
 - Project Requirements: [docs/project-requirements-document.md](docs/project-requirements-document.md)
 
 ## License
-No license file present yet. Until a license is added, this code should be treated as "All rights reserved" by default. Recommended next step: add an MIT OR Apache-2.0 `LICENSE` file to clarify usage.
+Released under the [MIT License](LICENSE) — © 2026 Konrad Thiemann.
 
 ## Suggested Badges (Add After Setup)
 - Code Coverage (enable Vitest coverage first)
