@@ -1031,6 +1031,7 @@ function TransactionsPage() {
               categoryId: editingRecurring.categoryId ?? null,
               intervalMonths: editingRecurring.intervalMonths ?? 1,
               dayOfMonth: editingRecurring.dayOfMonth ?? 1,
+              startDate: format(parseISO(editingRecurring.nextOccurrence), "yyyy-MM-dd"),
             }}
             headingId={`edit-recurring-${editingRecurring.id}`}
             onSuccess={handleRecurringEditSuccess}

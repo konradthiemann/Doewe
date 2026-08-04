@@ -32,6 +32,12 @@ export const recurringTransactionFormSchema = z.object({
   categoryId: z.string().optional(),
   intervalMonths: z.number().int().min(1).max(24),
   dayOfMonth: z.number().int().min(1).max(31),
+  // Optional: leer = nextOccurrence aus dayOfMonth ableiten (bisheriges Verhalten);
+  // ein yyyy-mm-dd-Datum legt die erste Buchung fest (z.B. Abo startet erst später).
+  startDate: z
+    .string()
+    .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "Ungültiges Datum")
+    .optional(),
 });
 export type RecurringTransactionFormValues = z.infer<typeof recurringTransactionFormSchema>;
 

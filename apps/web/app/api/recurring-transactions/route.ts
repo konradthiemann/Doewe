@@ -6,10 +6,12 @@
  * Sie werden NICHT automatisch als echte Transaktionen angelegt — stattdessen werden sie
  * im Analytics-Dashboard als "geplante" Beträge eingerechnet.
  *
- * `nextOccurrence` wird automatisch berechnet: ist `dayOfMonth` noch nicht vergangen,
- * wird der aktuelle Monat gesetzt, sonst der nächste Monat.
+ * `nextOccurrence` wird automatisch aus `dayOfMonth` berechnet (aktueller Monat, falls
+ * der Tag noch nicht vergangen ist, sonst nächster Monat). Alternativ kann ein `startDate`
+ * (yyyy-mm-dd) übergeben werden — dann ist dieses Datum die erste Buchung (nextOccurrence),
+ * z.B. für ein Abo, dessen erste Zahlung erst in einigen Monaten fällig wird.
  *
- * POST Body: { accountId, categoryId?, amountCents, description, intervalMonths? (1-24), dayOfMonth? (1-31) }
+ * POST Body: { accountId, categoryId?, amountCents, description, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd) }
  */
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -24,7 +26,12 @@ const RecurringInput = z.object({
   amountCents: z.number().int(),
   description: z.string().min(1),
   intervalMonths: z.number().int().min(1).max(24).optional(),
-  dayOfMonth: z.number().int().min(1).max(31).optional()
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isRealCalendarDate, "Ungültiges Datum")
+    .optional()
 });
 
 /**
@@ -54,6 +61,25 @@ function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
   const daysInNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
   const clampedDay = Math.min(dayOfMonth, daysInNextMonth);
   return new Date(nextYear, normalizedMonth, clampedDay, 0, 0, 0, 0);
+}
+
+/** Prüft, ob ein `yyyy-mm-dd`-String ein gültiges Kalenderdatum ist. */
+function isRealCalendarDate(startDate: string): boolean {
+  const [year, month, day] = startDate.split("-").map(Number);
+  if (month < 1 || month > 12) return false;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return day >= 1 && day <= daysInMonth;
+}
+
+/**
+ * Wandelt einen `yyyy-mm-dd`-String in ein lokales Date (Mitternacht) um.
+ * Der Tag wird defensiv auf den letzten Tag des Monats geclampt.
+ */
+function startDateToDate(startDate: string): Date {
+  const [year, month, day] = startDate.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const clampedDay = Math.min(day, daysInMonth);
+  return new Date(year, month - 1, clampedDay, 0, 0, 0, 0);
 }
 
 export async function GET() {
@@ -89,8 +115,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
   }
-  const day = data.dayOfMonth ?? 1;
-  const nextDate = nextOccurrenceDate(day);
+  // Startdatum (falls angegeben) legt die erste Buchung direkt fest; ansonsten wird
+  // nextOccurrence wie bisher aus dayOfMonth berechnet.
+  const day = data.dayOfMonth ?? (data.startDate ? Number(data.startDate.slice(8, 10)) : 1);
+  const nextDate = data.startDate ? startDateToDate(data.startDate) : nextOccurrenceDate(day);
   
   const createData = {
     accountId: data.accountId,

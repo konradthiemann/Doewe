@@ -68,7 +68,7 @@ sequenceDiagram
 
     User->>UI: Fills in: description=Miete, amount=850 (expense),\nrecurring=on, intervalMonths=1, dayOfMonth=1
     UI->>API_Create: POST /api/recurring-transactions\n{ accountId, categoryId, amountCents: -85000,\n  description, intervalMonths: 1, dayOfMonth: 1 }
-    Note over API_Create: Server sets frequency="MONTHLY" and\ncomputes nextOccurrence from dayOfMonth
+    Note over API_Create: Server sets frequency="MONTHLY" and computes\nnextOccurrence from dayOfMonth (or from an\noptional startDate, if supplied)
     API_Create->>ORM: prisma.recurringTransaction.create(...)
     ORM->>DB: INSERT INTO RecurringTransaction ...
     DB-->>ORM: New row
@@ -86,7 +86,7 @@ sequenceDiagram
     Dashboard-->>User: Dashboard shows "Miete 850,00 EUR" in recurring section
 ```
 
-When the recurring transaction is created, the server stores `frequency: "MONTHLY"` and computes `nextOccurrence` from `dayOfMonth`; the actual cadence is controlled by `intervalMonths` (e.g., `3` = quarterly). The summary endpoint has no query parameters — it always evaluates the current calendar month. Occurrences the user skipped for the month are **removed** from `recurringTransactions` server-side (there is no `skipped` flag in the response); projected income/outcome totals include only the active occurrences.
+When the recurring transaction is created, the server stores `frequency: "MONTHLY"` and computes `nextOccurrence` from `dayOfMonth` — unless the client supplies an optional `startDate` (`yyyy-mm-dd`), in which case that date becomes the first occurrence (useful when a subscription's first charge is months away). The actual cadence is controlled by `intervalMonths` (e.g., `3` = quarterly). The summary endpoint has no query parameters — it always evaluates the current calendar month. Occurrences the user skipped for the month are **removed** from `recurringTransactions` server-side (there is no `skipped` flag in the response); projected income/outcome totals include only the active occurrences.
 
 ---
 
