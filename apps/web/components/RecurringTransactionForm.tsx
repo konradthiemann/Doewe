@@ -20,6 +20,8 @@ type RecurringDetails = {
   categoryId?: string | null;
   intervalMonths: number;
   dayOfMonth?: number;
+  // yyyy-mm-dd der ersten Buchung (aus nextOccurrence abgeleitet); leer = keins gesetzt.
+  startDate?: string;
 };
 
 type Props = {
@@ -65,6 +67,7 @@ export default function RecurringTransactionForm({
       categoryId: recurring.categoryId ?? "",
       intervalMonths: recurring.intervalMonths || 1,
       dayOfMonth: recurring.dayOfMonth ?? 1,
+      startDate: recurring.startDate ?? "",
     },
   });
 
@@ -147,6 +150,7 @@ export default function RecurringTransactionForm({
       categoryId: values.categoryId || undefined,
       intervalMonths: values.intervalMonths,
       dayOfMonth: values.dayOfMonth,
+      startDate: values.startDate || undefined,
     };
 
     try {
@@ -385,6 +389,23 @@ export default function RecurringTransactionForm({
           <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.dayOfMonthHelper")}</p>
           {errors.dayOfMonth && (
             <p role="alert" className="mt-1 text-xs text-red-600">{errors.dayOfMonth.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1" htmlFor="recurring-startdate">
+            {t("recurringForm.startDateLabel")}
+          </label>
+          <input
+            {...register("startDate")}
+            id="recurring-startdate"
+            type="date"
+            aria-invalid={!!errors.startDate}
+            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+          />
+          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.startDateHelper")}</p>
+          {errors.startDate && (
+            <p role="alert" className="mt-1 text-xs text-red-600">{errors.startDate.message}</p>
           )}
         </div>
 

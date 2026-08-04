@@ -22,12 +22,16 @@ RecurringTransaction
 ├── frequency      — immer "MONTHLY" (andere Werte vorbereitet aber nie gesetzt)
 ├── intervalMonths — 1-24: Abstand in Monaten (1 = jeden Monat, 3 = quartalsweise)
 ├── dayOfMonth     — 1-31: Tag des Monats, an dem gebucht wird
-└── nextOccurrence — berechnetes nächstes Fälligkeitsdatum (DateTime)
+└── nextOccurrence — Ankerdatum der Serie = erste Buchung (DateTime); automatisch aus
+                     dayOfMonth berechnet ODER direkt aus einem optionalen Startdatum gesetzt
 ```
 
 ## nextOccurrence-Berechnung
 
-Beim **Anlegen** (POST) und beim **Ändern von dayOfMonth** (PATCH) wird `nextOccurrence` neu berechnet:
+`nextOccurrence` ist der **Anker** der Serie — die Fälligkeits-Logik weiter unten rechnet von diesem Datum aus. Er wird auf zwei Wegen gesetzt:
+
+- **Explizites Startdatum:** Wird beim Anlegen (POST) oder Bearbeiten (PATCH) ein `startDate` (`yyyy-mm-dd`) übergeben, ist dieses Datum die erste Buchung und `nextOccurrence` wird direkt darauf gesetzt — z.B. ein Abo, dessen erste Zahlung erst in zwei Monaten fällig ist. Ein in der Zukunft liegender Anker wird erst ab seinem Startmonat eingerechnet (`monthsSinceNext >= 0`, siehe unten).
+- **Automatisch aus `dayOfMonth`:** Ohne `startDate` wird `nextOccurrence` beim Anlegen (POST) und beim Ändern von `dayOfMonth` (PATCH) wie folgt berechnet:
 
 ```mermaid
 flowchart TD

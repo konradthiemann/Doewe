@@ -58,6 +58,7 @@ export default function TransactionForm({
   const [isRecurring, setIsRecurring] = useState(false);
   const [intervalMonths, setIntervalMonths] = useState(1);
   const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [startDate, setStartDate] = useState("");
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [isSavingGoal, setIsSavingGoal] = useState(false);
   const [selectedSavingGoalId, setSelectedSavingGoalId] = useState("");
@@ -256,6 +257,7 @@ export default function TransactionForm({
           description: payload.description,
           intervalMonths,
           dayOfMonth,
+          startDate: startDate || undefined,
         });
       } else {
         const res = await fetch(endpoint, {
@@ -315,6 +317,7 @@ export default function TransactionForm({
     description: string;
     intervalMonths: number;
     dayOfMonth: number;
+    startDate?: string | undefined;
   }) {
     const res = await fetch("/api/recurring-transactions", {
       method: "POST",
@@ -777,6 +780,21 @@ export default function TransactionForm({
                   />
                   <p className="text-xs text-gray-500 dark:text-neutral-400">
                     {t("transactionForm.dayOfMonthHelper")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium" htmlFor="tx-start-date">
+                    {t("transactionForm.startDateLabel")}
+                  </label>
+                  <input
+                    id="tx-start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                    {t("transactionForm.startDateHelper")}
                   </p>
                 </div>
                 {recurringError && (

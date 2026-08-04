@@ -665,7 +665,7 @@ List all recurring transactions for the authenticated user. Skip records are **n
 
 ### `POST /api/recurring-transactions`
 
-Create a new recurring transaction template. `frequency` is set server-side to `"MONTHLY"`; the actual cadence is controlled by `intervalMonths`. `nextOccurrence` is computed from `dayOfMonth` — it cannot be supplied.
+Create a new recurring transaction template. `frequency` is set server-side to `"MONTHLY"`; the actual cadence is controlled by `intervalMonths`. By default `nextOccurrence` is computed from `dayOfMonth` (this month if the day hasn't passed yet, otherwise next month). Optionally pass a `startDate` (`yyyy-mm-dd`) to pin the first occurrence to a specific date — e.g. a subscription whose first charge is a few months out.
 
 **Auth required:** Yes
 
@@ -677,7 +677,8 @@ Create a new recurring transaction template. `frequency` is set server-side to `
   "amountCents": -85000,
   "description": "Miete",
   "intervalMonths": 1,
-  "dayOfMonth": 1
+  "dayOfMonth": 1,
+  "startDate": "2026-10-01"
 }
 ```
 
@@ -689,6 +690,7 @@ Create a new recurring transaction template. `frequency` is set server-side to `
 | `description` | string | Required; non-empty |
 | `intervalMonths` | integer | Optional; 1–24, defaults to `1` (e.g., `3` = quarterly) |
 | `dayOfMonth` | integer | Optional; 1–31, defaults to `1` |
+| `startDate` | string | Optional; `yyyy-mm-dd`. When set, becomes `nextOccurrence` (the first occurrence); otherwise `nextOccurrence` is derived from `dayOfMonth` |
 
 **Success response — `201 Created`:** Full recurring transaction object (with computed `nextOccurrence` and `frequency: "MONTHLY"`).
 
@@ -704,7 +706,7 @@ Create a new recurring transaction template. `frequency` is set server-side to `
 
 ### `PATCH /api/recurring-transactions/[id]`
 
-Update a recurring transaction template. Partial update — send only changed fields.
+Update a recurring transaction template. Partial update — send only changed fields. Accepts the same fields as the create endpoint. When `startDate` (`yyyy-mm-dd`) is supplied, `nextOccurrence` is set to that date; otherwise, if `dayOfMonth` changes, `nextOccurrence` is recomputed from it.
 
 **Auth required:** Yes
 

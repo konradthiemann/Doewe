@@ -11,7 +11,12 @@ const UpdateInput = z.object({
   amountCents: z.number().int().optional(),
   description: z.string().min(1).optional(),
   intervalMonths: z.number().int().min(1).max(24).optional(),
-  dayOfMonth: z.number().int().min(1).max(31).optional()
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isRealCalendarDate, "Ungültiges Datum")
+    .optional()
 });
 
 function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
@@ -31,6 +36,25 @@ function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
   const daysInNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
   const clampedDay = Math.min(dayOfMonth, daysInNextMonth);
   return new Date(nextYear, normalizedMonth, clampedDay, 0, 0, 0, 0);
+}
+
+/** Prüft, ob ein `yyyy-mm-dd`-String ein gültiges Kalenderdatum ist. */
+function isRealCalendarDate(startDate: string): boolean {
+  const [year, month, day] = startDate.split("-").map(Number);
+  if (month < 1 || month > 12) return false;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return day >= 1 && day <= daysInMonth;
+}
+
+/**
+ * Wandelt einen `yyyy-mm-dd`-String in ein lokales Date (Mitternacht) um.
+ * Der Tag wird defensiv auf den letzten Tag des Monats geclampt.
+ */
+function startDateToDate(startDate: string): Date {
+  const [year, month, day] = startDate.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const clampedDay = Math.min(day, daysInMonth);
+  return new Date(year, month - 1, clampedDay, 0, 0, 0, 0);
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -65,11 +89,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
   }
 
-  // Recalculate nextOccurrence if dayOfMonth changes
-  const newDayOfMonth = data.dayOfMonth;
+  // nextOccurrence neu bestimmen: ein explizites startDate hat Vorrang; sonst wird
+  // (wie bisher) aus einem geänderten dayOfMonth neu berechnet.
+  const resolvedDayOfMonth =
+    data.dayOfMonth ?? (data.startDate ? Number(data.startDate.slice(8, 10)) : undefined);
   let nextOccurrence: Date | undefined;
-  if (newDayOfMonth !== undefined) {
-    nextOccurrence = nextOccurrenceDate(newDayOfMonth);
+  if (data.startDate) {
+    nextOccurrence = startDateToDate(data.startDate);
+  } else if (data.dayOfMonth !== undefined) {
+    nextOccurrence = nextOccurrenceDate(data.dayOfMonth);
   }
 
   const updateData = {
@@ -78,7 +106,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     amountCents: data.amountCents,
     description: data.description,
     intervalMonths: data.intervalMonths,
-    dayOfMonth: newDayOfMonth,
+    dayOfMonth: resolvedDayOfMonth,
     nextOccurrence
   } as Prisma.RecurringTransactionUncheckedUpdateInput;
 

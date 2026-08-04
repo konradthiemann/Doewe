@@ -231,7 +231,7 @@ A template for a transaction that repeats on a schedule (e.g., monthly rent, qua
 | `frequency` | String | Uppercase frequency identifier — allowed values per schema comment: `DAILY \| WEEKLY \| MONTHLY \| YEARLY` (validated in the API). The create endpoint currently always sets `"MONTHLY"`; the actual cadence is driven by `intervalMonths` |
 | `intervalMonths` | Int | Number of months between occurrences (e.g., `1` for monthly, `3` for quarterly) |
 | `dayOfMonth` | Int | Which day of the month the payment falls on (1–31) |
-| `nextOccurrence` | DateTime | Computed date of the next expected occurrence |
+| `nextOccurrence` | DateTime | Anchor date of the series = first occurrence. Computed from `dayOfMonth`, or set directly from an optional `startDate` (`yyyy-mm-dd`) supplied at create/update |
 | `createdAt` | DateTime | Creation timestamp |
 
 **Relationships:** Belongs to one `Account`. Optionally classified by one `Category`. Has many `RecurringTransactionSkip`s for months the user chooses to skip.
