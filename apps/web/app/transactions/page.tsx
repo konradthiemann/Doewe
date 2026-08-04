@@ -983,7 +983,6 @@ function TransactionsPage() {
       <Dialog
         open={!!editingTx}
         onOpenChange={(open) => { if (!open) closeEditDialog(); }}
-        titleId={dialogTitleId}
         title={t("transactionForm.editTitle")}
       >
         {editingTx && (
@@ -1002,7 +1001,6 @@ function TransactionsPage() {
       <Dialog
         open={creating}
         onOpenChange={(open) => { if (!open) closeCreateDialog(); }}
-        titleId={createDialogTitleId}
         title={t("transactionForm.addTitle")}
       >
         {creating && (
@@ -1018,7 +1016,6 @@ function TransactionsPage() {
       <Dialog
         open={!!editingRecurring}
         onOpenChange={(open) => { if (!open) closeRecurringDialog(); }}
-        titleId={editingRecurring ? `edit-recurring-${editingRecurring.id}` : undefined}
         title={t("recurringForm.title")}
       >
         {editingRecurring && (
