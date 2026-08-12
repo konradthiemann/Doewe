@@ -540,5 +540,6 @@ export const en: Record<string, string> = {
   "dashboard.budgetsShowAll": "Show {count} more budgets",
   "dashboard.upcomingTitle": "Still due this month",
   "dashboard.upcomingNone": "Nothing else is due for the rest of the month.",
-  "dashboard.recurringShowAll": "Show all {count} recurring transactions"
+  "dashboard.recurringShowAll": "Show all {count} recurring transactions",
+  "offline.banner": "You're offline — showing the last loaded data."
 };

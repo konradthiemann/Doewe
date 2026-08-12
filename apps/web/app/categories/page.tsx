@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
+import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
 
 type Category = { id: string; name: string; isIncome: boolean; isTaxRelevant: boolean };
@@ -17,9 +19,9 @@ function isProtectedCategory(name: string): boolean {
 export default function CategoriesPage() {
   const { t } = useI18n();
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [catLoading, setCatLoading] = useState(false);
-  const [catError, setCatError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Mutationsfehler laufen nicht über die Query — separat halten
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [catMessage, setCatMessage] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState<Record<string, string>>({});
   const [mergeTarget, setMergeTarget] = useState<Record<string, string>>({});
@@ -52,30 +54,35 @@ export default function CategoriesPage() {
     });
   }, []);
 
-  const refreshCategories = useCallback(async () => {
-    setCatLoading(true);
-    setCatError(null);
-    try {
-      const res = await fetch("/api/categories", { cache: "no-store" });
-      if (!res.ok) {
-        setCatError(t("settings.categories.errorLoad", { status: res.status }));
-        setCategories([]);
-        return;
-      }
-      const data: Category[] = await res.json();
-      const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
-      setCategories(sorted);
-      setRenameDraft(Object.fromEntries(sorted.map((c) => [c.id, c.name])));
-    } catch {
-      setCatError(t("settings.categories.errorLoadFallback"));
-    } finally {
-      setCatLoading(false);
-    }
-  }, [t]);
+  // Phase 2 „Offline lesen": Kategorien aus dem persistierten Query-Cache —
+  // offline zeigt die Seite den letzten geladenen Stand.
+  const categoriesQuery = useApiQuery<Category[]>(["categories"], "/api/categories");
+  const categories = useMemo(
+    () => [...(categoriesQuery.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [categoriesQuery.data]
+  );
+  const catLoading = categoriesQuery.isFetching;
+  const loadError = categoriesQuery.isError
+    ? (() => {
+        const match =
+          categoriesQuery.error instanceof Error
+            ? /failed with status (\d+)/.exec(categoriesQuery.error.message)
+            : null;
+        return match
+          ? t("settings.categories.errorLoad", { status: Number(match[1]) })
+          : t("settings.categories.errorLoadFallback");
+      })()
+    : null;
+  const catError = loadError ?? mutationError;
 
-  useEffect(() => {
-    refreshCategories();
-  }, [refreshCategories]);
+  // Nach Kategorie-Mutationen alle abhängigen Ansichten aktualisieren
+  // (Merge/Delete hängen Transaktionen um, Tax-Flag wirkt auf die Steuer-Seite).
+  const invalidateCategories = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["categories"] });
+    void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["tax"] });
+  }, [queryClient]);
 
   const otherCategories = useCallback(
     (currentId: string) => categories.filter((c) => c.id !== currentId),
@@ -85,11 +92,11 @@ export default function CategoriesPage() {
   const handleRename = async (id: string) => {
     const name = (renameDraft[id] || "").trim();
     if (!name) {
-      setCatError(t("settings.categories.errorNameRequired"));
+      setMutationError(t("settings.categories.errorNameRequired"));
       return;
     }
     setBusy(id, true);
-    setCatError(null);
+    setMutationError(null);
     setCatMessage(null);
     try {
       const res = await fetch(`/api/categories/${id}`, {
@@ -98,11 +105,11 @@ export default function CategoriesPage() {
         body: JSON.stringify({ name })
       });
       if (!res.ok) {
-        setCatError(t("settings.categories.errorUpdate", { status: res.status }));
+        setMutationError(t("settings.categories.errorUpdate", { status: res.status }));
         return;
       }
       setCatMessage(t("settings.categories.messageUpdated"));
-      await refreshCategories();
+      invalidateCategories();
     } finally {
       setBusy(id, false);
     }
@@ -110,7 +117,7 @@ export default function CategoriesPage() {
 
   const handleTaxToggle = async (id: string, isTaxRelevant: boolean) => {
     setBusy(id, true);
-    setCatError(null);
+    setMutationError(null);
     setCatMessage(null);
     try {
       const res = await fetch(`/api/categories/${id}`, {
@@ -119,11 +126,11 @@ export default function CategoriesPage() {
         body: JSON.stringify({ isTaxRelevant })
       });
       if (!res.ok) {
-        setCatError(t("settings.categories.errorUpdate", { status: res.status }));
+        setMutationError(t("settings.categories.errorUpdate", { status: res.status }));
         return;
       }
       setCatMessage(t("settings.categories.messageUpdated"));
-      await refreshCategories();
+      invalidateCategories();
     } finally {
       setBusy(id, false);
     }
@@ -132,11 +139,11 @@ export default function CategoriesPage() {
   const handleMerge = async (id: string) => {
     const targetId = mergeTarget[id];
     if (!targetId) {
-      setCatError(t("settings.categories.errorMergeTarget"));
+      setMutationError(t("settings.categories.errorMergeTarget"));
       return;
     }
     setBusy(id, true);
-    setCatError(null);
+    setMutationError(null);
     setCatMessage(null);
     try {
       const res = await fetch(`/api/categories/${id}`, {
@@ -145,11 +152,11 @@ export default function CategoriesPage() {
         body: JSON.stringify({ mergeIntoCategoryId: targetId })
       });
       if (!res.ok) {
-        setCatError(t("settings.categories.errorMerge", { status: res.status }));
+        setMutationError(t("settings.categories.errorMerge", { status: res.status }));
         return;
       }
       setCatMessage(t("settings.categories.messageMerged"));
-      await refreshCategories();
+      invalidateCategories();
     } finally {
       setBusy(id, false);
     }
@@ -159,15 +166,15 @@ export default function CategoriesPage() {
     const fallbackId = fallbackTarget[id];
     const fallbackNewName = (fallbackName[id] || "").trim();
     if (!fallbackId && !fallbackNewName) {
-      setCatError(t("settings.categories.errorFallbackRequired"));
+      setMutationError(t("settings.categories.errorFallbackRequired"));
       return;
     }
     if (fallbackId === id) {
-      setCatError(t("settings.categories.errorFallbackSame"));
+      setMutationError(t("settings.categories.errorFallbackSame"));
       return;
     }
     setBusy(id, true);
-    setCatError(null);
+    setMutationError(null);
     setCatMessage(null);
     try {
       const res = await fetch(`/api/categories/${id}`, {
@@ -176,11 +183,11 @@ export default function CategoriesPage() {
         body: JSON.stringify({ fallbackCategoryId: fallbackId || undefined, fallbackName: fallbackNewName || undefined })
       });
       if (!res.ok) {
-        setCatError(t("settings.categories.errorDelete", { status: res.status }));
+        setMutationError(t("settings.categories.errorDelete", { status: res.status }));
         return;
       }
       setCatMessage(t("settings.categories.messageDeleted"));
-      await refreshCategories();
+      invalidateCategories();
     } finally {
       setBusy(id, false);
     }
@@ -200,7 +207,7 @@ export default function CategoriesPage() {
           </div>
           <button
             type="button"
-            onClick={refreshCategories}
+            onClick={() => void categoriesQuery.refetch()}
             className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
           >
             {catLoading ? t("settings.categories.loading") : t("settings.categories.refresh")}

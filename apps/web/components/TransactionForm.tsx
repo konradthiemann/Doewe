@@ -2,10 +2,12 @@
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { createCategoryAction } from "../app/actions/categories";
+import { useApiQuery } from "../lib/api/useApiQuery";
 import { cn } from "../lib/cn";
 import { appConfig } from "../lib/config";
 import { dateInputToISO, toDateInputValue } from "../lib/dateInput";
@@ -26,6 +28,14 @@ type TransactionDetails = {
   taxRelevant?: boolean;
 };
 
+type CategoryOption = {
+  id: string;
+  name: string;
+  isIncome: boolean;
+  isTaxRelevant?: boolean;
+  usageCount?: number;
+};
+
 type Props = {
   mode?: "create" | "edit";
   transaction?: TransactionDetails;
@@ -44,13 +54,21 @@ export default function TransactionForm({
   onDelete,
 }: Props) {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
 
   const [txType, setTxType] = useState<"income" | "outcome">(
     transaction ? (transaction.amountCents >= 0 ? "income" : "outcome") : "outcome"
   );
-  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean; isTaxRelevant?: boolean; usageCount?: number }>>([]);
-  const [_loadError, setLoadError] = useState<string | null>(null);
+  const accountsQuery = useApiQuery<Array<{ id: string; name: string }>>(["accounts"], "/api/accounts");
+  const categoriesQuery = useApiQuery<CategoryOption[]>(["categories", "byUsage"], "/api/categories?sortByUsage=true");
+  const savingPlanQuery = useApiQuery<{ goals: Array<{ id: string; title: string; month: number; year: number }> }>(
+    ["saving-plan"],
+    "/api/saving-plan",
+    { enabled: mode === "create" }
+  );
+  const accounts = accountsQuery.data ?? [];
+  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const savingGoals = savingPlanQuery.data?.goals ?? [];
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -63,7 +81,6 @@ export default function TransactionForm({
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [isSavingGoal, setIsSavingGoal] = useState(false);
   const [selectedSavingGoalId, setSelectedSavingGoalId] = useState("");
-  const [savingGoals, setSavingGoals] = useState<Array<{ id: string; title: string; month: number; year: number }>>([]);
   const [taxRelevant, setTaxRelevant] = useState(transaction?.taxRelevant ?? false);
   const [taxTouched, setTaxTouched] = useState(false);
   const [taxHintOpen, setTaxHintOpen] = useState(false);
@@ -96,65 +113,19 @@ export default function TransactionForm({
 
   const categoryId = watch("categoryId");
 
+  // Defaults im Create-Mode setzen, sobald Referenzdaten aus dem Query-Cache da sind.
   useEffect(() => {
     if (mode !== "create") return;
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/saving-plan", { cache: "no-store" });
-        if (!res.ok) return;
-        const json: { goals: Array<{ id: string; title: string; month: number; year: number }> } = await res.json();
-        if (!active) return;
-        setSavingGoals(json.goals);
-      } catch {
-        // non-critical, ignore
-      }
-    })();
-    return () => { active = false; };
-  }, [mode]);
+    const acc = accountsQuery.data;
+    const cat = categoriesQuery.data;
+    if (!acc || !cat) return;
 
-  useEffect(() => {
-    let active = true;
+    const defaultAccount = acc[0];
+    const defaultCategory = (txType === "income" ? cat.find((c) => c.isIncome) : cat.find((c) => !c.isIncome)) ?? cat[0];
 
-    (async () => {
-      try {
-        const [accRes, catRes] = await Promise.all([
-          fetch("/api/accounts", { cache: "no-store" }),
-          fetch("/api/categories?sortByUsage=true", { cache: "no-store" }),
-        ]);
-
-        if (!accRes.ok || !catRes.ok) {
-          throw new Error(t("transactionForm.errorLoadRef"));
-        }
-
-        const [acc, cat]: [
-          Array<{ id: string; name: string }>,
-          Array<{ id: string; name: string; isIncome: boolean; usageCount?: number }>
-        ] = await Promise.all([accRes.json(), catRes.json()]);
-
-        if (!active) return;
-
-        setAccounts(acc);
-        setCategories(cat);
-
-        if (mode === "create") {
-          const defaultAccount = acc[0];
-          const defaultCategory = (txType === "income" ? cat.find((c) => c.isIncome) : cat.find((c) => !c.isIncome)) ?? cat[0];
-
-          if (defaultAccount && !watch("accountId")) setValue("accountId", defaultAccount.id);
-          if (defaultCategory && !watch("categoryId")) setValue("categoryId", defaultCategory.id);
-        }
-      } catch (err) {
-        if (!active) return;
-        setLoadError(err instanceof Error ? err.message : t("transactionForm.errorLoadRefFallback"));
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, t, txType]);
+    if (defaultAccount && !watch("accountId")) setValue("accountId", defaultAccount.id);
+    if (defaultCategory && !watch("categoryId")) setValue("categoryId", defaultCategory.id);
+  }, [mode, txType, accountsQuery.data, categoriesQuery.data, setValue, watch]);
 
   useEffect(() => {
     if (mode === "edit" && transaction) {
@@ -213,6 +184,16 @@ export default function TransactionForm({
       setValue("categoryId", allowed[0]?.id ?? "");
     }
   }, [categories, categoryId, txType, setValue]);
+
+  // Nach jeder Transaktions-Mutation alle davon abgeleiteten Caches invalidieren
+  // (Listen, Analytics, Sparplan-Fortschritt, Steuer-Ansicht, Kategorien-Nutzung).
+  function invalidateTransactionData() {
+    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    void queryClient.invalidateQueries({ queryKey: ["saving-plan"] });
+    void queryClient.invalidateQueries({ queryKey: ["tax"] });
+    void queryClient.invalidateQueries({ queryKey: ["categories", "byUsage"] });
+  }
 
   async function onSubmit(values: TransactionFormValues) {
     setSubmitError(null);
@@ -299,6 +280,11 @@ export default function TransactionForm({
         }
       }
 
+      invalidateTransactionData();
+      if (isRecurring) {
+        void queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      }
+
       const message = mode === "edit"
         ? t("transactionForm.updated")
         : isRecurring
@@ -361,7 +347,18 @@ export default function TransactionForm({
         return;
       }
 
-      setCategories((current) => [created, ...current]);
+      // Neue Kategorie sofort im Query-Cache verfügbar machen (sofort wählbar),
+      // dann kanonisch nachladen — deckt auch die unsortierte ["categories"]-Liste ab.
+      queryClient.setQueryData<CategoryOption[]>(["categories", "byUsage"], (current) => {
+        const option: CategoryOption = {
+          id: created.id,
+          name: created.name,
+          isIncome: created.isIncome,
+          isTaxRelevant: created.isTaxRelevant
+        };
+        return current ? [option, ...current] : [option];
+      });
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
       setValue("categoryId", created.id);
       setNewCategoryName("");
       setShowNewCategory(false);
@@ -385,6 +382,7 @@ export default function TransactionForm({
         return;
       }
 
+      invalidateTransactionData();
       const message = t("transactionForm.deleted");
       onDelete?.(message);
       onClose?.();

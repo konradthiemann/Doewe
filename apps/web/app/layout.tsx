@@ -6,6 +6,7 @@ import { Inter } from "next/font/google";
 
 import AppChrome from "../components/AppChrome";
 import MainContainer from "../components/MainContainer";
+import OfflineBanner from "../components/OfflineBanner";
 
 import Providers from "./providers";
 
@@ -67,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main
         </a>
         <Providers>
+          <OfflineBanner />
           <MainContainer>{children}</MainContainer>
           <AppChrome />
         </Providers>

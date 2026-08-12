@@ -17,6 +17,7 @@ import { Doughnut, Bar } from "react-chartjs-2";
 
 import PageContainer from "../components/PageContainer";
 import { Skeleton } from "../components/ui/Skeleton";
+import { useApiQuery } from "../lib/api/useApiQuery";
 import { useI18n } from "../lib/i18n";
 
 ChartJS.register(
@@ -30,117 +31,94 @@ ChartJS.register(
   ChartDataLabels
 );
 
+type SummaryData = {
+  totalBalance: number;
+  carryoverFromLastMonth: number;
+  incomeTotal: number;
+  outcomeTotal: number;
+  remaining: number;
+  plannedSavings: number;
+  completedGoals?: Array<{ title: string; target: number; spent: number; completedAt: string }>;
+  completedGoalsSpent?: number;
+  monthlySavingsActual: number;
+  outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
+  categoryBudgets?: Array<{ categoryId: string; name: string; budget: number; spent: number; diff: number }>;
+  recurringTransactions?: Array<{
+    id: string;
+    description: string;
+    amountCents: number;
+    categoryId: string | null;
+    dayOfMonth: number | null;
+  }>;
+  recurringIncomeTotal?: number;
+  recurringOutcomeTotal?: number;
+  projectedIncomeTotal?: number;
+  projectedOutcomeTotal?: number;
+  projectedRemaining?: number;
+};
+
+type QuarterlyData = {
+  quarters: Array<{ month: number; year: number; incomeCents: number; outcomeCents: number; savingsCents: number; balanceCents: number }>;
+  totals: { incomeCents: number; outcomeCents: number; savingsCents: number };
+};
+
+type SavingPlanData = {
+  goals: Array<{ month: number; year: number }>;
+  totals: { availableCents: number; totalTargetCents: number; suggestedMonthlyCents: number };
+};
+
+const EMPTY_SUMMARY: SummaryData = {
+  totalBalance: 0,
+  carryoverFromLastMonth: 0,
+  incomeTotal: 0,
+  outcomeTotal: 0,
+  remaining: 0,
+  plannedSavings: 0,
+  completedGoals: [],
+  completedGoalsSpent: 0,
+  monthlySavingsActual: 0,
+  outgoingByCategory: [],
+  categoryBudgets: [],
+  recurringTransactions: [],
+  recurringIncomeTotal: 0,
+  recurringOutcomeTotal: 0,
+  projectedIncomeTotal: 0,
+  projectedOutcomeTotal: 0,
+  projectedRemaining: 0
+};
+
 export default function HomePage() {
   const { locale, t } = useI18n();
-  const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
-  const [summary, setSummary] = useState<{
-    totalBalance: number;
-    carryoverFromLastMonth: number;
-    incomeTotal: number;
-    outcomeTotal: number;
-    remaining: number;
-    plannedSavings: number;
-    completedGoals?: Array<{ title: string; target: number; spent: number; completedAt: string }>;
-    completedGoalsSpent?: number;
-    monthlySavingsActual: number;
-    outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
-    categoryBudgets?: Array<{ categoryId: string; name: string; budget: number; spent: number; diff: number }>;
-    recurringTransactions?: Array<{
-      id: string;
-      description: string;
-      amountCents: number;
-      categoryId: string | null;
-      dayOfMonth: number | null;
-    }>;
-    recurringIncomeTotal?: number;
-    recurringOutcomeTotal?: number;
-    projectedIncomeTotal?: number;
-    projectedOutcomeTotal?: number;
-    projectedRemaining?: number;
-  }>({
-    totalBalance: 0,
-    carryoverFromLastMonth: 0,
-    incomeTotal: 0,
-    outcomeTotal: 0,
-    remaining: 0,
-    plannedSavings: 0,
-    completedGoals: [],
-    completedGoalsSpent: 0,
-    monthlySavingsActual: 0,
-    outgoingByCategory: [],
-    categoryBudgets: [],
-    recurringTransactions: [],
-    recurringIncomeTotal: 0,
-    recurringOutcomeTotal: 0,
-    projectedIncomeTotal: 0,
-    projectedOutcomeTotal: 0,
-    projectedRemaining: 0
-  });
 
-  const [quarterly, setQuarterly] = useState<{
-    quarters: Array<{ month: number; year: number; incomeCents: number; outcomeCents: number; savingsCents: number; balanceCents: number }>;
-    totals: { incomeCents: number; outcomeCents: number; savingsCents: number };
-  } | null>(null);
-  const [quarterlyLoading, setQuarterlyLoading] = useState(true);
-  const [quarterlyError, setQuarterlyError] = useState<string | null>(null);
+  // Phase 2 „Offline lesen": Daten kommen aus dem persistierten Query-Cache —
+  // offline zeigt das Dashboard den letzten geladenen Stand.
+  const summaryQuery = useApiQuery<SummaryData>(["analytics", "summary"], "/api/analytics/summary");
+  const quarterlyQuery = useApiQuery<QuarterlyData>(["analytics", "quarterly"], "/api/analytics/quarterly");
+  const savingPlanQuery = useApiQuery<SavingPlanData>(["saving-plan"], "/api/saving-plan");
 
-  const [savingPlan, setSavingPlan] = useState<{
-    totals: { availableCents: number; totalTargetCents: number; suggestedMonthlyCents: number };
-    nextDeadline: { month: number; year: number } | null;
-  } | null>(null);
+  const summary = summaryQuery.data ?? EMPTY_SUMMARY;
+  const loading = summaryQuery.isPending;
+  const quarterly = quarterlyQuery.data ?? null;
+  const quarterlyLoading = quarterlyQuery.isPending;
+  const quarterlyError = quarterlyQuery.isError ? t("dashboard.quarterlyError") : null;
 
-  useEffect(() => {
-    async function fetchSummary() {
-      const res = await fetch("/api/analytics/summary", { cache: "no-store" });
-      const data = res.ok ? await res.json() : undefined;
-      if (data) setSummary(data);
-    }
-
-    async function fetchQuarterly() {
-      setQuarterlyLoading(true);
-      setQuarterlyError(null);
-      try {
-        const res = await fetch("/api/analytics/quarterly", { cache: "no-store" });
-        if (!res.ok) throw new Error("Failed to load");
-        const data = await res.json();
-        setQuarterly(data);
-      } catch {
-        setQuarterlyError(t("dashboard.quarterlyError"));
-      } finally {
-        setQuarterlyLoading(false);
-      }
-    }
-
-    async function fetchSavingPlan() {
-      try {
-        const res = await fetch("/api/saving-plan", { cache: "no-store" });
-        if (!res.ok) return;
-        const data: {
-          goals: Array<{ month: number; year: number }>;
-          totals: { availableCents: number; totalTargetCents: number; suggestedMonthlyCents: number };
-        } = await res.json();
-        const now = new Date();
-        const currentMonth = now.getMonth() + 1;
-        const currentYear = now.getFullYear();
-        const upcoming = (data.goals || [])
-          .filter((g) => g.year > currentYear || (g.year === currentYear && g.month >= currentMonth))
-          .sort((a, b) => (a.year - b.year) * 12 + (a.month - b.month));
-        setSavingPlan({
-          totals: data.totals,
-          nextDeadline: upcoming[0] ? { month: upcoming[0].month, year: upcoming[0].year } : null
-        });
-      } catch {
-        // silent: saving plan is enhancement data, summary is the fallback
-      }
-    }
-
-    (async () => {
-      await Promise.all([fetchSummary(), fetchQuarterly(), fetchSavingPlan()]);
-      setLoading(false);
-    })();
-  }, [t]);
+  // Sparplan: nächste Deadline aus den datierten Zielen ableiten
+  const savingPlan = useMemo(() => {
+    const data = savingPlanQuery.data;
+    if (!data) return null;
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const upcoming = (data.goals || [])
+      .filter((g) => g.year > currentYear || (g.year === currentYear && g.month >= currentMonth))
+      .sort((a, b) => (a.year - b.year) * 12 + (a.month - b.month));
+    return {
+      totals: data.totals,
+      nextDeadline: upcoming[0] ? { month: upcoming[0].month, year: upcoming[0].year } : null
+    };
+  }, [savingPlanQuery.data]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
