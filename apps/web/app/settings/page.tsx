@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 
 import ChangePasswordCard from "../../components/ChangePasswordCard";
+import InstallAppCard from "../../components/InstallAppCard";
 import PageContainer from "../../components/PageContainer";
 import { useI18n } from "../../lib/i18n";
 import { useTheme, type Theme } from "../../lib/ThemeContext";
@@ -81,6 +82,9 @@ export default function SettingsPage() {
           </div>
         </fieldset>
       </div>
+
+      {/* Install as App Section — nur sichtbar, wenn die App nicht installiert ist */}
+      <InstallAppCard />
       </PageContainer>
     </main>
   );

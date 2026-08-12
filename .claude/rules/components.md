@@ -14,6 +14,7 @@ paths:
 ## Tailwind
 - `@tailwindcss/forms` ist eingebunden — Form-Elemente nutzen dessen Reset-Styles
 - Mobile-first: `sm:`, `md:`, `lg:` Prefixes für responsive Breakpoints
+- **Fokussierbare Controls (`input`, `select`, `textarea`) mobil NIE unter `text-base` (16px) stylen** — iOS Safari zoomt bei fokussierten Feldern mit < 16px automatisch in die Seite. Kompaktere Darstellung ab Tablet ist ok: `text-base md:text-sm`. Das Forms-Plugin setzt als Default bereits 16px; das Problem entsteht nur durch explizite `text-xs`/`text-sm`-Utilities auf Controls.
 
 ## Vor Änderungen
 - Bestehende Komponenten-Dateien lesen um das Pattern zu verstehen

@@ -523,5 +523,13 @@ export const en: Record<string, string> = {
   "settings.categories.badgeTax": "Tax",
   "settings.categories.taxToggleLabel": "Tax-relevant",
   "settings.categories.taxToggleHint": "All existing and future transactions in this category are earmarked for tax. Individual transactions can still be unmarked manually.",
-  "nav.categories": "Categories"
+  "nav.categories": "Categories",
+  "offline.title": "You're offline",
+  "offline.body": "There's no internet connection right now. As soon as you're back online you can pick up where you left off.",
+  "offline.retry": "Try again",
+  "settings.installTitle": "Install as an app",
+  "settings.installDescription": "Doewe on your home screen: launches full-screen and feels like a native app.",
+  "settings.installButton": "Install app",
+  "settings.installIosHint": "On iPhone/iPad: open Safari's share menu and choose “Add to Home Screen”.",
+  "settings.installGenericHint": "You'll find installation in your browser menu (e.g. “Install app” or “Add to home screen”)."
 };

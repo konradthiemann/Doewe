@@ -18,5 +18,7 @@ export default withAuth({
 });
 
 export const config = {
-  matcher: ["/((?!api/auth|api/demo|api/health|login|forgot-password|reset-password|impressum|datenschutz|_next|static|favicon.ico|assets|.*\\..*).*)"]
+  // ~offline: Offline-Fallback-Seite muss ohne Session erreichbar sein,
+  // damit der Service Worker sie beim Install precachen kann.
+  matcher: ["/((?!api/auth|api/demo|api/health|login|forgot-password|reset-password|~offline|impressum|datenschutz|_next|static|favicon.ico|assets|.*\\..*).*)"]
 };

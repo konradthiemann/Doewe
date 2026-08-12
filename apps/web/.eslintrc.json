@@ -2,6 +2,7 @@
   "root": true,
   "extends": ["../../shared/eslint/eslint.base.cjs", "next/core-web-vitals"],
   "env": { "browser": true, "es2021": true },
+  "ignorePatterns": ["public/sw.js", "public/swe-worker*.js"],
   "overrides": [
     {
       "files": ["prisma/seed.js", "lib/demoConstants.js", "lib/demoData.js"],
