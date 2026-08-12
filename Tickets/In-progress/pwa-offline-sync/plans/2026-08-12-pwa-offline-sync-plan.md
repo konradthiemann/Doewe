@@ -3,6 +3,7 @@
 > **Stand:** 2026-08-12 (v2) · Recherche + Codebase-Analyse abgeschlossen, noch keine Umsetzung.
 > **v2:** Web Push (Teil C, Abschnitt 5) und Haushalts-Sharing (Teil D, Abschnitt 6) als vollwertige Phasen ausgearbeitet; Bank-/CSV-Import als Entscheidungsgrundlage ergänzt (Teil E, Abschnitt 7).
 > **v3:** Positionierungs-Entscheidung zu Teil E festgehalten (**manual-first / „bewusster Umgang"**, Abschnitt 7.5); Teil C um **Erfassungs-Reminder** erweitert (5.3): getimt/konfigurierbar = machbar via Server-Cron; ortsabhängig = als PWA technisch nicht möglich, Alternativen notiert.
+> **v4:** Wissenschaftliche Einordnung der **Financial-Wellbeing/Mental-Load-Positionierung** (7.6, inkl. Framing-Regeln und „Calm Finance"-Designprinzipien); neues **Teil F: Dashboard-Neuordnung & Aha-Moment** (Abschnitt 8, RevenueCat-Aktivierungsprinzip, Ist-Analyse mit Belegen, 2-Spalten-Validierung).
 > **Kontext:** Doewe ist eine solide, gut dokumentierte CRUD-Anwendung. Dieser Plan beschreibt den Weg zu einer installierbaren, offline-fähigen App mit Zwei-Wege-Synchronisation.
 
 ---
@@ -19,11 +20,14 @@
 
 **Teil E — Bank-Import:** Bewusst **keine** Phase, sondern eine Entscheidungsgrundlage (Abschnitt 7): Was bringt es wirklich, welche Wege gibt es **ohne** Bank-Verbindung (Datei-Import!), und welche regulatorisch-wirtschaftlichen Hürden entstehen, falls die App öffentlich skalieren und Geld verdienen soll. **Entschieden am 2026-08-12: Doewe positioniert sich manual-first („bewusster Umgang") — keine Bank-Verbindung; Details und Konsequenzen in 7.5.**
 
-**Empfohlene Reihenfolge:** 1 → 2 → 3a → C → D → 3b (C ist unabhängig und kann direkt nach Phase 1 vorgezogen werden; E wird separat entschieden und blockiert nichts).
+**Teil F — Dashboard & Aha-Moment (Aktivierung):** Der erste Eindruck entscheidet: Laut RevenueCats „State of Subscription Apps" fällt die Nutzungs-Entscheidung in der ersten Session (82 % der Trial-Starts am Install-Tag, 55 % der 3-Tage-Trial-Kündigungen an Tag 0) — daraus abgeleitet die Praxisregel „Aha-Moment in unter 60 Sekunden". Für Doewe heißt das: Das Dashboard muss die Alltagsfrage „Wie stehe ich diesen Monat da — was ist noch frei?" in Sekunden beantworten, und neue Nutzer brauchen einen Weg zum ersten echten Einblick innerhalb der ersten Minute. Ist-Analyse, Ziel-Hierarchie (inkl. Validierung der 2-Spalten-Idee) und Onboarding in Abschnitt 8. Die wissenschaftliche Einordnung der Wellbeing-Positionierung, auf die das einzahlt, steht in 7.6.
+
+**Empfohlene Reihenfolge:** 1 → F → 2 → 3a → C → D → 3b (F und C sind unabhängig und vorziehbar; E ist entschieden: vorerst nicht).
 
 | Phase | Inhalt | Nutzen | Aufwand | Abhängigkeit |
 |---|---|---|---|---|
 | 1 | PWA-Grundausbau + Zoom-Fix | installierbar, App-Gefühl, Bug weg | 1–2 Tage | — |
+| F | **Dashboard & Aha-Moment** (Abschnitt 8) | erster Eindruck, Aktivierung, Wellbeing-Framing | 3–5 Tage | unabhängig (nach 1 sinnvoll) |
 | 2 | Offline **lesen** | App startet & zeigt Daten ohne Netz | 2–4 Tage | 1 |
 | 3a | Offline **erfassen** (Outbox, konfliktfrei) | Buchungen unterwegs ohne Netz | 3–5 Tage | 2 |
 | C | **Web Push**: Budget-Warnungen + Erfassungs-Reminder (Abschnitt 5) | App meldet sich von selbst, stützt manual-first | 4–7 Tage | 1 (vorziehbar) |
@@ -329,9 +333,65 @@ Das flankierende Feature zur manual-first-Positionierung (7.5): Wer bewusst manu
   2. **E1 (CSV/CAMT-Datei-Import)** bleibt der Eskalationspfad, falls Erfassungsaufwand doch zum Churn-Risiko wird — auch er passt zur Positionierung (Datei statt Verbindung, Daten bleiben lokal kontrolliert).
   3. Marketing-/README-Sprache kann die Positionierung aktiv nutzen („local-first, bank-frei, bewusst").
 
+### 7.6 Wissenschaftliche Einordnung: Finanzieller Überblick, Mental Load & Positionierung (v4)
+
+**These:** „Überblick über Finanzen und Ziele reduziert den Mental Load und stärkt das Wohlbefinden." Die Befundlage trägt diese These — mit wichtigen Präzisierungen.
+
+**Was die Forschung hergibt (Wirkkette):**
+1. **Geldsorgen und psychische Gesundheit hängen robust zusammen:** Die Meta-Analyse von **Richardson, Elliott & Roberts (2013, Clinical Psychology Review, 65 Studien)** zeigt signifikante Zusammenhänge zwischen unbesicherten Schulden und Depression, Suizidalität und Substanzkonsum; Menschen mit Depression sind mehr als doppelt so häufig verschuldet.
+2. **„Mental Load" hat eine wissenschaftliche Fassung: die Bandwidth-Tax.** **Mullainathan & Shafir („Scarcity", 2013)** zeigen, dass Geld-Knappheit und Geldsorgen kognitive Bandbreite besetzen (Arbeitsgedächtnis, exekutive Kontrolle) — Sorgen „tunneln" die Aufmerksamkeit auf das Finanzproblem. Genau das ist der Mechanismus hinter „Kopf frei durch Klarheit".
+3. **Subjektives finanzielles Wohlbefinden ist ein Top-Prädiktor für allgemeines Wohlbefinden:** **Netemeyer et al. (2018, Journal of Consumer Research)** fassen es als zwei Konstrukte — *Stress im täglichen Geld-Management* und *erwartete Zukunftssicherheit* — beides stark mit dem Gesamt-Wohlbefinden verbunden, kontrolliert für andere Lebensbereiche. Eine App, die genau diese beiden Größen adressiert (Monatsüberblick heute + Sparziele morgen), setzt am richtigen Konstrukt an.
+4. **Wahrgenommene Kontrolle ist der Mediator:** Studien zur finanziellen Knappheit zeigen, dass geringere wahrgenommene Kontrolle erklärt, warum Knappheit Distress erhöht und Lebenszufriedenheit senkt. Überblick + Plan = Kontrollerleben.
+
+**Die Gegenseite gehört dazu (und ist ein Design-Auftrag, kein Gegenargument):**
+- **Ostrich-Effekt:** Menschen vermeiden den Blick auf ihre Finanzen genau dann, wenn sie schlechte Nachrichten erwarten (Karlsson/Loewenstein/Seppi 2009); Vermeidung ist bei Angst/Depression häufiger und sagt **schlechtere** finanzielle Outcomes voraus. Zugleich zeigen Kontobewegungsdaten (**Olafsson & Pagel, NBER w23945**): Wer regelmäßig schaut, gibt kontrollierter aus. Aber: Für manche Nutzer erzeugt häufiges Monitoring selbst Anspannung.
+- **Konsequenz → „Calm Finance"-Designprinzipien:** (a) Die erste Zahl ist **vorwärtsgerichtet** („was ist noch frei"), nicht rückwärtsgerichtet-alarmierend; (b) kein Rot-Overload, Warnungen konstruktiv formulieren; (c) kein Schuld-Framing (auch bei Überziehung: „So kommst du zurück" statt Alarm); (d) Reminder nerven nie (Smart-Suppression, 5.3); (e) der erste Blick muss **billig** sein — Antwort in < 3 Sekunden, damit auch Vermeider den Einstieg schaffen. Die App muss den Blick aufs Geld *sicher anfühlen* lassen — das ist der eigentliche Anti-Ostrich-Hebel.
+
+**Ehrliche Grenzen (nicht überverkaufen):**
+- Die Evidenz ist überwiegend **korrelational** und **bidirektional** (psychische Probleme verursachen auch Geldprobleme). Interventionsstudien speziell zu Budget-Apps sind dünn. Wir behaupten also Mechanismus-Plausibilität („Klarheit → Kontrollerleben → weniger Geld-Stress"), keine Therapiewirkung.
+- **Framing-Regeln:** Wellness-Sprache ✅ („weniger Geld-Stress durch Klarheit", „Kopf frei", „mentale Last reduzieren"). Medizinische Claims ❌ („verbessert deine mentale Gesundheit", „hilft gegen Angst/Depression") — das wäre nicht nur unseriös, sondern rückt die App in Deutschland in Richtung Medizinprodukt-/DiGA-Regulatorik und Heilversprechen-Problematik.
+
+**Fazit & Passung:** ✅ **Aufnehmen — als Positionierung und Designprinzip, nicht als Gesundheitsversprechen.** Die Mental-Load-Positionierung ist die natürliche Weiterentwicklung der manual-first-Entscheidung (7.5): Die YNAB-Schule *ist* im Kern eine Achtsamkeits-Mechanik (bewusstes Erfassen = bewusster Umgang), und „Klarheit statt Bank-Zugriff" verbindet beide Zielgruppen aus 7.5. Slogan-Richtung: **„Doewe — Klarheit statt Kopfzerbrechen. Deine Finanzen, dein Kopf frei."** Konkret zahlen darauf ein: Teil F (vorwärtsgerichtetes Dashboard), Teil C (nie nervende Reminder), Phase 2/3 (Offline = Verfügbarkeit ohne Reibung).
+
 ---
 
-## 8. Quellen (Recherche 2026-08-12)
+## 8. Teil F — Dashboard & Aha-Moment (Aktivierung)
+
+**Ziel:** Die erste Session entscheidet. Das Dashboard beantwortet die Alltagsfrage **„Wie stehe ich diesen Monat da — was ist noch frei?"** in unter 3 Sekunden, und ein neuer Nutzer erlebt seinen ersten echten Einblick („Aha") in unter 60 Sekunden.
+
+### 8.1 Das Aktivierungs-Prinzip (RevenueCat, verifiziert)
+Aus RevenueCats „State of Subscription Apps" (2025/2026) belegt: **82 % der Trial-Starts passieren am Install-Tag**, **55 % der Kündigungen von 3-Tage-Trials fallen auf Tag 0** — die Bindungs-Entscheidung fällt in der ersten Session, bevor Nutzer Kernfeatures überhaupt gesehen haben. Die „Aha-Moment in 60 Sekunden"-Regel ist die daraus destillierte Praxisempfehlung. Doewe ist (noch) keine Subscription-App, aber das Aktivierungsprinzip ist identisch: **Time-to-Value < erste Session.** Relevant wird das doppelt, falls je monetarisiert wird.
+
+### 8.2 Ist-Analyse Dashboard (✅ belegt, `apps/web/app/page.tsx`, gelesen 2026-08-12)
+Reihenfolge heute: (1) Balance-Overview mit 4 KPIs — Kontostand gesamt, Übertrag, Sparquote, Fixkostenquote (`:308-344`) → (2) Kategorie-Budgets, worst-first sortiert (`:347-395`) → (3) Doughnut + „Einkommensnutzung" mit Segmentbalken und 4 Detail-Karten (`:397-533`) → (4) Daueraufträge (als `<details>` einklappbar, gut!) + Sparübersicht (`:536-705`) → (5) Quartalsübersicht mit Bar-Chart, MoM-Deltas und Tabelle (`:708-878`).
+
+Befunde:
+1. **Die stärkste Zahl ist versteckt:** `projectedLeft` — „was bleibt bis Monatsende, **inklusive noch anstehender Daueraufträge**" — ist Doewes Differenzierungsmerkmal (vorausschauend statt rückblickend) und existiert bereits. Sie erscheint aber erst als kleine zweite Detail-Karte tief in Sektion 3 (`:496-505`). Die erste Zahl, die man sieht, ist der statische Kontostand.
+2. **Mobil kollabiert alles auf 1 Spalte:** Die KPI-Grids nutzen `sm:grid-cols-2 md:grid-cols-4` (`:313`) — unter 640 px (jedes Smartphone im Porträt) wird daraus ein langer Einspalter → viel Scrollen bis zur Substanz. **Die 2-Spalten-Idee ist damit validiert:** `grid-cols-2` ab Basis-Breakpoint für KPI-Karten ist der richtige Move.
+3. **Ladezustände als Text** („Lädt…", `:353` u. a.) statt Skeletons — der erste Eindruck wirkt langsamer als nötig.
+4. **Quartalsübersicht dupliziert Review-Inhalte** am Seitenende (Chart + Tabelle, ~170 Zeilen) — legitim, aber nicht Dashboard-Kernaufgabe.
+5. Positiv: safe-area, worst-first-Budgets, `<details>`-Pattern, MoM-Deltas, A11y-Attribute sind schon da.
+
+### 8.3 Ziel-Hierarchie (Umbau-Vorschlag)
+1. **Hero-Karte „Verfügbar bis Monatsende"** (= `projectedLeft`, vorhandene Größe): große Zahl, Mini-Segmentbalken (ausgegeben/gespart/frei — existiert in Sektion 3), eine Kontextzeile („inkl. {n} anstehender Daueraufträge, Übertrag {x} €"). Vorwärtsgerichtet = Calm-Finance-Prinzip (7.6). Übertrag wandert hierher statt eigener KPI-Karte.
+2. **KPI-Grid `grid-cols-2` ab Basis** (Validierung der 2-Spalten-Idee mit Typografie-Auflagen): max. 4 Karten — Ausgegeben (Monat), Gespart (+ Zielfortschritt), Kontostand gesamt, Fixkostenquote. Beträge `text-lg`/`text-xl` + `tabular-nums` statt `text-2xl` (sonst Umbruch bei 375 px in halber Breite), Karten mit `min-w-0` (bekanntes Grid-Gotcha der Review-Seite).
+3. **Budget-Ampel kompakt:** Top-3 kritische Kategorien + „Alle {n} anzeigen" (Rest im `<details>`), worst-first-Sortierung existiert schon.
+4. **„Steht noch an":** kommende Daueraufträge des Restmonats (`dayOfMonth >= heute`, Daten vorhanden `:48-54`) — macht die Hero-Projektion nachvollziehbar und erklärt sie nebenbei.
+5. Doughnut + Sparübersicht darunter; **Quartalsübersicht ans Ende als `<details>`** (oder Teaser + Link auf `/review` — dort lebt die Tiefe).
+6. **Skeleton-Loader** statt Text (Spinner/Skeleton-Primitives existieren laut UI-Feedback-Pattern).
+
+### 8.4 Onboarding-Aha für neue Nutzer (< 60 Sekunden)
+Ein leeres Dashboard erzeugt kein Aha. Zwei sich ergänzende Wege:
+1. **Mini-Wizard beim ersten Login (3 Schritte, überspringbar):** Monatseinkommen → größte Fixkosten (legt 1–3 Daueraufträge an) → optional Sparziel. Ergebnis: Die Hero-Karte zeigt sofort eine **echte persönliche Projektion** — das ist der Aha-Moment, mit eigenen Zahlen, in < 60 s. Passt zur manual-first-Story: Der Wizard IST die erste bewusste Auseinandersetzung.
+2. **„Mit Beispieldaten erkunden":** Demo-Seed-Endpoint existiert (`/api/demo/seed`, ✅ belegt: Route + Middleware-Ausnahme). ⚠️ Zu prüfen: aktueller UI-Einstieg dazu; sauberer „Demo beenden/zurücksetzen"-Pfad gehört zur DoD.
+
+### 8.5 DoD & Aufwand
+- Preview-Test bei 375 px (kein horizontaler Overflow, `min-w-0`-Check), hell + dunkel; Hero beantwortet die Monatsfrage ohne Scrollen; neuer Account erreicht gefüllte Hero-Karte in < 60 s (Wizard-Durchlauf); i18n-Keys de/en ergänzt; keine neuen API-Endpoints nötig (alle Daten liegen in `summary`/`quarterly`/`saving-plan` — belegt).
+- **Aufwand: 3–5 Tage** (Dashboard-Umbau 2–3, Wizard + Demo-Einstieg 1–2). **Abhängigkeit:** unabhängig; sinnvoll direkt nach Phase 1.
+
+---
+
+## 9. Quellen (Recherche 2026-08-12)
 - iOS-Zoom bei < 16px: [CSS-Tricks — 16px or Larger Text Prevents iOS Form Zoom](https://css-tricks.com/16px-or-larger-text-prevents-ios-form-zoom/), [Guide Fari — Avoid text-sm on inputs](https://guidefari.com/safari-ios-input-zoom/)
 - Serwist-Setup: [Serwist — Getting started (Next.js)](https://serwist.pages.dev/docs/next/getting-started), [LogRocket — Next.js PWA with offline support](https://blog.logrocket.com/nextjs-16-pwa-offline-support/)
 - EU/DMA-Kehrtwende: [Apple Developer — Update on apps distributed in the EU](https://developer.apple.com/support/dma-and-apps-in-the-eu/), [Macworld — Home Screen web apps are not going away](https://www.macworld.com/article/2238869/ios-17-4-home-screen-web-apps-digital-markets-act-eu.html)
@@ -351,3 +411,10 @@ Das flankierende Feature zur manual-first-Positionierung (7.5): Wer bewusst manu
 - [Chrome — Notification Triggers API (Origin Trial 2019, nie regulär ausgeliefert)](https://developer.chrome.com/docs/web-platform/notification-triggers)
 - [Progressier — Geofencing: nicht im Web verfügbar](https://progressier.com/pwa-capabilities/geofencing)
 - [MDN — Re-engageable Notifications & Push](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Tutorials/js13kGames/Re-engageable_Notifications_Push)
+
+**Ergänzt für v4 (Wellbeing-Wissenschaft, Aktivierung, Dashboard):**
+- Schulden & psychische Gesundheit: [Richardson, Elliott & Roberts 2013 — Meta-Analyse (PubMed)](https://pubmed.ncbi.nlm.nih.gov/24121465/), [Systematic Review Debt & Mental Health USA (PMC)](https://pmc.ncbi.nlm.nih.gov/articles/PMC13089121/), [Financial Health Network — Mental-Financial Health Connection](https://finhealthnetwork.org/research/understanding-the-mental-financial-health-connection/)
+- Wohlbefinden & Kontrolle: [Netemeyer et al. 2018 — How Am I Doing? Perceived Financial Well-Being](https://www.researchgate.net/publication/320830550_How_Am_I_Doing_Perceived_Financial_Well-Being_Its_Potential_Antecedents_and_Its_Relation_to_Overall_Well-Being), [Mullainathan & Shafir — Scarcity (Zusammenfassung)](https://www.gleech.org/scarcity), [Scarcity, Tunneling & Cognitive Load — Scoping Review (PMC)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10910771/)
+- Ostrich-Effekt / Monitoring: [Olafsson & Pagel — The Ostrich in Us (NBER w23945)](https://www.nber.org/papers/w23945), [Darden — The Ostrich Effect](https://ideas.darden.virginia.edu/behavior-ostrich-effect), [Simply Psychology — Financial Avoidance](https://www.simplypsychology.com/articles/financial-avoidance-psychology)
+- Aktivierung/Aha-Moment: [RevenueCat — State of Subscription Apps 2026](https://www.revenuecat.com/state-of-subscription-apps), [RevenueCat — Trends & Benchmarks 2026 in 10 Minuten](https://www.revenuecat.com/blog/growth/subscription-app-trends-benchmarks-2026/), [RevenueCat — Activation Metrics](https://www.revenuecat.com/blog/growth/activation-metrics), [Day-0-Kündigungsanalyse (tasu.ai)](https://tasu.ai/library/why-users-cancel-free-trials-day-0)
+- Finanz-Dashboard-UX: [Eleken — Fintech UX Best Practices 2026](https://www.eleken.co/blog-posts/fintech-ux-best-practices), [Appthetics — Budgeting App UX Patterns](https://www.appthetics.com/blog/budgeting-apps-ux-patterns)
