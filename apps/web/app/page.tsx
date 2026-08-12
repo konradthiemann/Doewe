@@ -11,10 +11,12 @@ import {
   type ChartOptions
 } from "chart.js";
 import ChartDataLabels, { type Context as DataLabelsContext } from "chartjs-plugin-datalabels";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Bar } from "react-chartjs-2";
 
 import PageContainer from "../components/PageContainer";
+import { Skeleton } from "../components/ui/Skeleton";
 import { useI18n } from "../lib/i18n";
 
 ChartJS.register(
@@ -179,7 +181,6 @@ export default function HomePage() {
   const spentPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
   const expensesPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedExpenses / availableBudget) * 100)) : 0;
   const savedPercent = availableBudget > 0 ? Math.min(100 - expensesPercent, Math.round((totalSavingsTransfer / availableBudget) * 100)) : 0;
-  const leftPercent = availableBudget > 0 ? Math.max(0, 100 - expensesPercent - savedPercent) : 0;
   const overspent = Math.max(0, projectedSpent - availableBudget);
   const overspentPercent = availableBudget > 0 ? Math.max(0, Math.round((overspent / availableBudget) * 100)) : 0;
   const hasIncomeData = projectedIncome > 0 || carryover !== 0;
@@ -301,46 +302,200 @@ export default function HomePage() {
   const recurringIncomeTotal = summary.recurringIncomeTotal || 0;
   const recurringOutcomeTotal = summary.recurringOutcomeTotal || 0;
 
+  // "Steht noch an": Daueraufträge mit Fälligkeitstag ab heute (Restmonat)
+  const todayOfMonth = new Date().getDate();
+  const upcomingRecurring = recurringTransactions
+    .filter((rec) => rec.dayOfMonth != null && rec.dayOfMonth >= todayOfMonth)
+    .sort((a, b) => (a.dayOfMonth ?? 0) - (b.dayOfMonth ?? 0));
+
+  // Budgets: kritischste zuerst; nur Top 3 offen, Rest einklappbar
+  const sortedBudgets = categoryBudgets.slice().sort((a, b) => b.diff - a.diff);
+  const topBudgets = sortedBudgets.slice(0, 3);
+  const moreBudgets = sortedBudgets.slice(3);
+
+  // Leerer Account (Erstnutzung): Hero zeigt Willkommens-Einstieg statt 0-Werten
+  const showWelcome = !loading && !hasIncomeData && projectedSpent === 0 && recurringTransactions.length === 0;
+
+  const renderBudgetItem = (c: { categoryId: string; name: string; budget: number; spent: number; diff: number }) => {
+    const pct = c.budget > 0 ? Math.min(200, Math.round((c.spent / c.budget) * 100)) : 0;
+    const over = c.diff > 0;
+    return (
+      <li key={c.categoryId} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-medium text-gray-900 dark:text-neutral-100">{c.name}</span>
+          <span className={`text-xs font-semibold tabular-nums ${over ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+            {formatCurrency(c.spent)} / {formatCurrency(c.budget)}
+          </span>
+        </div>
+        <div className="h-2 w-full rounded bg-gray-200 dark:bg-neutral-900 overflow-hidden" aria-hidden="true">
+          <div
+            className={`h-2 rounded ${over ? "bg-red-500" : "bg-emerald-500"}`}
+            style={{ width: `${Math.min(100, pct)}%` }}
+          />
+        </div>
+        <p className={`mt-1 text-[11px] ${over ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-neutral-400"}`}>
+          {over
+            ? t("dashboard.categoryBudgetOverBy", { amount: formatCurrency(c.diff) })
+            : t("dashboard.categoryBudgetUnderBy", { amount: formatCurrency(-c.diff) })}
+        </p>
+      </li>
+    );
+  };
+
+  const renderRecurringItem = (rec: { id: string; description: string; amountCents: number; dayOfMonth: number | null }) => (
+    <li key={rec.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 truncate">
+          {rec.description}
+        </p>
+        {rec.dayOfMonth && (
+          <p className="text-xs text-gray-500 dark:text-neutral-400">
+            {t("dashboard.recurringDay", { day: rec.dayOfMonth })}
+          </p>
+        )}
+      </div>
+      <span className={`text-sm font-semibold ml-3 ${
+        rec.amountCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+      }`}>
+        {formatCurrency(rec.amountCents / 100)}
+      </span>
+    </li>
+  );
+
   return (
     <main id="maincontent" className="py-6 md:py-8">
       <PageContainer className="space-y-6">
-      {/* Account Balance & Carryover Section */}
-      <section aria-labelledby="balance-overview">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
-          <h2 id="balance-overview" className="text-lg font-medium mb-4">
-            {t("dashboard.balanceOverview")}
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
-            <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalance")}</p>
-              <p className={`text-2xl font-semibold ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+      {/* Hero: "Verfügbar bis Monatsende" — beantwortet die Monatsfrage auf einen Blick */}
+      <section aria-labelledby="hero-left">
+        <div className="rounded-xl border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          {loading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-9 w-56" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+            </div>
+          ) : showWelcome ? (
+            <div className="space-y-3">
+              <h2 id="hero-left" className="text-lg font-semibold text-gray-900 dark:text-neutral-100">
+                {t("dashboard.welcomeTitle")}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-neutral-300">{t("dashboard.welcomeBody")}</p>
+              <Link
+                href="/transactions"
+                className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              >
+                {t("dashboard.welcomeCta")}
+              </Link>
+            </div>
+          ) : (
+            <>
+              <h2 id="hero-left" className="text-sm font-medium text-gray-500 dark:text-neutral-400">
+                {t("dashboard.heroTitle")}
+              </h2>
+              <p className={`mt-1 text-3xl font-bold tabular-nums ${projectedLeft >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                {formatCurrency(projectedLeft)}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.heroHint")}</p>
+              {budgetUnderwater && (
+                <div className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300" role="alert">
+                  {t("dashboard.budgetUnderwaterWarning")}
+                </div>
+              )}
+              {hasIncomeData && (
+                <div className="mt-4 space-y-2">
+                  <div className="relative h-3 w-full overflow-hidden rounded-full bg-emerald-500 dark:bg-emerald-600">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-l-full bg-red-500 dark:bg-red-600 transition-all duration-500"
+                      style={{ width: `${Math.min(100, expensesPercent)}%` }}
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={expensesPercent}
+                      aria-label={t("dashboard.spent")}
+                    />
+                    {totalSavingsTransfer > 0 && (
+                      <div
+                        className="absolute inset-y-0 bg-blue-500 dark:bg-blue-600 transition-all duration-500"
+                        style={{ left: `${Math.min(100, expensesPercent)}%`, width: `${Math.min(100 - expensesPercent, savedPercent)}%` }}
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={savedPercent}
+                        aria-label={t("dashboard.saved")}
+                      />
+                    )}
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-x-3 text-xs text-gray-600 dark:text-neutral-400">
+                    <span>{t("dashboard.spent")}: {formatCurrency(projectedExpenses)}</span>
+                    {totalSavingsTransfer > 0 && (
+                      <span className="text-blue-600 dark:text-blue-400">{t("dashboard.saved")}: {formatCurrency(totalSavingsTransfer)}</span>
+                    )}
+                    <span>{t("dashboard.left")}: {formatCurrency(projectedLeft)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                    {savingsWithdrawn > 0
+                      ? t("dashboard.budgetBreakdownWithWithdrawal", {
+                          carryover: formatCurrency(carryover),
+                          income: formatCurrency(projectedIncome),
+                          withdrawn: formatCurrency(savingsWithdrawn),
+                          budget: formatCurrency(availableBudget)
+                        })
+                      : t("dashboard.budgetBreakdown", {
+                          carryover: formatCurrency(carryover),
+                          income: formatCurrency(projectedIncome),
+                          budget: formatCurrency(availableBudget)
+                        })}
+                  </p>
+                  {overspent > 0 && (
+                    <p className="text-xs font-medium text-red-600 dark:text-red-400">
+                      {t("dashboard.overspendAboveBudget", { percent: overspentPercent })} ({formatCurrency(overspent)})
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* Kern-KPIs — 2-spaltig ab Mobile (kein Einspalter-Scrollen mehr) */}
+      <section aria-label={t("dashboard.balanceOverview")}>
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="min-w-0 rounded-md border border-gray-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.spent")}</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-red-600 dark:text-red-400">{formatCurrency(projectedSpent)}</p>
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400">{t("dashboard.spentOfBudget", { percent: spentPercent })}</p>
+            </div>
+            <div className="min-w-0 rounded-md border border-gray-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.saved")}</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{formatCurrency(totalSavingsTransfer)}</p>
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400">{t("dashboard.savingsRate")}: {savingsRate}%</p>
+            </div>
+            <div className="min-w-0 rounded-md border border-gray-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalance")}</p>
+              <p className={`mt-0.5 text-lg font-semibold tabular-nums ${summary.totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
                 {formatCurrency(summary.totalBalance)}
               </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalanceHint")}</p>
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400">{t("dashboard.totalBalanceHint")}</p>
             </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.carryoverFromLastMonth")}</p>
-              <p className={`text-2xl font-semibold ${carryover >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}`}>
-                {formatCurrency(carryover)}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">
-                {carryover < 0 ? t("dashboard.carryoverNegativeHint") : t("dashboard.carryoverHint")}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.savingsRate")}</p>
-              <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">{savingsRate}%</p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.savingsRateHint")}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatio")}</p>
-              <p className={`text-2xl font-semibold ${fixedCostRatio >= 70 ? "text-red-600 dark:text-red-400" : fixedCostRatio >= 50 ? "text-amber-600 dark:text-amber-400" : "text-gray-700 dark:text-neutral-200"}`}>
+            <div className="min-w-0 rounded-md border border-gray-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatio")}</p>
+              <p className={`mt-0.5 text-lg font-semibold tabular-nums ${fixedCostRatio >= 70 ? "text-red-600 dark:text-red-400" : fixedCostRatio >= 50 ? "text-amber-600 dark:text-amber-400" : "text-gray-700 dark:text-neutral-200"}`}>
                 {fixedCostRatio}%
               </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatioHint")}</p>
+              <p className="text-[11px] text-gray-500 dark:text-neutral-400">{t("dashboard.fixedCostRatioHint")}</p>
             </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* Category Budgets — nach oben gezogen: wichtigste Info für tägliche Haushaltsplanung */}
@@ -351,7 +506,11 @@ export default function HomePage() {
           </h2>
           <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.categoryBudgetsSubtitle")}</p>
           {loading ? (
-            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
+            <div className="grid gap-2 lg:grid-cols-2">
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
+            </div>
           ) : categoryBudgets.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.categoryBudgetsEmpty")}</p>
           ) : (
@@ -360,243 +519,101 @@ export default function HomePage() {
                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-3">{t("dashboard.categoryBudgetsAllOk")}</p>
               )}
               <ul className="grid gap-2 lg:grid-cols-2">
-                {categoryBudgets
-                  .slice()
-                  .sort((a, b) => b.diff - a.diff)
-                  .map((c) => {
-                    const pct = c.budget > 0 ? Math.min(200, Math.round((c.spent / c.budget) * 100)) : 0;
-                    const over = c.diff > 0;
-                    return (
-                      <li key={c.categoryId} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-gray-900 dark:text-neutral-100">{c.name}</span>
-                          <span className={`text-xs font-semibold tabular-nums ${over ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                            {formatCurrency(c.spent)} / {formatCurrency(c.budget)}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full rounded bg-gray-200 dark:bg-neutral-900 overflow-hidden" aria-hidden="true">
-                          <div
-                            className={`h-2 rounded ${over ? "bg-red-500" : "bg-emerald-500"}`}
-                            style={{ width: `${Math.min(100, pct)}%` }}
-                          />
-                        </div>
-                        <p className={`mt-1 text-[11px] ${over ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-neutral-400"}`}>
-                          {over
-                            ? t("dashboard.categoryBudgetOverBy", { amount: formatCurrency(c.diff) })
-                            : t("dashboard.categoryBudgetUnderBy", { amount: formatCurrency(-c.diff) })}
-                        </p>
-                      </li>
-                    );
-                  })}
+                {topBudgets.map(renderBudgetItem)}
               </ul>
+              {moreBudgets.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer select-none text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                    {t("dashboard.budgetsShowAll", { count: moreBudgets.length })}
+                  </summary>
+                  <ul className="mt-2 grid gap-2 lg:grid-cols-2">
+                    {moreBudgets.map(renderBudgetItem)}
+                  </ul>
+                </details>
+              )}
             </>
           )}
         </div>
       </section>
 
-      <section aria-labelledby="outgoing-chart" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* Ausgaben nach Kategorie (Doughnut) */}
+      <section aria-labelledby="outgoing-chart">
         <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
           <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
             {t("dashboard.outgoingsByCategory")}
           </h2>
           {loading ? (
-            <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
+            <div className="mx-auto w-full max-w-md space-y-3">
+              <Skeleton className="mx-auto h-44 w-44 rounded-full" />
+              <Skeleton className="h-3 w-full" />
+            </div>
           ) : outgoingValues.length > 0 ? (
-            <Doughnut data={doughnutData} options={doughnutOptions} />
+            <div className="mx-auto w-full max-w-md">
+              <Doughnut data={doughnutData} options={doughnutOptions} />
+            </div>
           ) : (
             <p className="text-sm text-gray-500">{t("dashboard.noOutgoings")}</p>
-          )}
-        </div>
-
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 p-4 bg-white dark:bg-neutral-900">
-          <h2 id="income-usage-heading" className="text-lg font-medium mb-1">
-            {t("dashboard.monthlyIncomeUsage")}
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">{t("dashboard.incomeUsageSubtitle")}</p>
-          {budgetUnderwater && !loading && (
-            <div className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300" role="alert">
-              {t("dashboard.budgetUnderwaterWarning")}
-            </div>
-          )}
-          {loading ? (
-            <p className="text-sm text-gray-500">{t("dashboard.loading")}</p>
-          ) : hasIncomeData ? (
-            <figure aria-labelledby="income-usage-heading income-usage-summary" className="space-y-4">
-              {/* Progress bar: red (expenses) + blue (savings) + green (remaining) */}
-              <div className="space-y-2">
-                <div className="relative w-full h-8 rounded-full overflow-hidden bg-emerald-500 dark:bg-emerald-600">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-l-full bg-red-500 dark:bg-red-600 transition-all duration-500"
-                    style={{ width: `${Math.min(100, expensesPercent)}%` }}
-                    role="progressbar"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={expensesPercent}
-                    aria-label={t("dashboard.spent")}
-                  />
-                  {totalSavingsTransfer > 0 && (
-                    <div
-                      className="absolute inset-y-0 bg-blue-500 dark:bg-blue-600 transition-all duration-500"
-                      style={{ left: `${Math.min(100, expensesPercent)}%`, width: `${Math.min(100 - expensesPercent, savedPercent)}%` }}
-                      role="progressbar"
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={savedPercent}
-                      aria-label={t("dashboard.saved")}
-                    />
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow">
-                    {expensesPercent + savedPercent}%
-                  </div>
-                </div>
-                <div className="flex justify-between text-xs text-gray-600 dark:text-neutral-400">
-                  <span>{t("dashboard.spent")}: {formatCurrency(projectedExpenses)}</span>
-                  {totalSavingsTransfer > 0 && <span className="text-blue-600 dark:text-blue-400">{t("dashboard.saved")}: {formatCurrency(totalSavingsTransfer)}</span>}
-                  <span>{t("dashboard.left")}: {formatCurrency(projectedLeft)}</span>
-                </div>
-                <div className="text-xs text-gray-500 dark:text-neutral-400">
-                  {savingsWithdrawn > 0
-                    ? t("dashboard.budgetBreakdownWithWithdrawal", {
-                        carryover: formatCurrency(carryover),
-                        income: formatCurrency(projectedIncome),
-                        withdrawn: formatCurrency(savingsWithdrawn),
-                        budget: formatCurrency(availableBudget)
-                      })
-                    : t("dashboard.budgetBreakdown", {
-                        carryover: formatCurrency(carryover),
-                        income: formatCurrency(projectedIncome),
-                        budget: formatCurrency(availableBudget)
-                      })}
-                </div>
-              </div>
-              <figcaption id="income-usage-summary" className="space-y-3 text-sm text-gray-700 dark:text-neutral-300">
-                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={t("dashboard.incomeReportBreakdown")}>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.spent")}</dt>
-                    <dd
-                      className="text-lg font-semibold text-red-600 dark:text-red-400"
-                      title={t("dashboard.spentBreakdownTooltip", {
-                        outcome: formatCurrency(projectedOutcome),
-                        savings: formatCurrency(totalSavingsTransfer)
-                      })}
-                    >
-                      {formatCurrency(projectedSpent)}
-                    </dd>
-                    <p className="text-xs text-slate-600 dark:text-neutral-400">
-                      {t("dashboard.spentOfBudget", { percent: spentPercent })}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-neutral-500 mt-0.5">
-                      {t("dashboard.spentBreakdownTooltip", {
-                        outcome: formatCurrency(projectedOutcome),
-                        savings: formatCurrency(totalSavingsTransfer)
-                      })}
-                    </p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.left")}</dt>
-                    <dd className={`text-lg font-semibold ${projectedLeft >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{formatCurrency(projectedLeft)}</dd>
-                    <p className="text-xs text-slate-600 dark:text-neutral-400">
-                      {projectedLeft > 0
-                        ? t("dashboard.leftAvailable", { percent: leftPercent })
-                        : projectedLeft === 0
-                          ? t("dashboard.fullyAllocated")
-                          : t("dashboard.negativeLeft")}
-                    </p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-200">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("dashboard.overspend")}</dt>
-                    <dd className={`text-lg font-semibold ${overspent > 0 ? "text-red-600 dark:text-red-400" : "text-slate-500 dark:text-neutral-400"}`}>
-                      {overspent > 0 ? formatCurrency(overspent) : t("dashboard.zeroEuro")}
-                    </dd>
-                    <p className="text-xs text-slate-600 dark:text-neutral-400">
-                      {overspent > 0
-                        ? t("dashboard.overspendAboveBudget", { percent: overspentPercent })
-                        : t("dashboard.noOverspend")}
-                    </p>
-                  </div>
-                </dl>
-                <p>
-                  {t("dashboard.spentSummary", {
-                    spent: formatCurrency(projectedSpent),
-                    budget: formatCurrency(availableBudget)
-                  })}
-                  {totalSavingsTransfer > 0 && ` ${t("dashboard.savedSummary", { saved: formatCurrency(totalSavingsTransfer) })}`}
-                  {projectedLeft > 0 && ` ${t("dashboard.leftSummary", { left: formatCurrency(projectedLeft) })}`}
-                  {overspent > 0 && ` ${t("dashboard.overspentSummary", { overspent: formatCurrency(overspent) })}`}
-                </p>
-              </figcaption>
-            </figure>
-          ) : (
-            <p className="text-sm text-gray-500">{t("dashboard.addIncomeTransactions")}</p>
           )}
         </div>
       </section>
 
       {/* Recurring + Savings — paired side by side on lg+ */}
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-      {/* Recurring Transactions Section */}
+      {/* Recurring Transactions Section — "Steht noch an" sichtbar, Gesamtliste einklappbar */}
       <section aria-labelledby="recurring-overview">
-        <details className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
-          <summary className="flex items-center justify-between cursor-pointer p-5 select-none list-none [&::-webkit-details-marker]:hidden">
-            <div>
-              <h2 id="recurring-overview" className="text-lg font-medium mb-1">
-                {t("dashboard.recurringOverview")}
-              </h2>
-              <p className="text-xs text-gray-500 dark:text-neutral-400">
-                {t("dashboard.recurringSubtitle")}
-              </p>
-            </div>
-            <svg className="w-5 h-5 text-gray-500 dark:text-neutral-400 transition-transform group-open:rotate-180 shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </summary>
-          <div className="px-5 pb-5">
+        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
+          <h2 id="recurring-overview" className="text-lg font-medium mb-1">
+            {t("dashboard.recurringOverview")}
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
+            {t("dashboard.recurringSubtitle")}
+          </p>
           {loading ? (
-            <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.loading")}</p>
+            <div className="space-y-2">
+              <Skeleton className="h-14" />
+              <Skeleton className="h-14" />
+            </div>
           ) : recurringTransactions.length > 0 ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-2 mb-4">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringIncome")}</p>
-                  <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
-                    {formatCurrency(recurringIncomeTotal)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringOutcome")}</p>
-                  <p className="text-2xl font-semibold text-red-600 dark:text-red-400">
-                    {formatCurrency(recurringOutcomeTotal)}
-                  </p>
-                </div>
-              </div>
-
-              <ul className="space-y-2">
-                {recurringTransactions.map((rec) => (
-                  <li key={rec.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-neutral-100 truncate">
-                        {rec.description}
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
+                {t("dashboard.upcomingTitle")}
+              </p>
+              {upcomingRecurring.length > 0 ? (
+                <ul className="mt-2 space-y-2">
+                  {upcomingRecurring.slice(0, 5).map(renderRecurringItem)}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.upcomingNone")}</p>
+              )}
+              <details className="mt-4">
+                <summary className="cursor-pointer select-none text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                  {t("dashboard.recurringShowAll", { count: recurringTransactions.length })}
+                </summary>
+                <div className="mt-3">
+                  <div className="grid gap-4 sm:grid-cols-2 mb-4">
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringIncome")}</p>
+                      <p className="text-2xl font-semibold tabular-nums text-green-600 dark:text-green-400">
+                        {formatCurrency(recurringIncomeTotal)}
                       </p>
-                      {rec.dayOfMonth && (
-                        <p className="text-xs text-gray-500 dark:text-neutral-400">
-                          {t("dashboard.recurringDay", { day: rec.dayOfMonth })}
-                        </p>
-                      )}
                     </div>
-                    <span className={`text-sm font-semibold ml-3 ${
-                      rec.amountCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
-                    }`}>
-                      {formatCurrency(rec.amountCents / 100)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                    <div>
+                      <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.recurringOutcome")}</p>
+                      <p className="text-2xl font-semibold tabular-nums text-red-600 dark:text-red-400">
+                        {formatCurrency(recurringOutcomeTotal)}
+                      </p>
+                    </div>
+                  </div>
+                  <ul className="space-y-2">
+                    {recurringTransactions.map(renderRecurringItem)}
+                  </ul>
+                </div>
+              </details>
             </>
           ) : (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.noRecurring")}</p>
           )}
-          </div>
-        </details>
+        </div>
       </section>
 
       <section aria-labelledby="savings-overview">
@@ -704,14 +721,22 @@ export default function HomePage() {
       </section>
       </div>
 
-      {/* Quarterly Overview Section */}
+      {/* Quarterly Overview Section — eingeklappt: die Tiefe lebt auf /review */}
       <section aria-labelledby="quarterly-overview">
-        <div className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white p-5 dark:bg-neutral-900">
-          <h2 id="quarterly-overview" className="text-lg font-medium mb-1">
-            {t("dashboard.quarterlyOverview")}
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-4">{t("dashboard.quarterlySubtitle")}</p>
-          
+        <details className="rounded-md border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 group">
+          <summary className="flex items-center justify-between cursor-pointer p-5 select-none list-none [&::-webkit-details-marker]:hidden">
+            <div>
+              <h2 id="quarterly-overview" className="text-lg font-medium mb-1">
+                {t("dashboard.quarterlyOverview")}
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlySubtitle")}</p>
+            </div>
+            <svg className="w-5 h-5 text-gray-500 dark:text-neutral-400 transition-transform group-open:rotate-180 shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </summary>
+          <div className="px-5 pb-5">
+
           {quarterlyLoading ? (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
           ) : quarterlyError ? (
@@ -874,7 +899,8 @@ export default function HomePage() {
           ) : (
             <p className="text-sm text-gray-500 dark:text-neutral-400">{t("dashboard.quarterlyLoading")}</p>
           )}
-        </div>
+          </div>
+        </details>
       </section>
 
       </PageContainer>
