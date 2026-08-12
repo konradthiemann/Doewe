@@ -319,6 +319,8 @@ export const de: Record<string, string> = {
   "transactionForm.amountLabel": "Betrag",
   "transactionForm.amountPlaceholder": "z.B. 12,34 oder 12.34",
   "transactionForm.amountHint": "Du kannst Komma (12,34) oder Punkt (12.34) als Dezimaltrennzeichen verwenden.",
+  "transactionForm.dateLabel": "Datum",
+  "transactionForm.dateHint": "Standard ist heute. Für Nachbuchungen aus einem früheren Monat das passende Datum wählen.",
   "transactionForm.save": "Speichern",
   "transactionForm.add": "Hinzufügen",
   "transactionForm.saving": "Speichern…",

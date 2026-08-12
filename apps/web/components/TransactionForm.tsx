@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { createCategoryAction } from "../app/actions/categories";
 import { cn } from "../lib/cn";
 import { appConfig } from "../lib/config";
+import { dateInputToISO, toDateInputValue } from "../lib/dateInput";
 import { useI18n } from "../lib/i18n";
 import { transactionFormSchema, type TransactionFormValues } from "../lib/schemas/forms";
 
@@ -89,6 +90,7 @@ export default function TransactionForm({
       amount: transaction ? toDecimalString(fromCents(Math.abs(transaction.amountCents))) : "",
       accountId: transaction?.accountId ?? "",
       categoryId: transaction?.categoryId ?? "",
+      occurredAt: toDateInputValue(transaction ? new Date(transaction.occurredAt) : new Date()),
     },
   });
 
@@ -161,6 +163,7 @@ export default function TransactionForm({
         amount: toDecimalString(fromCents(Math.abs(transaction.amountCents))),
         accountId: transaction.accountId,
         categoryId: transaction.categoryId ?? "",
+        occurredAt: toDateInputValue(new Date(transaction.occurredAt)),
       });
       setTxType(transaction.amountCents >= 0 ? "income" : "outcome");
       setTaxRelevant(transaction.taxRelevant ?? false);
@@ -242,7 +245,10 @@ export default function TransactionForm({
       accountId: values.accountId,
       amountCents: signedCents,
       description: values.description,
-      occurredAt: mode === "edit" && transaction ? transaction.occurredAt : new Date().toISOString(),
+      occurredAt: dateInputToISO(
+        values.occurredAt,
+        mode === "edit" && transaction ? new Date(transaction.occurredAt) : new Date()
+      ),
       categoryId: values.categoryId && values.categoryId !== "__new__" ? values.categoryId : undefined,
       savingGoalId: isSavingGoal && selectedSavingGoalId ? selectedSavingGoalId : undefined,
       taxRelevant: isRecurring ? undefined : taxRelevant,
@@ -301,7 +307,7 @@ export default function TransactionForm({
       onSuccess?.(message, uploadWarning ? { keepOpen: true } : undefined);
 
       if (mode === "create") {
-        reset((current) => ({ ...current, description: "", amount: "" }));
+        reset((current) => ({ ...current, description: "", amount: "", occurredAt: toDateInputValue(new Date()) }));
         setTaxRelevant(false);
         setTaxTouched(false);
       }
@@ -621,6 +627,28 @@ export default function TransactionForm({
             <p role="alert" className="mt-1 text-xs text-red-600">{errors.amount.message}</p>
           )}
         </div>
+
+        {!isRecurring && (
+          <div>
+            <label className="block text-sm font-medium mb-1" htmlFor="tx-date">
+              {t("transactionForm.dateLabel")} <span className="text-red-600">*</span>
+            </label>
+            <input
+              {...register("occurredAt")}
+              id="tx-date"
+              type="date"
+              aria-invalid={!!errors.occurredAt}
+              aria-describedby="tx-date-hint"
+              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            />
+            <p id="tx-date-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
+              {t("transactionForm.dateHint")}
+            </p>
+            {errors.occurredAt && (
+              <p role="alert" className="mt-1 text-xs text-red-600">{errors.occurredAt.message}</p>
+            )}
+          </div>
+        )}
 
         {!isRecurring && (
           <div className="space-y-3">

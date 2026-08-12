@@ -22,6 +22,11 @@ export const transactionFormSchema = z.object({
   amount: centsString,
   accountId: z.string().min(1, "Konto erforderlich"),
   categoryId: z.string().optional(),
+  // yyyy-mm-dd aus <input type="date">; Pflicht. Default ist der aktuelle Tag,
+  // kann aber auf ein zurückliegendes Datum gesetzt werden (Nachbuchungen).
+  occurredAt: z
+    .string()
+    .refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v), "Ungültiges Datum"),
 });
 export type TransactionFormValues = z.infer<typeof transactionFormSchema>;
 

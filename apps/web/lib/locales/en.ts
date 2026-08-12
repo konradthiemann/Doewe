@@ -319,6 +319,8 @@ export const en: Record<string, string> = {
   "transactionForm.amountLabel": "Amount",
   "transactionForm.amountPlaceholder": "e.g. 12.34 or 12,34",
   "transactionForm.amountHint": "You can use dot (12.34) or comma (12,34) as decimal separator.",
+  "transactionForm.dateLabel": "Date",
+  "transactionForm.dateHint": "Defaults to today. Choose an earlier date to record it in a past month.",
   "transactionForm.save": "Save",
   "transactionForm.add": "Add",
   "transactionForm.saving": "Saving…",
