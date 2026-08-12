@@ -5,7 +5,8 @@
     "lib": [
       "dom",
       "dom.iterable",
-      "esnext"
+      "esnext",
+      "webworker"
     ],
     "allowJs": false,
     "skipLibCheck": true,
@@ -20,7 +21,8 @@
     "incremental": true,
     "types": [
       "node",
-      "next-auth"
+      "next-auth",
+      "@serwist/next/typings"
     ],
     "plugins": [
       {
@@ -35,6 +37,7 @@
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "public/sw.js"
   ]
 }

@@ -9,7 +9,7 @@ import MainContainer from "../components/MainContainer";
 
 import Providers from "./providers";
 
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,7 +19,25 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Doewe",
-  description: "Family management: track finances, set goals, detect patterns."
+  description: "Family management: track finances, set goals, detect patterns.",
+  // Installierte iOS-Web-App: Vollbild-Modus + eigener Titel auf dem Home-Bildschirm
+  appleWebApp: {
+    capable: true,
+    title: "Doewe",
+    statusBarStyle: "default"
+  }
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Inhalte dürfen bis in die Safe-Areas laufen (Bottom-Nav padded bereits via env(safe-area-inset-bottom))
+  viewportFit: "cover",
+  // Browser-Chrome/Statusbar-Farbe folgt dem OS-Farbschema (bg-white / neutral-900)
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#171717" }
+  ]
 };
 
 // Inline script to prevent flash of wrong theme

@@ -523,5 +523,13 @@ export const de: Record<string, string> = {
   "settings.categories.badgeTax": "Steuer",
   "settings.categories.taxToggleLabel": "Für Steuer relevant",
   "settings.categories.taxToggleHint": "Alle bestehenden und künftigen Transaktionen dieser Kategorie werden für die Steuer vorgemerkt. Einzelne Transaktionen lassen sich weiterhin manuell abwählen.",
-  "nav.categories": "Kategorien"
+  "nav.categories": "Kategorien",
+  "offline.title": "Du bist offline",
+  "offline.body": "Gerade besteht keine Internetverbindung. Sobald du wieder online bist, kannst du hier weitermachen.",
+  "offline.retry": "Erneut versuchen",
+  "settings.installTitle": "Als App installieren",
+  "settings.installDescription": "Doewe auf dem Home-Bildschirm: startet im Vollbild und fühlt sich wie eine native App an.",
+  "settings.installButton": "App installieren",
+  "settings.installIosHint": "Auf iPhone/iPad: In Safari das Teilen-Menü öffnen und „Zum Home-Bildschirm“ wählen.",
+  "settings.installGenericHint": "Die Installation findest du im Browser-Menü (z. B. „App installieren“ oder „Zum Startbildschirm hinzufügen“)."
 };
