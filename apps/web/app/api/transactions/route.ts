@@ -19,6 +19,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../lib/auth";
+import { checkBudgetAlerts } from "../../../lib/budgetAlerts";
 import { prisma } from "../../../lib/prisma";
 
 import { TransactionInput } from "./schema";
@@ -110,6 +111,17 @@ export async function POST(req: Request) {
       }
 
       return row;
+    });
+
+    // Budget-Warnung (Teil C): Nach dem Commit prüfen, ob eine Kategorie-Budget-
+    // Schwelle erreicht wurde, und ggf. einen Push senden. Bewusst awaited (auf
+    // Serverless enden Handler sonst vor dem Versand); alle Fehler werden intern
+    // geschluckt, die Buchung darf nie an einem Push-Problem scheitern.
+    await checkBudgetAlerts({
+      accountId: created.accountId,
+      userId: user.id,
+      categoryId: created.categoryId,
+      occurredAt: created.occurredAt
     });
 
     return NextResponse.json(created, { status: 201 });

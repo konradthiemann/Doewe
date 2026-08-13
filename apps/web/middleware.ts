@@ -20,5 +20,6 @@ export default withAuth({
 export const config = {
   // ~offline: Offline-Fallback-Seite muss ohne Session erreichbar sein,
   // damit der Service Worker sie beim Install precachen kann.
-  matcher: ["/((?!api/auth|api/demo|api/health|login|forgot-password|reset-password|~offline|impressum|datenschutz|_next|static|favicon.ico|assets|.*\\..*).*)"]
+  // api/cron: Cron-Endpoints authentifizieren per Secret-Header, nicht per Session.
+  matcher: ["/((?!api/auth|api/cron|api/demo|api/health|login|forgot-password|reset-password|~offline|impressum|datenschutz|_next|static|favicon.ico|assets|.*\\..*).*)"]
 };

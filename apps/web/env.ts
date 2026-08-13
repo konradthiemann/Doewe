@@ -50,6 +50,20 @@ export const env = createEnv({
      */
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+    /**
+     * Web Push (Teil C). VAPID keypair for signing push messages. When unset,
+     * lib/push.ts logs to the console instead of sending — same staged fallback
+     * as the mailer. Generate with `npx web-push generate-vapid-keys`.
+     */
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    /** Contact URI/mailto for the VAPID `sub` claim (push services require it). */
+    VAPID_SUBJECT: z.string().optional(),
+    /**
+     * Shared secret guarding the cron endpoints (send-reminders,
+     * notify-monthly-review). Requests must send it as `Authorization: Bearer …`;
+     * missing/wrong secret → 401. Set as a Railway cron header.
+     */
+    CRON_SECRET: z.string().optional(),
   },
   client: {
     /**
@@ -57,6 +71,12 @@ export const env = createEnv({
      * can conditionally render the Google button. Set to "1" when enabled.
      */
     NEXT_PUBLIC_GOOGLE_ENABLED: z.string().optional(),
+    /**
+     * VAPID public key, exposed to the client so the browser can create a
+     * PushSubscription. Must match VAPID_PRIVATE_KEY. When unset the notifications
+     * UI shows a "not configured" hint instead of the enable button.
+     */
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -76,7 +96,11 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT,
+    CRON_SECRET: process.env.CRON_SECRET,
     NEXT_PUBLIC_GOOGLE_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_ENABLED,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

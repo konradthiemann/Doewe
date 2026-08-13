@@ -111,7 +111,14 @@ const sectionsDe: LegalSection[] = [
     ]
   },
   {
-    heading: "8. Webanalyse (Vercel)",
+    heading: "8. Push-Mitteilungen",
+    paragraphs: [
+      "Wenn du in den Einstellungen „Mitteilungen“ aktivierst, kannst du Web-Push-Benachrichtigungen auf deinem Gerät empfangen (z. B. Budget-Warnungen, einen Hinweis zum Monats-Review und einen optionalen Erfassungs-Reminder). Dazu wird ein technisches Abonnement deines Browsers gespeichert (ein Endpoint-URL des jeweiligen Push-Dienstes deines Browserherstellers – etwa Apple, Google oder Mozilla – sowie zwei kryptografische Schlüssel), das der Anwendung erlaubt, dir Mitteilungen zuzustellen. Die Zustellung selbst läuft technisch über den Push-Dienst deines Browserherstellers; die Inhalte der Mitteilungen werden bewusst knapp gehalten und enthalten keine konkreten Beträge.",
+      "Die Verarbeitung erfolgt ausschließlich auf Grundlage deiner ausdrücklichen Einwilligung, die du durch das Erlauben der Browser-Berechtigung und das Aktivieren der Funktion erteilst (Art. 6 Abs. 1 lit. a DSGVO). Du kannst die Einwilligung jederzeit mit Wirkung für die Zukunft widerrufen, indem du die Mitteilungen in den Einstellungen deaktivierst oder die Berechtigung im Browser entziehst; das gespeicherte Abonnement wird dann gelöscht."
+    ]
+  },
+  {
+    heading: "9. Webanalyse (Vercel)",
     paragraphs: [
       "Diese Anwendung nutzt Vercel Web Analytics und Vercel Speed Insights, Dienste der Vercel Inc., USA. Damit wird anonymisiert die Nutzung der Anwendung ausgewertet (z. B. Seitenaufrufe und Performance-Kennzahlen wie Ladezeiten), um die Anwendung technisch zu verbessern. Vercel Web Analytics arbeitet nach Angaben des Anbieters cookielos und ohne eindeutig identifizierende Merkmale; es werden keine personenbezogenen Nutzerprofile gebildet. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der Analyse und Verbesserung der Anwendung).",
       <>
@@ -121,38 +128,38 @@ const sectionsDe: LegalSection[] = [
     ]
   },
   {
-    heading: "9. Empfänger der Daten",
+    heading: "10. Empfänger der Daten",
     paragraphs: [
       "Empfänger bzw. Kategorien von Empfängern personenbezogener Daten sind der Hosting-Anbieter (Railway) als Auftragsverarbeiter sowie der Anbieter der Webanalyse (Vercel). Eine darüber hinausgehende Weitergabe an Dritte findet nicht statt, es sei denn, ich bin gesetzlich dazu verpflichtet."
     ]
   },
   {
-    heading: "10. Speicherdauer",
+    heading: "11. Speicherdauer",
     paragraphs: [
       "Personenbezogene Daten werden nur so lange gespeichert, wie es für die genannten Zwecke erforderlich ist. Die Daten deines Nutzerkontos und die von dir eingegebenen Inhalte werden gespeichert, bis du dein Konto löschst bzw. die Löschung verlangst. Server-Logfiles werden nur für einen kurzen Zeitraum gespeichert und anschließend gelöscht. Gesetzliche Aufbewahrungspflichten bleiben unberührt."
     ]
   },
   {
-    heading: "11. Deine Rechte",
+    heading: "12. Deine Rechte",
     paragraphs: [
       "Du hast jederzeit das Recht auf Auskunft über die zu deiner Person gespeicherten Daten (Art. 15 DSGVO), Berichtigung unrichtiger Daten (Art. 16 DSGVO), Löschung (Art. 17 DSGVO), Einschränkung der Verarbeitung (Art. 18 DSGVO), Datenübertragbarkeit (Art. 20 DSGVO) sowie Widerspruch gegen die Verarbeitung (Art. 21 DSGVO). Soweit eine Verarbeitung auf einer Einwilligung beruht, kannst du diese jederzeit mit Wirkung für die Zukunft widerrufen (Art. 7 Abs. 3 DSGVO). Zur Ausübung deiner Rechte genügt eine Nachricht an die oben genannte Kontaktadresse."
     ]
   },
   {
-    heading: "12. Beschwerderecht bei der Aufsichtsbehörde",
+    heading: "13. Beschwerderecht bei der Aufsichtsbehörde",
     paragraphs: [
       "Unbeschadet anderweitiger Rechtsbehelfe steht dir das Recht zu, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren (Art. 77 DSGVO). Die zuständige Aufsichtsbehörde ist:",
       authorityBlockDe
     ]
   },
   {
-    heading: "13. SSL-/TLS-Verschlüsselung",
+    heading: "14. SSL-/TLS-Verschlüsselung",
     paragraphs: [
       "Diese Anwendung nutzt aus Sicherheitsgründen eine SSL- bzw. TLS-Verschlüsselung. Eine verschlüsselte Verbindung erkennst du daran, dass die Adresszeile des Browsers mit „https://“ beginnt. Bei aktiver Verschlüsselung können die Daten, die du an die Anwendung übermittelst, nicht von Dritten mitgelesen werden."
     ]
   },
   {
-    heading: "14. Pflicht zur Bereitstellung",
+    heading: "15. Pflicht zur Bereitstellung",
     paragraphs: [
       "Die Bereitstellung von E-Mail-Adresse und Passwort ist für die Erstellung eines Nutzerkontos erforderlich. Ohne diese Angaben kannst du kein Konto anlegen und die Anwendung nicht nutzen. Die Angabe eines Namens ist freiwillig."
     ]
@@ -226,7 +233,14 @@ const sectionsEn: LegalSection[] = [
     ]
   },
   {
-    heading: "8. Web analytics (Vercel)",
+    heading: "8. Push notifications",
+    paragraphs: [
+      "If you enable “Notifications” in the settings, you can receive web push notifications on your device (e.g. budget alerts, a monthly-review heads-up and an optional logging reminder). To do so, a technical subscription of your browser is stored (an endpoint URL of the push service of your browser vendor — such as Apple, Google or Mozilla — and two cryptographic keys) that allows the application to deliver notifications to you. Delivery itself technically runs through the push service of your browser vendor; the contents of the notifications are deliberately kept minimal and contain no concrete amounts.",
+      "Processing is carried out solely on the basis of your explicit consent, which you give by allowing the browser permission and enabling the feature (Art. 6 (1) (a) GDPR). You can withdraw your consent at any time with effect for the future by disabling notifications in the settings or revoking the permission in your browser; the stored subscription is then deleted."
+    ]
+  },
+  {
+    heading: "9. Web analytics (Vercel)",
     paragraphs: [
       "This application uses Vercel Web Analytics and Vercel Speed Insights, services of Vercel Inc., USA. They are used to analyse the use of the application in anonymised form (e.g. page views and performance metrics such as loading times) in order to improve the application technically. According to the provider, Vercel Web Analytics works without cookies and without uniquely identifying attributes; no personal user profiles are created. The legal basis is Art. 6 (1) (f) GDPR (legitimate interest in analysing and improving the application).",
       <>
@@ -236,38 +250,38 @@ const sectionsEn: LegalSection[] = [
     ]
   },
   {
-    heading: "9. Recipients of the data",
+    heading: "10. Recipients of the data",
     paragraphs: [
       "Recipients or categories of recipients of personal data are the hosting provider (Railway) as a processor and the web analytics provider (Vercel). No further disclosure to third parties takes place unless I am legally obliged to do so."
     ]
   },
   {
-    heading: "10. Storage period",
+    heading: "11. Storage period",
     paragraphs: [
       "Personal data is stored only for as long as is necessary for the stated purposes. The data of your user account and the content you enter are stored until you delete your account or request deletion. Server log files are stored only for a short period and then deleted. Statutory retention obligations remain unaffected."
     ]
   },
   {
-    heading: "11. Your rights",
+    heading: "12. Your rights",
     paragraphs: [
       "At any time you have the right to access the data stored about you (Art. 15 GDPR), to rectification of inaccurate data (Art. 16 GDPR), to erasure (Art. 17 GDPR), to restriction of processing (Art. 18 GDPR), to data portability (Art. 20 GDPR) and to object to processing (Art. 21 GDPR). Where processing is based on consent, you may withdraw it at any time with effect for the future (Art. 7 (3) GDPR). To exercise your rights, a message to the contact address above is sufficient."
     ]
   },
   {
-    heading: "12. Right to lodge a complaint with a supervisory authority",
+    heading: "13. Right to lodge a complaint with a supervisory authority",
     paragraphs: [
       "Without prejudice to any other remedy, you have the right to lodge a complaint with a data protection supervisory authority (Art. 77 GDPR). The competent supervisory authority is:",
       authorityBlockEn
     ]
   },
   {
-    heading: "13. SSL/TLS encryption",
+    heading: "14. SSL/TLS encryption",
     paragraphs: [
       "For security reasons, this application uses SSL/TLS encryption. You can recognise an encrypted connection by the fact that the browser's address bar begins with “https://”. When encryption is active, the data you transmit to the application cannot be read by third parties."
     ]
   },
   {
-    heading: "14. Obligation to provide data",
+    heading: "15. Obligation to provide data",
     paragraphs: [
       "Providing an email address and password is required to create a user account. Without this information you cannot create an account or use the application. Providing a name is optional."
     ]
@@ -281,7 +295,7 @@ export default function DatenschutzPage() {
   return (
     <LegalContent
       title={isDe ? "Datenschutzerklärung" : "Privacy Policy"}
-      updated={isDe ? "Stand: 24. Juni 2026" : "Last updated: 24 June 2026"}
+      updated={isDe ? "Stand: 13. August 2026" : "Last updated: 13 August 2026"}
       sections={isDe ? sectionsDe : sectionsEn}
     />
   );
