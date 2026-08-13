@@ -1316,6 +1316,152 @@ Notable semantics:
 
 ---
 
+## Household
+
+The household is the tenancy boundary (Teil D). Every user belongs to exactly one household with a role of `OWNER` or `MEMBER`. All domain data is scoped by `householdId`; owner-only actions additionally check the role and return `403` otherwise.
+
+### `GET /api/household`
+
+Returns the caller's household and its member list.
+
+**Success — `200 OK`:**
+```json
+{
+  "id": "hh_…",
+  "name": "Familie Thiemann",
+  "role": "OWNER",
+  "members": [
+    { "userId": "u_…", "name": "Konrad", "email": "…", "role": "OWNER", "joinedAt": "…", "isMe": true }
+  ]
+}
+```
+
+| Status | Reason |
+|---|---|
+| `404` | Household not found |
+
+### `PATCH /api/household`
+
+Rename the household. **Owner only.** Body: `{ "name": string }` (1–80 chars). Returns `{ id, name }`. `403` if not OWNER, `400` on validation error.
+
+### `GET /api/household/invites`
+
+Lists open (unaccepted, unexpired) invites for the household — without tokens.
+
+### `POST /api/household/invites`
+
+Creates an invite. **Owner only.** Body: `{ email?: string, role?: "MEMBER" | "OWNER" }`. Returns the invite plus the **plaintext `token`** and a join `url` **once** (only the SHA-256 hash is stored, mirroring password reset). Invites are single-use and expire.
+
+**Success — `201 Created`:** `{ id, email, role, expiresAt, createdAt, token, url }`
+
+### `DELETE /api/household/invites/[id]`
+
+Revokes an open invite. **Owner only.** Idempotent — already accepted/deleted invites return `404`.
+
+### `POST /api/household/invites/accept`
+
+The logged-in user accepts an invite and switches into the inviting household. Rate-limited per IP; lookup by token hash only.
+
+**Body:** `{ "token": string }`
+
+**Success — `200 OK`:** `{ "ok": true, "householdId": "hh_…" }`
+
+| Status | Reason |
+|---|---|
+| `400` | Invalid or expired invite |
+| `409` `HAS_OWN_DATA` | v1 only lets an *empty* account join (no household merge); the caller already has transactions/budgets/recurring |
+| `409` | Already a member of this household |
+
+The caller's previous (empty) household is orphaned and cascade-deleted on join.
+
+### `POST /api/household/leave`
+
+A `MEMBER` leaves the shared household and is immediately re-provisioned a fresh own household (as OWNER) with a default account + categories. An `OWNER` cannot leave (`403`).
+
+### `DELETE /api/household/members/[userId]`
+
+The `OWNER` removes a member. **Owner only.** The removed member is re-provisioned a fresh own household so they are never locked out. The owner cannot remove themselves (`400`); unknown/foreign members return `404`.
+
+---
+
+## Push & Notifications
+
+Web Push (Teil C) — VAPID-based. Budget alerts, monthly-review reminders, and capture reminders.
+
+### `POST /api/push/subscription`
+
+Registers this device for Web Push. Idempotent over the unique `endpoint`: re-registering updates keys + `lastSeenAt`, and reassigns the endpoint to the current user on a shared device.
+
+**Body:** `{ endpoint: string, keys: { p256dh: string, auth: string }, userAgent?: string }`
+
+**Success — `201 Created`:** `{ "ok": true }`
+
+### `DELETE /api/push/subscription`
+
+Removes this device's registration. Body: `{ "endpoint": string }`. Only the caller's own subscriptions are deletable.
+
+### `GET /api/notifications/settings`
+
+Returns the caller's notification opt-outs and capture-reminder config.
+
+```json
+{
+  "notifyBudgetAlerts": true,
+  "notifyMonthlyReview": true,
+  "reminder": { "enabled": false, "time": "20:00", "weekdays": 127, "timezone": "Europe/Berlin", "smartSuppress": true }
+}
+```
+
+`weekdays` is a 7-bit bitmask (127 = every day). `smartSuppress` skips the reminder when the user already captured that day.
+
+### `PUT /api/notifications/settings`
+
+Partially updates settings. Body (all optional): `{ notifyBudgetAlerts?, notifyMonthlyReview?, reminder?: { enabled?, time?, weekdays?, timezone?, smartSuppress? } }`. The reminder record is upserted lazily. Returns `{ "ok": true }`.
+
+---
+
+## Sync
+
+Two-way offline sync (Phase 3b). Write-path v1 covers **transactions** only (the sole offline-captured entity); reads of all entities come via pull. Authorization is scoped by `account.householdId`.
+
+### `POST /api/sync/push`
+
+Applies a FIFO batch of local transaction mutations.
+
+**Body:** `{ "ops": PushOp[] }` (1–100 ops), where each op is:
+```json
+{
+  "mutationId": "cuid",
+  "entity": "transaction",
+  "op": "create" | "update" | "delete",
+  "id": "cuid",
+  "patch": { "…": "…" },
+  "baseUpdatedAt": 1723545600000
+}
+```
+- `patch` (create/update): whitelisted fields `accountId, categoryId, savingGoalId, amountCents, description, occurredAt, taxRelevant`. Create requires `accountId, amountCents, description, occurredAt`.
+- `baseUpdatedAt`: the `updatedAt` (epoch ms) the client based its edit on — drives concurrent-change detection.
+
+**Success — `200 OK`:** `{ "results": PushResult[] }`, one per op:
+
+| `status` | Meaning |
+|---|---|
+| `applied` | Written; `row` = server state after write |
+| `duplicate` | Known `mutationId` replay or already-existing record |
+| `conflict` | Concurrent change (per-field LWW won; `row` + `conflicts[]`), **or** the server row is tombstoned (delete wins; discarded) |
+
+Conflict rules (see `@doewe/shared/sync`): field-merge + Last-Write-Wins per field, losing values journaled to `ConflictLog`; **delete wins** over a concurrent edit; per-op idempotency via `MutationLog`.
+
+### `GET /api/sync/pull`
+
+Returns a full household snapshot for offline reads: `{ accounts, categories, transactions, budgets, recurring }` (tombstones excluded). Supports `ETag` / `If-None-Match` → `304 Not Modified` when unchanged.
+
+### `GET /api/sync/conflicts`
+
+Returns the recent `ConflictLog` for the household (last 7 days, newest first, up to 50) so the UI can surface a "changed on another device" notice. Response is an array of `{ id, entity, entityId, field, serverValue, clientValue, createdAt }`.
+
+---
+
 ## Demo
 
 ### `POST /api/demo/seed`

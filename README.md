@@ -193,21 +193,25 @@ See architecture tree above. Monorepo uses npm workspaces:
 ## ✨ Key Features
 
 Current implemented features include:
-- Transaction management (create, edit, delete, list) via `app/api/transactions`.
-- Recurring transactions with monthly cadence and skips for upcoming runs.
-- Budget endpoints for tracking planned vs actual spending.
+- Transaction management (create, edit, delete, list) via `app/api/transactions`, with a manually selectable posting date.
+- Recurring transactions with monthly cadence, optional start date, and skips for upcoming runs.
+- Budget endpoints for tracking planned vs actual spending, with Web Push budget alerts.
 - Categories management (`app/api/categories`).
-- Saving plans & goals with progress timeline, withdrawals, and completion.
-- Analytics summary endpoint (`app/api/analytics/summary`) for aggregated insights.
+- Saving plans & goals with progress timeline, withdrawals, undated idea-backlog goals, and completion.
+- Analytics summary endpoint (`app/api/analytics/summary`) plus quarterly and monthly-review breakdowns (including income-by-source).
 - Tax preparation (German Belegvorhaltepflicht): earmark transactions for the tax return, attach receipt photos/PDFs (stored in PostgreSQL, `app/api/transactions/[id]/attachments`), mark whole categories as tax-relevant (retroactive), and review per-year sums with receipt status on `/tax`.
-- Domain utilities (money formatting, numeric handling, string helpers) in `@doewe/shared`.
+- **Authentication**: credentials login, password reset & change with session eviction, optional Sign-in with Google.
+- **Household sharing**: the household is the tenancy boundary; roles (OWNER/MEMBER) and invitation links let a family share one dataset.
+- **Progressive Web App**: installable (manifest, icons, service worker), offline reading (TanStack Query + IndexedDB), offline capture (outbox with client IDs + idempotency), and a two-way sync engine with per-field Last-Write-Wins conflict handling (`app/api/sync/*`).
+- **Web Push notifications**: budget alerts, monthly-review reminders, and capture reminders (VAPID).
+- Domain utilities (money formatting, numeric handling, string helpers, sync merge logic) in `@doewe/shared`.
 - Chart visualization using Chart.js to display spending patterns.
 - Accessible, mobile‑first UI components styled with Tailwind, with reusable toast + spinner feedback primitives.
 
 Planned / extensible areas:
-- Goal tracking & alerts.
 - Advanced anomaly detection across spending categories.
-- Multi-user authentication & role-based access (future enhancement).
+- Bank/CSV import.
+- Fine-grained household permissions beyond OWNER/MEMBER.
 
 ---
 
@@ -390,10 +394,10 @@ npm run lint && npm run typecheck && npm run test
 
 ## 🗺️ Roadmap
 
-- Authentication & user accounts
-- Budget goal alerts via scheduled jobs
 - Enhanced analytics (trend lines, category forecasts)
-- Export/import (CSV, OFX)
+- Export/import (CSV, OFX) and optional bank connections
+- Design-system rollout (tokens + component refresh)
+- Fine-grained household permissions
 - Performance budget & bundle size tracking
 
 ---
