@@ -68,7 +68,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   const existing = await prisma.recurringTransaction.findFirst({
-    where: { id: params.id, account: { userId: user.id } }
+    where: { id: params.id, account: { householdId: user.householdId } }
   });
   if (!existing) {
     return NextResponse.json({ error: "Recurring transaction not found" }, { status: 404 });
@@ -76,14 +76,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const data = parsed.data;
   if (data.accountId) {
-    const account = await prisma.account.findFirst({ where: { id: data.accountId, userId: user.id } });
+    const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId: user.householdId } });
     if (!account) {
       return NextResponse.json({ error: "Account not found" }, { status: 404 });
     }
   }
 
   if (data.categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: data.categoryId, userId: user.id } });
+    const category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId: user.householdId } });
     if (!category) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
@@ -123,7 +123,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const existing = await prisma.recurringTransaction.findFirst({
-    where: { id: params.id, account: { userId: user.id } }
+    where: { id: params.id, account: { householdId: user.householdId } }
   });
   if (!existing) {
     return NextResponse.json({ error: "Recurring transaction not found" }, { status: 404 });

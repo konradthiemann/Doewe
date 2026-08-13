@@ -47,6 +47,16 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Nach erfolgreichem Login/Registrierung dorthin zurück, woher man kam
+  // (z. B. der Haushalts-Einladungs-Link). Nur relative Pfade zulassen, damit
+  // der Parameter kein offener Redirect zu fremden Hosts wird.
+  function resolveCallbackUrl(): string {
+    if (typeof window === "undefined") return "/";
+    const raw = new URLSearchParams(window.location.search).get("callbackUrl");
+    if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+    return "/";
+  }
+
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
@@ -57,7 +67,7 @@ export default function LoginPage() {
       redirect: false,
       email,
       password,
-      callbackUrl: "/"
+      callbackUrl: resolveCallbackUrl()
     });
 
     setLoading(false);
@@ -103,7 +113,7 @@ export default function LoginPage() {
         setError("Registered but login failed. Try again.");
         return;
       }
-      router.push("/");
+      router.push(resolveCallbackUrl());
     } catch (err) {
       setLoading(false);
       setError(err instanceof Error ? err.message : "Unable to register.");
@@ -114,8 +124,8 @@ export default function LoginPage() {
     setError(null);
     setMessage(null);
     setLoading(true);
-    // Full-page redirect to Google, then back to the app root on success.
-    void signIn("google", { callbackUrl: "/" });
+    // Full-page redirect to Google, then back to where we came from on success.
+    void signIn("google", { callbackUrl: resolveCallbackUrl() });
   }
 
   async function handleDemo() {

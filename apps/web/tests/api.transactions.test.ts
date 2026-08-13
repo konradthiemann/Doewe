@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
+
 // Use the same DATABASE_URL as the main app (set by pretest or .env)
 // pretest already runs: prisma generate && prisma db push && db:seed
 
@@ -8,35 +10,37 @@ process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
 
 let prisma: import("@prisma/client").PrismaClient;
 let testUserId: string;
+let testHouseholdId: string;
 let testAccountId: string;
 let testCategoryId: string;
 
 beforeAll(async () => {
   const { PrismaClient } = await import("@prisma/client");
   prisma = new PrismaClient();
-  
-  // Create isolated test user, account, and category
+
+  // Create isolated test user, household, account, and category
   const user = await prisma.user.upsert({
     where: { email: "tx-test@example.com" },
     update: {},
     create: { id: TEST_USER_ID, email: "tx-test@example.com", password: "hashed" }
   });
   testUserId = user.id;
-  
+  testHouseholdId = await ensureTestHousehold(prisma, user.id);
+
   const account = await prisma.account.upsert({
     where: { id: "acc_tx_test" },
-    update: { userId: user.id },
-    create: { id: "acc_tx_test", name: "TX Test Account", userId: user.id }
+    update: { userId: user.id, householdId: testHouseholdId },
+    create: { id: "acc_tx_test", name: "TX Test Account", userId: user.id, householdId: testHouseholdId }
   });
   testAccountId = account.id;
-  
+
   const category = await prisma.category.upsert({
-    where: { userId_name: { userId: user.id, name: "TX Test Category" } },
+    where: { householdId_name: { householdId: testHouseholdId, name: "TX Test Category" } },
     update: {},
-    create: { name: "TX Test Category", userId: user.id }
+    create: { name: "TX Test Category", userId: user.id, householdId: testHouseholdId }
   });
   testCategoryId = category.id;
-  
+
   // Clean up any existing transactions for this test account
   await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
 });
@@ -47,6 +51,7 @@ afterAll(async () => {
     await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
     await prisma.category.deleteMany({ where: { id: testCategoryId } });
     await prisma.account.deleteMany({ where: { id: testAccountId } });
+    await cleanupTestHousehold(prisma, testUserId);
     await prisma.user.deleteMany({ where: { id: testUserId } });
     await prisma.$disconnect();
   }
@@ -205,9 +210,9 @@ describe("/api/transactions", () => {
     const routes = await import("../app/api/transactions/route");
 
     const taxCategory = await prisma.category.upsert({
-      where: { userId_name: { userId: testUserId, name: "TX Tax Category" } },
+      where: { householdId_name: { householdId: testHouseholdId, name: "TX Tax Category" } },
       update: { isTaxRelevant: true },
-      create: { name: "TX Tax Category", userId: testUserId, isTaxRelevant: true }
+      create: { name: "TX Tax Category", userId: testUserId, householdId: testHouseholdId, isTaxRelevant: true }
     });
 
     // Ohne Flag → erbt true von der Kategorie

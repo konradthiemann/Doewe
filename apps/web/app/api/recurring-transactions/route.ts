@@ -87,7 +87,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const items = await prisma.recurringTransaction.findMany({
-    where: { account: { userId: user.id } },
+    where: { account: { householdId: user.householdId } },
     orderBy: { nextOccurrence: "asc" }
   });
   return NextResponse.json(items);
@@ -104,13 +104,13 @@ export async function POST(req: Request) {
   }
   const data = parsed.data;
 
-  const account = await prisma.account.findFirst({ where: { id: data.accountId, userId: user.id } });
+  const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId: user.householdId } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
   if (data.categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: data.categoryId, userId: user.id } });
+    const category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId: user.householdId } });
     if (!category) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }

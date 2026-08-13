@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
   const transactions = await prisma.transaction.findMany({
     where: {
-      account: { userId: user.id },
+      account: { householdId: user.householdId },
       taxRelevant: true,
       occurredAt: {
         gte: new Date(Date.UTC(year, 0, 1)),

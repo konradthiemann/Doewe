@@ -14,9 +14,9 @@ import { prisma } from "../../../lib/prisma";
  */
 export const SAVINGS_CATEGORY_NAMES = ["savings", "sparen"];
 
-export async function findSavingsCategoryId(userId: string): Promise<string | null> {
+export async function findSavingsCategoryId(householdId: string): Promise<string | null> {
   const categories = await prisma.category.findMany({
-    where: { userId },
+    where: { householdId },
     select: { id: true, name: true }
   });
   const match = categories.find((c) =>
@@ -26,8 +26,8 @@ export async function findSavingsCategoryId(userId: string): Promise<string | nu
 }
 
 /** Raw savings balance: negated net sum of the savings category. */
-export async function resolveSavingsBalanceCents(accountId: string, userId: string): Promise<number> {
-  const savingsCatId = await findSavingsCategoryId(userId);
+export async function resolveSavingsBalanceCents(accountId: string, householdId: string): Promise<number> {
+  const savingsCatId = await findSavingsCategoryId(householdId);
 
   if (!savingsCatId) {
     return 0;
@@ -47,9 +47,9 @@ export async function resolveSavingsBalanceCents(accountId: string, userId: stri
  * Savings pool currently available to spend or withdraw: the raw balance minus
  * the amounts already reserved (withdrawn) for completed goals. Floored at 0.
  */
-export async function getAvailableSavingsCents(accountId: string, userId: string): Promise<number> {
+export async function getAvailableSavingsCents(accountId: string, householdId: string): Promise<number> {
   const [raw, withdrawnAgg] = await Promise.all([
-    resolveSavingsBalanceCents(accountId, userId),
+    resolveSavingsBalanceCents(accountId, householdId),
     prisma.budget.aggregate({
       where: { accountId, categoryId: null, completedAt: { not: null } },
       _sum: { spentCents: true }

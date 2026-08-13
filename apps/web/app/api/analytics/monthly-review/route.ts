@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const account = await prisma.account.findFirst({
-    where: { userId: user.id },
+    where: { householdId: user.householdId },
     orderBy: { createdAt: "asc" }
   });
   if (!account) return NextResponse.json({ error: "No account found for user" }, { status: 404 });
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   // Resolve savings category (consistent with summary + quarterly routes)
   const SAVINGS_NAMES = ["savings", "sparen"];
   const savingsCategory = await prisma.category.findFirst({
-    where: { userId: user.id, name: { in: SAVINGS_NAMES, mode: "insensitive" } },
+    where: { householdId: user.householdId, name: { in: SAVINGS_NAMES, mode: "insensitive" } },
     select: { id: true }
   });
   const savingsCatId = savingsCategory?.id ?? null;
@@ -172,7 +172,7 @@ export async function GET(request: Request) {
     ])
   );
   const catRows = await prisma.category.findMany({
-    where: { id: { in: catIds }, userId: user.id },
+    where: { id: { in: catIds }, householdId: user.householdId },
     select: { id: true, name: true }
   });
   const catNameMap: Record<string, string> = {};

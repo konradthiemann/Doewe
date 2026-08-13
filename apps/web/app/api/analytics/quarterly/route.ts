@@ -10,7 +10,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // NOTE: Nur das erste Konto wird verwendet — Multi-Account ist eine bekannte zukünftige Erweiterung.
-  const account = await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+  const account = await prisma.account.findFirst({ where: { householdId: user.householdId }, orderBy: { createdAt: "asc" } });
   if (!account) {
     return NextResponse.json({ error: "No account found for user" }, { status: 404 });
   }
@@ -31,7 +31,7 @@ export async function GET() {
   const SAVINGS_NAMES = ["savings", "sparen"];
   const savingsCategory = await prisma.category.findFirst({
     where: {
-      userId: user.id,
+      householdId: user.householdId,
       name: { in: SAVINGS_NAMES, mode: "insensitive" }
     },
     select: { id: true }

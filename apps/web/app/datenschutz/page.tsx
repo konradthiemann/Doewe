@@ -107,7 +107,8 @@ const sectionsDe: LegalSection[] = [
   {
     heading: "7. Deine Finanzdaten",
     paragraphs: [
-      "Im Rahmen der Nutzung speicherst du selbst Inhalte in der Anwendung, insbesondere Konten, Transaktionen, Kategorien, Budgets, Sparpläne und wiederkehrende Buchungen. Diese Daten werden ausschließlich verarbeitet, um dir die Funktionen der Anwendung bereitzustellen. Sie sind nur für dich in deinem Konto sichtbar, werden nicht an Dritte weitergegeben und nicht zu Profiling- oder Werbezwecken ausgewertet. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO."
+      "Im Rahmen der Nutzung speicherst du selbst Inhalte in der Anwendung, insbesondere Konten, Transaktionen, Kategorien, Budgets, Sparpläne und wiederkehrende Buchungen. Diese Daten werden ausschließlich verarbeitet, um dir die Funktionen der Anwendung bereitzustellen, werden nicht an Dritte weitergegeben und nicht zu Profiling- oder Werbezwecken ausgewertet. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO.",
+      "Deine Finanzdaten sind allen Mitgliedern deines Haushalts sichtbar. Ein Haushalt ist die gemeinsame Datengrenze der Anwendung: Legst du ein Konto an, gehört es zu deinem Haushalt, und alle Personen, die diesem Haushalt beigetreten sind, können die darin gespeicherten Konten, Transaktionen, Kategorien, Budgets, Sparpläne und wiederkehrenden Buchungen sehen und bearbeiten. Bei neu erfassten Transaktionen wird zusätzlich gespeichert, welches Haushaltsmitglied sie angelegt hat. Weitere Personen erhalten nur dann Zugriff, wenn du sie über einen Einladungs-Link ausdrücklich in deinen Haushalt einlädst. Der Einladungs-Link ist einmalig verwendbar und läuft nach sieben Tagen ab; in der Datenbank wird nur ein kryptografischer Hash des Tokens gespeichert. Verlässt ein Mitglied den Haushalt oder wird es entfernt, endet dessen Zugriff, und es erhält einen eigenen, leeren Haushalt."
     ]
   },
   {
@@ -229,7 +230,8 @@ const sectionsEn: LegalSection[] = [
   {
     heading: "7. Your financial data",
     paragraphs: [
-      "As part of using the application, you store content yourself — in particular accounts, transactions, categories, budgets, savings plans and recurring entries. This data is processed solely to provide you with the features of the application. It is visible only to you within your account, is not passed on to third parties and is not evaluated for profiling or advertising purposes. The legal basis is Art. 6 (1) (b) GDPR."
+      "As part of using the application, you store content yourself — in particular accounts, transactions, categories, budgets, savings plans and recurring entries. This data is processed solely to provide you with the features of the application, is not passed on to third parties and is not evaluated for profiling or advertising purposes. The legal basis is Art. 6 (1) (b) GDPR.",
+      "Your financial data is visible to all members of your household. A household is the application's shared data boundary: when you create an account it belongs to your household, and everyone who has joined that household can view and edit the accounts, transactions, categories, budgets, savings plans and recurring entries stored within it. For newly recorded transactions, the application additionally stores which household member created them. Other people gain access only if you explicitly invite them into your household via an invite link. The invite link is single-use and expires after seven days; only a cryptographic hash of the token is stored in the database. If a member leaves the household or is removed, their access ends and they receive their own empty household."
     ]
   },
   {

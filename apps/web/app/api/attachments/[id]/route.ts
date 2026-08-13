@@ -17,7 +17,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const attachment = await prisma.attachment.findFirst({
-    where: { id: params.id, transaction: { account: { userId: user.id } } }
+    where: { id: params.id, transaction: { account: { householdId: user.householdId } } }
   });
   if (!attachment) {
     return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
@@ -38,7 +38,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const attachment = await prisma.attachment.findFirst({
-    where: { id: params.id, transaction: { account: { userId: user.id } } },
+    where: { id: params.id, transaction: { account: { householdId: user.householdId } } },
     select: { id: true }
   });
   if (!attachment) {

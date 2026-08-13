@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     where: {
       year,
       month,
-      recurring: { account: { userId: user.id } }
+      recurring: { account: { householdId: user.householdId } }
     },
     select: { recurringId: true, year: true, month: true }
   });
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
 
   const { recurringId, year, month } = parsed.data;
   const recurring = await prisma.recurringTransaction.findFirst({
-    where: { id: recurringId, account: { userId: user.id } }
+    where: { id: recurringId, account: { householdId: user.householdId } }
   });
   if (!recurring) {
     return NextResponse.json({ error: "Recurring transaction not found" }, { status: 404 });
@@ -80,7 +80,7 @@ export async function DELETE(req: Request) {
 
   const { recurringId, year, month } = parsed.data;
   const recurring = await prisma.recurringTransaction.findFirst({
-    where: { id: recurringId, account: { userId: user.id } }
+    where: { id: recurringId, account: { householdId: user.householdId } }
   });
   if (!recurring) {
     return NextResponse.json({ error: "Recurring transaction not found" }, { status: 404 });

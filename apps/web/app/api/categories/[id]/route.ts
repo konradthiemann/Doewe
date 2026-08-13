@@ -35,7 +35,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const sourceCategory = await prisma.category.findFirst({ where: { id: params.id, userId: user.id } });
+  const sourceCategory = await prisma.category.findFirst({ where: { id: params.id, householdId: user.householdId } });
   if (!sourceCategory) return NextResponse.json({ error: "Category not found" }, { status: 404 });
 
   // Protect Savings/Sparen category from modification
@@ -56,7 +56,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: "Cannot merge into the same category" }, { status: 400 });
     }
 
-    const targetCategory = await prisma.category.findFirst({ where: { id: mergeIntoCategoryId, userId: user.id } });
+    const targetCategory = await prisma.category.findFirst({ where: { id: mergeIntoCategoryId, householdId: user.householdId } });
     if (!targetCategory) {
       return NextResponse.json({ error: "Target category not found" }, { status: 404 });
     }
@@ -114,7 +114,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const sourceCategory = await prisma.category.findFirst({ where: { id: params.id, userId: user.id } });
+  const sourceCategory = await prisma.category.findFirst({ where: { id: params.id, householdId: user.householdId } });
   if (!sourceCategory) return NextResponse.json({ error: "Category not found" }, { status: 404 });
 
   // Protect Savings/Sparen category from deletion
@@ -136,7 +136,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     if (fallbackCategoryId === sourceCategory.id) {
       return NextResponse.json({ error: "Fallback cannot be the same category" }, { status: 400 });
     }
-    const target = await prisma.category.findFirst({ where: { id: fallbackCategoryId, userId: user.id } });
+    const target = await prisma.category.findFirst({ where: { id: fallbackCategoryId, householdId: user.householdId } });
     if (!target) {
       return NextResponse.json({ error: "Fallback category not found" }, { status: 404 });
     }
@@ -145,7 +145,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   if (!targetCategoryId && fallbackName) {
     try {
       const created = await prisma.category.create({
-        data: { name: fallbackName, userId: user.id, isIncome: sourceCategory.isIncome }
+        data: { name: fallbackName, userId: user.id, householdId: user.householdId, isIncome: sourceCategory.isIncome }
       });
       targetCategoryId = created.id;
     } catch (error) {

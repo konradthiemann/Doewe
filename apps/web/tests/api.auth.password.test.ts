@@ -3,6 +3,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createResetToken, hashResetToken } from "../lib/passwordReset";
 
+import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
+
 // change-password relies on getSessionUser(), which honours TEST_USER_ID_BYPASS.
 const TEST_USER_ID = "test-user-pw";
 process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
@@ -27,12 +29,16 @@ beforeAll(async () => {
     update: { password: await hash(ORIGINAL_PASSWORD, 10) },
     create: { id: TEST_USER_ID, email: TEST_EMAIL, password: await hash(ORIGINAL_PASSWORD, 10) },
   });
+  // getSessionUser() resolves a household membership per request — without one
+  // the bypass user counts as unauthenticated (401).
+  await ensureTestHousehold(prisma, TEST_USER_ID);
   await prisma.passwordResetToken.deleteMany({ where: { userId: TEST_USER_ID } });
 });
 
 afterAll(async () => {
   if (prisma) {
     await prisma.passwordResetToken.deleteMany({ where: { userId: TEST_USER_ID } });
+    await cleanupTestHousehold(prisma, TEST_USER_ID);
     await prisma.user.deleteMany({ where: { id: TEST_USER_ID } });
     await prisma.$disconnect();
   }

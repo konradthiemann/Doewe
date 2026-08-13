@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 
 import ChangePasswordCard from "../../components/ChangePasswordCard";
+import HouseholdCard from "../../components/HouseholdCard";
 import InstallAppCard from "../../components/InstallAppCard";
 import NotificationsCard from "../../components/NotificationsCard";
 import PageContainer from "../../components/PageContainer";
@@ -55,6 +56,9 @@ export default function SettingsPage() {
         </div>
       </div>
       </div>
+
+      {/* Household Section (Teil D) */}
+      <HouseholdCard />
 
       {/* Change Password Section */}
       <ChangePasswordCard />

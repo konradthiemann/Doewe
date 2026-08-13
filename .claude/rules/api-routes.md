@@ -9,7 +9,12 @@ Route-Dateien liegen in `apps/web/app/api/<ressource>/route.ts`.
 ## Struktur
 - Export-Funktionen nach HTTP-Verb: `GET`, `POST`, `PUT`, `DELETE`
 - Auth-Guard am Anfang jeder Handler-Funktion via `getSessionUser()` aus `../../../lib/auth`
-- Autorisierung: Nur Daten des eigenen Accounts laden (`where: { account: { userId: user.id } }`)
+- Autorisierung: **Teil D — der Haushalt ist die Mandanten-Grenze**. Alle Domänen-Queries scopen über `householdId`, NICHT über `userId`:
+  - Accounts: `where: { householdId: user.householdId }`
+  - Alles über Accounts/Kategorien (Transaction/Budget/Recurring): `where: { account: { householdId: user.householdId } }`
+  - Kategorien sind eindeutig pro Haushalt (`@@unique([householdId, name])`) → Upserts nutzen `where: { householdId_name: { householdId, name } }`
+  - `userId` bleibt nur als Provenienz erhalten (z. B. `Transaction.createdByUserId`, Push-Abos, Idempotenz-`mutationLog`) — niemals als Autorisierungs-Scope
+  - OWNER-only-Aktionen (Haushalt umbenennen, einladen, Mitglied entfernen) prüfen zusätzlich `user.role === "OWNER"` → sonst 403
 - Validierung: Zod-Schema für POST/PUT-Bodies
 - Antwort: `NextResponse.json(...)` mit explizitem Status-Code
 

@@ -53,7 +53,7 @@ export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const account = await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+  const account = await prisma.account.findFirst({ where: { householdId: user.householdId }, orderBy: { createdAt: "asc" } });
   if (!account) {
     return NextResponse.json({ error: "No account found for user" }, { status: 404 });
   }
@@ -69,7 +69,7 @@ export async function GET() {
         transactions: { select: { amountCents: true } }
       }
     }),
-    resolveSavingsBalanceCents(accountId, user.id)
+    resolveSavingsBalanceCents(accountId, user.householdId)
   ]);
 
   const mapGoal = (goal: (typeof goalsRaw)[number]) => ({
@@ -139,7 +139,7 @@ export async function POST(req: Request) {
 
   const payload = parsed.data;
 
-  const account = await prisma.account.findFirst({ where: { id: payload.accountId, userId: user.id } });
+  const account = await prisma.account.findFirst({ where: { id: payload.accountId, householdId: user.householdId } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }

@@ -43,7 +43,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // NOTE: Nur das erste Konto wird verwendet — Multi-Account ist eine bekannte zukünftige Erweiterung.
-  const account = await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+  const account = await prisma.account.findFirst({ where: { householdId: user.householdId }, orderBy: { createdAt: "asc" } });
   if (!account) {
     return NextResponse.json({ error: "No account found for user" }, { status: 404 });
   }
@@ -70,7 +70,7 @@ export async function GET() {
   // Spar-Kategorie auflösen — case-insensitive, EN + DE
   const SAVINGS_NAMES = ["savings", "sparen"];
   const allUserCategories = await prisma.category.findMany({
-    where: { userId: user.id },
+    where: { householdId: user.householdId },
     select: { id: true, name: true }
   });
   const savingsCategory = allUserCategories.find((c) =>
@@ -285,7 +285,7 @@ export async function GET() {
     ...categoryBudgetsRaw.map((b) => b.categoryId).filter((id): id is string => id !== null)
   ]));
   const updatedCategories = await prisma.category.findMany({
-    where: { id: { in: updatedCatIds }, userId: user.id },
+    where: { id: { in: updatedCatIds }, householdId: user.householdId },
     select: { id: true, name: true }
   });
   const updatedNameMap: Record<string, string> = {};
