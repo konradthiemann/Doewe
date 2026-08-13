@@ -29,7 +29,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const items = await prisma.transaction.findMany({
-    where: { account: { userId: user.id } },
+    where: { account: { householdId: user.householdId } },
     orderBy: { occurredAt: "desc" }
   });
   return NextResponse.json(items);
@@ -58,21 +58,21 @@ export async function POST(req: Request) {
   const occurredAt =
     typeof data.occurredAt === "string" ? new Date(data.occurredAt) : data.occurredAt;
 
-  const account = await prisma.account.findFirst({ where: { id: data.accountId, userId: user.id } });
+  const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId: user.householdId } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
   let category: { isTaxRelevant: boolean } | null = null;
   if (data.categoryId) {
-    category = await prisma.category.findFirst({ where: { id: data.categoryId, userId: user.id } });
+    category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId: user.householdId } });
     if (!category) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
   }
 
   if (data.savingGoalId) {
-    const goal = await prisma.budget.findFirst({ where: { id: data.savingGoalId, account: { userId: user.id } } });
+    const goal = await prisma.budget.findFirst({ where: { id: data.savingGoalId, account: { householdId: user.householdId } } });
     if (!goal) {
       return NextResponse.json({ error: "Saving goal not found" }, { status: 404 });
     }
@@ -88,6 +88,8 @@ export async function POST(req: Request) {
           accountId: data.accountId,
           categoryId: data.categoryId ?? null,
           savingGoalId: data.savingGoalId ?? null,
+          // Provenienz für das "von {Name}"-Badge im Haushalt (Teil D)
+          createdByUserId: user.id,
           amountCents: data.amountCents,
           description: data.description,
           occurredAt,

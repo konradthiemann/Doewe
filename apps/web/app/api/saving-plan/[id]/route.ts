@@ -47,7 +47,7 @@ export async function GET(
   const goal = await prisma.budget.findUnique({
     where: { id },
     include: {
-      account: { select: { userId: true } },
+      account: { select: { householdId: true } },
       category: { select: { name: true } }
     }
   });
@@ -56,7 +56,7 @@ export async function GET(
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 
-  if (goal.account.userId !== user.id) {
+  if (goal.account.householdId !== user.householdId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -86,14 +86,14 @@ export async function PATCH(
 
   const goal = await prisma.budget.findUnique({
     where: { id },
-    include: { account: { select: { userId: true } } }
+    include: { account: { select: { householdId: true } } }
   });
 
   if (!goal) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 
-  if (goal.account.userId !== user.id) {
+  if (goal.account.householdId !== user.householdId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -150,14 +150,14 @@ export async function DELETE(
 
   const goal = await prisma.budget.findUnique({
     where: { id },
-    include: { account: { select: { userId: true } } }
+    include: { account: { select: { householdId: true } } }
   });
 
   if (!goal) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 
-  if (goal.account.userId !== user.id) {
+  if (goal.account.householdId !== user.householdId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

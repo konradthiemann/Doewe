@@ -38,18 +38,18 @@ export async function POST(req: Request) {
   const payload = parsed.data;
 
   const account = payload.accountId
-    ? await prisma.account.findFirst({ where: { id: payload.accountId, userId: user.id } })
-    : await prisma.account.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+    ? await prisma.account.findFirst({ where: { id: payload.accountId, householdId: user.householdId } })
+    : await prisma.account.findFirst({ where: { householdId: user.householdId }, orderBy: { createdAt: "asc" } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  const savingsCatId = await findSavingsCategoryId(user.id);
+  const savingsCatId = await findSavingsCategoryId(user.householdId);
   if (!savingsCatId) {
     return NextResponse.json({ error: "No savings category" }, { status: 409 });
   }
 
-  const availableCents = await getAvailableSavingsCents(account.id, user.id);
+  const availableCents = await getAvailableSavingsCents(account.id, user.householdId);
   if (availableCents <= 0) {
     return NextResponse.json({ error: "Nothing available to withdraw", availableCents }, { status: 409 });
   }
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
     data: {
       accountId: account.id,
       categoryId: savingsCatId,
+      createdByUserId: user.id,
       // Positive: money returns from the savings pool to the current account.
       amountCents: payload.amountCents,
       description: payload.description ?? "Savings withdrawal",

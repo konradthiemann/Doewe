@@ -18,18 +18,18 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const data = parsed.data;
   const occurredAt = typeof data.occurredAt === "string" ? new Date(data.occurredAt) : data.occurredAt;
 
-  const existing = await prisma.transaction.findFirst({ where: { id: params.id, account: { userId: user.id } } });
+  const existing = await prisma.transaction.findFirst({ where: { id: params.id, account: { householdId: user.householdId } } });
   if (!existing) {
     return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
   }
 
-  const account = await prisma.account.findFirst({ where: { id: data.accountId, userId: user.id } });
+  const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId: user.householdId } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
   if (data.categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: data.categoryId, userId: user.id } });
+    const category = await prisma.category.findFirst({ where: { id: data.categoryId, householdId: user.householdId } });
     if (!category) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
@@ -69,7 +69,7 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const existing = await prisma.transaction.findFirst({ where: { id: params.id, account: { userId: user.id } } });
+  const existing = await prisma.transaction.findFirst({ where: { id: params.id, account: { householdId: user.householdId } } });
   if (!existing) {
     return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
   }

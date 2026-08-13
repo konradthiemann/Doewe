@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
+
 // Integrationstests für GET /api/tax?year=YYYY
 
 const TEST_USER_ID = "test-user-tax";
@@ -7,6 +9,7 @@ process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
 
 let prisma: import("@prisma/client").PrismaClient;
 let testUserId: string;
+let testHouseholdId: string;
 let testAccountId: string;
 let testCategoryId: string;
 
@@ -20,18 +23,19 @@ beforeAll(async () => {
     create: { id: TEST_USER_ID, email: "tax-test@example.com", password: "hashed" }
   });
   testUserId = user.id;
+  testHouseholdId = await ensureTestHousehold(prisma, user.id);
 
   const account = await prisma.account.upsert({
     where: { id: "acc_tax_test" },
-    update: { userId: user.id },
-    create: { id: "acc_tax_test", name: "Tax Test Account", userId: user.id }
+    update: { userId: user.id, householdId: testHouseholdId },
+    create: { id: "acc_tax_test", name: "Tax Test Account", userId: user.id, householdId: testHouseholdId }
   });
   testAccountId = account.id;
 
   const category = await prisma.category.upsert({
-    where: { userId_name: { userId: user.id, name: "Tax Test Category" } },
+    where: { householdId_name: { householdId: testHouseholdId, name: "Tax Test Category" } },
     update: { isTaxRelevant: true },
-    create: { name: "Tax Test Category", userId: user.id, isTaxRelevant: true }
+    create: { name: "Tax Test Category", userId: user.id, householdId: testHouseholdId, isTaxRelevant: true }
   });
   testCategoryId = category.id;
 
@@ -104,6 +108,7 @@ afterAll(async () => {
     await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
     await prisma.category.deleteMany({ where: { id: testCategoryId } });
     await prisma.account.deleteMany({ where: { id: testAccountId } });
+    await cleanupTestHousehold(prisma, testUserId);
     await prisma.user.deleteMany({ where: { id: testUserId } });
     await prisma.$disconnect();
   }

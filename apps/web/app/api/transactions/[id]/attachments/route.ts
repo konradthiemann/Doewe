@@ -31,7 +31,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const transaction = await prisma.transaction.findFirst({
-    where: { id: params.id, account: { userId: user.id } },
+    where: { id: params.id, account: { householdId: user.householdId } },
     select: { id: true }
   });
   if (!transaction) {
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const transaction = await prisma.transaction.findFirst({
-    where: { id: params.id, account: { userId: user.id } },
+    where: { id: params.id, account: { householdId: user.householdId } },
     select: { id: true }
   });
   if (!transaction) {

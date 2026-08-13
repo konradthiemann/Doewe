@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
+
 // Use the same DATABASE_URL as the main app (set by pretest or .env)
 // pretest already runs: prisma generate && prisma db push && db:seed
 
@@ -8,6 +10,7 @@ process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
 
 let prisma: import("@prisma/client").PrismaClient;
 let testUserId: string;
+let testHouseholdId: string;
 let testAccountId: string;
 let savingsCategoryId: string;
 let foodCategoryId: string;
@@ -23,26 +26,27 @@ beforeAll(async () => {
     create: { id: TEST_USER_ID, email: "analytics-test@example.com", password: "hashed" }
   });
   testUserId = user.id;
+  testHouseholdId = await ensureTestHousehold(prisma, user.id);
 
   const account = await prisma.account.upsert({
     where: { id: "acc_analytics_test" },
-    update: { userId: user.id },
-    create: { id: "acc_analytics_test", name: "Analytics Test Account", userId: user.id }
+    update: { userId: user.id, householdId: testHouseholdId },
+    create: { id: "acc_analytics_test", name: "Analytics Test Account", userId: user.id, householdId: testHouseholdId }
   });
   testAccountId = account.id;
 
   // Create categories
   const savingsCat = await prisma.category.upsert({
-    where: { userId_name: { userId: user.id, name: "Savings" } },
+    where: { householdId_name: { householdId: testHouseholdId, name: "Savings" } },
     update: {},
-    create: { name: "Savings", userId: user.id }
+    create: { name: "Savings", userId: user.id, householdId: testHouseholdId }
   });
   savingsCategoryId = savingsCat.id;
 
   const foodCat = await prisma.category.upsert({
-    where: { userId_name: { userId: user.id, name: "Food" } },
+    where: { householdId_name: { householdId: testHouseholdId, name: "Food" } },
     update: {},
-    create: { name: "Food", userId: user.id }
+    create: { name: "Food", userId: user.id, householdId: testHouseholdId }
   });
   foodCategoryId = foodCat.id;
 
@@ -162,6 +166,7 @@ afterAll(async () => {
     await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
     await prisma.category.deleteMany({ where: { userId: testUserId } });
     await prisma.account.deleteMany({ where: { id: testAccountId } });
+    await cleanupTestHousehold(prisma, testUserId);
     await prisma.user.deleteMany({ where: { id: testUserId } });
     await prisma.$disconnect();
   }

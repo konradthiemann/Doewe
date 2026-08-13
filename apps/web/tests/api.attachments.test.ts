@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
+
 // Integrationstests für die Beleg-Endpoints:
 //   GET/POST /api/transactions/[id]/attachments
 //   GET/DELETE /api/attachments/[id]
@@ -10,9 +12,11 @@ process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
 
 let prisma: import("@prisma/client").PrismaClient;
 let testUserId: string;
+let testHouseholdId: string;
 let testAccountId: string;
 let testTransactionId: string;
 let otherUserId: string;
+let otherHouseholdId: string;
 let otherTransactionId: string;
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
@@ -36,11 +40,12 @@ beforeAll(async () => {
     create: { id: TEST_USER_ID, email: "attach-test@example.com", password: "hashed" }
   });
   testUserId = user.id;
+  testHouseholdId = await ensureTestHousehold(prisma, user.id);
 
   const account = await prisma.account.upsert({
     where: { id: "acc_attach_test" },
-    update: { userId: user.id },
-    create: { id: "acc_attach_test", name: "Attach Test Account", userId: user.id }
+    update: { userId: user.id, householdId: testHouseholdId },
+    create: { id: "acc_attach_test", name: "Attach Test Account", userId: user.id, householdId: testHouseholdId }
   });
   testAccountId = account.id;
 
@@ -63,10 +68,11 @@ beforeAll(async () => {
     create: { id: "test-user-attach-other", email: "attach-other@example.com", password: "hashed" }
   });
   otherUserId = otherUser.id;
+  otherHouseholdId = await ensureTestHousehold(prisma, otherUser.id, "Other Household");
   const otherAccount = await prisma.account.upsert({
     where: { id: "acc_attach_other" },
-    update: { userId: otherUser.id },
-    create: { id: "acc_attach_other", name: "Other Account", userId: otherUser.id }
+    update: { userId: otherUser.id, householdId: otherHouseholdId },
+    create: { id: "acc_attach_other", name: "Other Account", userId: otherUser.id, householdId: otherHouseholdId }
   });
   const otherTx = await prisma.transaction.create({
     data: {
@@ -83,6 +89,8 @@ afterAll(async () => {
   if (prisma) {
     await prisma.transaction.deleteMany({ where: { account: { userId: { in: [testUserId, otherUserId] } } } });
     await prisma.account.deleteMany({ where: { userId: { in: [testUserId, otherUserId] } } });
+    await cleanupTestHousehold(prisma, testUserId);
+    await cleanupTestHousehold(prisma, otherUserId);
     await prisma.user.deleteMany({ where: { id: { in: [testUserId, otherUserId] } } });
     await prisma.$disconnect();
   }

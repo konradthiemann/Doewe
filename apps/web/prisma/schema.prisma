@@ -10,21 +10,28 @@ datasource db {
 model Account {
   id          String        @id @default(cuid())
   name        String
+  // Original creator of the account. Kept for provenance; authorization is
+  // scoped by householdId (Teil D — a household is the tenant, not a user).
   userId      String
+  householdId String
   createdAt   DateTime      @default(now())
   transactions Transaction[]
   recurring    RecurringTransaction[]
   budgets      Budget[]
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([householdId])
 }
 
 model Category {
   id            String        @id @default(cuid())
   name          String
+  // Original creator; authorization is scoped by householdId (Teil D).
   userId        String
+  householdId   String
   isIncome      Boolean       @default(false)
   // Selecting this category in the transaction form pre-enables the tax toggle.
   isTaxRelevant Boolean       @default(false)
@@ -33,10 +40,12 @@ model Category {
   recurring    RecurringTransaction[]
   budgets      Budget[]
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, name])
+  @@unique([householdId, name])
   @@index([userId])
+  @@index([householdId])
 }
 
 model Transaction {
@@ -50,6 +59,10 @@ model Transaction {
   // Marked for the German tax return (Belegvorhaltepflicht: receipts are
   // archived as attachments and kept for the Finanzamt on request).
   taxRelevant   Boolean  @default(false)
+  // Which household member booked this (Teil D) — drives the "von {Name}" badge.
+  // Nullable: legacy rows are backfilled to the account's original owner; future
+  // writes always set it from the session user.
+  createdByUserId String?
   createdAt     DateTime @default(now())
 
   account     Account  @relation(fields: [accountId], references: [id])
@@ -157,6 +170,55 @@ model User {
   passwordResetTokens PasswordResetToken[]
   pushSubscriptions   PushSubscription[]
   reminderSetting     ReminderSetting?
+  // v1: exactly one household per user (see HouseholdMember.userId @unique).
+  householdMember     HouseholdMember?
+}
+
+// Teil D — Haushalts-Sharing: the household is the tenant boundary. All
+// financial data (Accounts, Categories and everything hanging off them) is
+// scoped by householdId, so two users sharing a household see the same data.
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  members    HouseholdMember[]
+  invites    HouseholdInvite[]
+  accounts   Account[]
+  categories Category[]
+}
+
+// v1: one household per user (`userId @unique`) → the session carries a single
+// householdId, no household switcher in the UI. role: OWNER | MEMBER.
+model HouseholdMember {
+  id          String   @id @default(cuid())
+  householdId String
+  userId      String   @unique
+  role        String   @default("MEMBER")
+  joinedAt    DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+}
+
+// Invitation to join a household. Only the SHA-256 hash of the token is stored;
+// the plaintext lives solely in the emailed/shared invite link (same pattern as
+// PasswordResetToken). v1: only fresh accounts without own data may accept.
+model HouseholdInvite {
+  id          String    @id @default(cuid())
+  householdId String
+  email       String?
+  role        String    @default("MEMBER")
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
 }
 
 // One-time tokens for the "forgot password" flow. Only the SHA-256 hash of the

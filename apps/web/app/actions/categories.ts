@@ -27,7 +27,13 @@ export const createCategoryAction = authActionClient
     }
 
     const created = await prisma.category.create({
-      data: { name, isIncome: isIncome ?? false, isTaxRelevant: isTaxRelevant ?? false, userId: user.id },
+      data: {
+        name,
+        isIncome: isIncome ?? false,
+        isTaxRelevant: isTaxRelevant ?? false,
+        userId: user.id,
+        householdId: user.householdId,
+      },
     });
 
     return created;

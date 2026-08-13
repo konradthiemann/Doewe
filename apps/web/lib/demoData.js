@@ -176,19 +176,33 @@ async function ensureUserAndAccount(prisma) {
     create: { email: DEMO_EMAIL, name: DEMO_NAME, password: passwordHash }
   });
 
+  // Haushalt des Demo-Users (Teil D): deterministische Id wie in der Backfill-
+  // Migration (`hh_<userId>`), plus OWNER-Mitgliedschaft für getSessionUser().
+  const householdId = `hh_${user.id}`;
+  await prisma.household.upsert({
+    where: { id: householdId },
+    update: {},
+    create: { id: householdId, name: DEMO_NAME }
+  });
+  await prisma.householdMember.upsert({
+    where: { userId: user.id },
+    update: { householdId },
+    create: { householdId, userId: user.id, role: "OWNER" }
+  });
+
   const account = await prisma.account.upsert({
     where: { id: DEMO_ACCOUNT_ID },
-    update: { userId: user.id },
-    create: { id: DEMO_ACCOUNT_ID, name: "Demo Account", userId: user.id }
+    update: { userId: user.id, householdId },
+    create: { id: DEMO_ACCOUNT_ID, name: "Demo Account", userId: user.id, householdId }
   });
 
   const categoryMap = {};
   for (const name of ALL_CATEGORIES) {
     const isIncome = INCOME_CATEGORIES.includes(name);
     const cat = await prisma.category.upsert({
-      where: { userId_name: { userId: user.id, name } },
+      where: { householdId_name: { householdId, name } },
       update: { isIncome },
-      create: { name, isIncome, userId: user.id }
+      create: { name, isIncome, userId: user.id, householdId }
     });
     categoryMap[name] = cat.id;
   }

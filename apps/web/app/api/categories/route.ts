@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
   // Get user's account(s) for transaction counting
   const accounts = await prisma.account.findMany({
-    where: { userId: user.id },
+    where: { householdId: user.householdId },
     select: { id: true }
   });
   const accountIds = accounts.map((a) => a.id);
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
   if (sortByUsage && accountIds.length > 0) {
     // Get categories with usage count
     const categories = await prisma.category.findMany({
-      where: { userId: user.id },
+      where: { householdId: user.householdId },
       include: {
         _count: {
           select: {
@@ -69,7 +69,7 @@ export async function GET(req: Request) {
 
   // Default: order by createdAt
   const items = await prisma.category.findMany({
-    where: { userId: user.id },
+    where: { householdId: user.householdId },
     orderBy: { createdAt: "desc" }
   });
   return NextResponse.json(items);
@@ -96,7 +96,8 @@ export async function POST(req: Request) {
         name: parsed.data.name,
         isIncome: parsed.data.isIncome,
         isTaxRelevant: parsed.data.isTaxRelevant,
-        userId: user.id
+        userId: user.id,
+        householdId: user.householdId
       }
     });
     return NextResponse.json(created, { status: 201 });

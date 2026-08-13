@@ -2,10 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { prisma } from "../lib/prisma";
 
+import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
+
 const TEST_USER_EMAIL = "test@example.com";
 const TEST_ACCOUNT_NAME = "Test Konto";
 
 let testUserId: string;
+let testHouseholdId: string;
 let testAccountId: string;
 let testGoalId: string;
 
@@ -19,10 +22,11 @@ describe("Saving Plan API", () => {
       });
     }
     testUserId = user.id;
+    testHouseholdId = await ensureTestHousehold(prisma, user.id);
 
     // Create test account
     const account = await prisma.account.create({
-      data: { name: TEST_ACCOUNT_NAME, userId: testUserId }
+      data: { name: TEST_ACCOUNT_NAME, userId: testUserId, householdId: testHouseholdId }
     });
     testAccountId = account.id;
   });
@@ -31,6 +35,7 @@ describe("Saving Plan API", () => {
     // Clean up test data
     await prisma.budget.deleteMany({ where: { accountId: testAccountId } });
     await prisma.account.delete({ where: { id: testAccountId } });
+    await cleanupTestHousehold(prisma, testUserId);
   });
 
   it("POST /api/saving-plan creates a goal", async () => {

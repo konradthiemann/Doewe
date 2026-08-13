@@ -17,16 +17,16 @@ const CompleteInput = z.object({
   spentCents: z.number().int().min(0)
 });
 
-async function loadOwnedGoal(id: string, userId: string) {
+async function loadOwnedGoal(id: string, householdId: string) {
   const goal = await prisma.budget.findUnique({
     where: { id },
-    include: { account: { select: { userId: true } } }
+    include: { account: { select: { householdId: true } } }
   });
 
   if (!goal) {
     return { error: NextResponse.json({ error: "Goal not found" }, { status: 404 }) } as const;
   }
-  if (goal.account.userId !== userId) {
+  if (goal.account.householdId !== householdId) {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) } as const;
   }
   return { goal } as const;
@@ -42,7 +42,7 @@ export async function POST(
   }
 
   const { id } = await params;
-  const result = await loadOwnedGoal(id, user.id);
+  const result = await loadOwnedGoal(id, user.householdId);
   if ("error" in result) return result.error;
 
   const json = await request.json();
@@ -76,7 +76,7 @@ export async function DELETE(
   }
 
   const { id } = await params;
-  const result = await loadOwnedGoal(id, user.id);
+  const result = await loadOwnedGoal(id, user.householdId);
   if ("error" in result) return result.error;
 
   const updated = await prisma.budget.update({

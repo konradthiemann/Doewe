@@ -27,7 +27,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const items = await prisma.budget.findMany({
-    where: { account: { userId: user.id } },
+    where: { account: { householdId: user.householdId } },
     orderBy: [{ year: "desc" }, { month: "desc" }]
   });
   return NextResponse.json(items);
@@ -42,13 +42,13 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const account = await prisma.account.findFirst({ where: { id: parsed.data.accountId, userId: user.id } });
+  const account = await prisma.account.findFirst({ where: { id: parsed.data.accountId, householdId: user.householdId } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
   if (parsed.data.categoryId) {
-    const category = await prisma.category.findFirst({ where: { id: parsed.data.categoryId, userId: user.id } });
+    const category = await prisma.category.findFirst({ where: { id: parsed.data.categoryId, householdId: user.householdId } });
     if (!category) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }

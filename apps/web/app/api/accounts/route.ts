@@ -13,7 +13,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const items = await prisma.account.findMany({
-    where: { userId: user.id },
+    where: { householdId: user.householdId },
     orderBy: { createdAt: "desc" }
   });
   return NextResponse.json(items);
@@ -28,6 +28,6 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const created = await prisma.account.create({ data: { name: parsed.data.name, userId: user.id } });
+  const created = await prisma.account.create({ data: { name: parsed.data.name, userId: user.id, householdId: user.householdId } });
   return NextResponse.json(created, { status: 201 });
 }

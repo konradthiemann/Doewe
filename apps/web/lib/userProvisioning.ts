@@ -18,13 +18,23 @@ export async function createUserWithDefaults(input: {
   name: string | null;
   password: string | null;
 }) {
+  // Teil D: every new user gets their own single-member household (OWNER). All
+  // financial data is scoped to that household, so the default account and
+  // categories are created inside it.
+  const household = await prisma.household.create({
+    data: { name: input.name?.trim() || "Haushalt" }
+  });
+
   const user = await prisma.user.create({
     data: {
       email: input.email,
       name: input.name,
       password: input.password,
+      householdMember: {
+        create: { householdId: household.id, role: "OWNER" }
+      },
       accounts: {
-        create: { name: DEFAULT_ACCOUNT_NAME }
+        create: { name: DEFAULT_ACCOUNT_NAME, householdId: household.id }
       }
     },
     include: {
@@ -34,12 +44,48 @@ export async function createUserWithDefaults(input: {
 
   await prisma.category.createMany({
     data: [
-      ...DEFAULT_CATEGORIES.income.map((c) => ({ name: c, isIncome: true, userId: user.id })),
-      ...DEFAULT_CATEGORIES.outcome.map((c) => ({ name: c, isIncome: false, userId: user.id })),
-      { name: "Savings", isIncome: false, userId: user.id }
+      ...DEFAULT_CATEGORIES.income.map((c) => ({ name: c, isIncome: true, userId: user.id, householdId: household.id })),
+      ...DEFAULT_CATEGORIES.outcome.map((c) => ({ name: c, isIncome: false, userId: user.id, householdId: household.id })),
+      { name: "Savings", isIncome: false, userId: user.id, householdId: household.id }
     ],
     skipDuplicates: true
   });
 
   return user;
+}
+
+/**
+ * Creates a fresh, single-member household (OWNER) for an EXISTING user, with the
+ * default account and category set. Used when a member leaves a shared household
+ * (Teil D) — they must always own a household, otherwise getSessionUser() would
+ * lock them out. Re-points the user's unique HouseholdMember row to the new
+ * household and returns its id.
+ */
+export async function provisionFreshHousehold(input: {
+  userId: string;
+  name: string | null;
+}): Promise<string> {
+  const household = await prisma.household.create({
+    data: { name: input.name?.trim() || "Haushalt" }
+  });
+
+  await prisma.householdMember.update({
+    where: { userId: input.userId },
+    data: { householdId: household.id, role: "OWNER" }
+  });
+
+  await prisma.account.create({
+    data: { name: DEFAULT_ACCOUNT_NAME, userId: input.userId, householdId: household.id }
+  });
+
+  await prisma.category.createMany({
+    data: [
+      ...DEFAULT_CATEGORIES.income.map((c) => ({ name: c, isIncome: true, userId: input.userId, householdId: household.id })),
+      ...DEFAULT_CATEGORIES.outcome.map((c) => ({ name: c, isIncome: false, userId: input.userId, householdId: household.id })),
+      { name: "Savings", isIncome: false, userId: input.userId, householdId: household.id }
+    ],
+    skipDuplicates: true
+  });
+
+  return household.id;
 }

@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
+
 // pretest (siehe tests/setup.ts) läuft: prisma generate && db push && seed.
 // Auth wird über TEST_USER_ID_BYPASS umgangen (siehe lib/auth.ts).
 const TEST_USER_ID = "test-user-recurring";
@@ -7,6 +9,7 @@ process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
 
 let prisma: import("@prisma/client").PrismaClient;
 let testUserId: string;
+let testHouseholdId: string;
 let testAccountId: string;
 
 beforeAll(async () => {
@@ -19,11 +22,12 @@ beforeAll(async () => {
     create: { id: TEST_USER_ID, email: "recurring-test@example.com", password: "hashed" }
   });
   testUserId = user.id;
+  testHouseholdId = await ensureTestHousehold(prisma, user.id);
 
   const account = await prisma.account.upsert({
     where: { id: "acc_recurring_test" },
-    update: { userId: user.id },
-    create: { id: "acc_recurring_test", name: "Recurring Test Account", userId: user.id }
+    update: { userId: user.id, householdId: testHouseholdId },
+    create: { id: "acc_recurring_test", name: "Recurring Test Account", userId: user.id, householdId: testHouseholdId }
   });
   testAccountId = account.id;
 
@@ -34,6 +38,7 @@ afterAll(async () => {
   if (prisma) {
     await prisma.recurringTransaction.deleteMany({ where: { accountId: testAccountId } });
     await prisma.account.deleteMany({ where: { id: testAccountId } });
+    await cleanupTestHousehold(prisma, testUserId);
     await prisma.user.deleteMany({ where: { id: testUserId } });
     await prisma.$disconnect();
   }
