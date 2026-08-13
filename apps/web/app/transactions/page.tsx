@@ -454,7 +454,7 @@ function TransactionsPage() {
             <div className="relative">
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-neutral-500"
+                className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-ink-faint"
               >
                 <svg
                   className="h-4 w-4"
@@ -486,7 +486,7 @@ function TransactionsPage() {
                     ? t("transactions.searchPlaceholder")
                     : t("transactions.recurringSearchPlaceholder")
                 }
-                className="w-full rounded-full border border-gray-300 bg-white/90 px-10 py-2 text-base md:text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-neutral-600 dark:bg-neutral-900/90 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus-visible:ring-offset-neutral-900"
+                className="w-full rounded-full border border-line-strong bg-surface/95 px-10 py-2 text-base md:text-sm text-ink placeholder:text-ink-faint shadow-card focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
               />
             </div>
           </form>
@@ -498,12 +498,12 @@ function TransactionsPage() {
               onClick={() => setShowFilters(!showFilters)}
               aria-label={hasFilters ? t("transactions.filtersExpandActive") : t("transactions.filtersExpand")}
               aria-pressed={showFilters}
-              className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+              className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border shadow-card transition-all focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 ${
                 hasFilters
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:border-indigo-400 dark:bg-indigo-950 dark:text-indigo-400 dark:hover:bg-indigo-900"
+                  ? "border-brand bg-brand-soft text-brand hover:bg-brand-soft"
                   : showFilters
-                    ? "border-gray-400 bg-gray-100 text-gray-800 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
-                    : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    ? "border-line-strong bg-surface-2 text-ink"
+                    : "border-line-strong bg-surface text-ink-muted hover:bg-surface-2"
               }`}
             >
               <svg
@@ -516,8 +516,8 @@ function TransactionsPage() {
               </svg>
               {hasFilters && (
                 <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75 dark:bg-indigo-500" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500 dark:bg-indigo-400" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-75 motion-reduce:animate-none" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand" />
                 </span>
               )}
             </button>
@@ -529,7 +529,7 @@ function TransactionsPage() {
           role="tablist"
           aria-label={t("transactions.tabsLabel")}
           onKeyDown={handleTabKeyDown}
-          className="flex rounded-xl bg-gray-100 p-1 dark:bg-neutral-800"
+          className="flex rounded-card bg-surface-2 p-1"
         >
           {tabs.map((tab, index) => (
             <button
@@ -541,10 +541,10 @@ function TransactionsPage() {
               id={`tab-${tab.id}`}
               type="button"
               onClick={() => void setActiveTab(tab.id)}
-              className={`flex-1 rounded-lg py-2 text-sm font-medium transition focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-100 dark:focus-visible:ring-offset-neutral-800 ${
+              className={`flex-1 rounded-field py-2 text-sm font-medium transition focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg ${
                 activeTab === tab.id
-                  ? "bg-white text-gray-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-100"
-                  : "text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+                  ? "bg-surface text-ink shadow-card"
+                  : "text-ink-muted hover:text-ink"
               }`}
             >
               {tab.label}
@@ -565,12 +565,12 @@ function TransactionsPage() {
             {t("transactions.listHeading")}
           </h2>
           {error && (
-            <p id="form-error" role="alert" className="text-sm text-red-600">
+            <p id="form-error" role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
           {recurringError && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-danger">
               {recurringError}
             </p>
           )}
@@ -580,17 +580,17 @@ function TransactionsPage() {
               showFilters ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
             }`}
           >
-          <div className="rounded-xl border border-gray-200 bg-gradient-to-b from-white to-gray-50/50 p-5 shadow-sm dark:border-neutral-700 dark:from-neutral-900 dark:to-neutral-900/80">
+          <div className="rounded-card border border-line bg-surface p-5 shadow-card">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">{t("transactions.filtersTitle")}</p>
-                <p className="text-xs text-gray-500 dark:text-neutral-400">{t("transactions.filtersHint")}</p>
+                <p className="text-sm font-semibold text-ink">{t("transactions.filtersTitle")}</p>
+                <p className="text-xs text-ink-muted">{t("transactions.filtersHint")}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowFilters(false)}
                 aria-label={t("transactions.filtersClose")}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <svg
                   aria-hidden="true"
@@ -611,8 +611,8 @@ function TransactionsPage() {
                 onClick={() => void setFilterType("all")}
                 className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "all"
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                    ? "bg-brand text-brand-on shadow-card"
+                    : "bg-surface-2 text-ink hover:opacity-80"
                 }`}
               >
                 {t("transactions.filterTypeAll")}
@@ -622,8 +622,8 @@ function TransactionsPage() {
                 onClick={() => void setFilterType("income")}
                 className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "income"
-                    ? "bg-emerald-600 text-white shadow-sm"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                    ? "bg-income text-brand-on shadow-card"
+                    : "bg-surface-2 text-ink hover:opacity-80"
                 }`}
               >
                 <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
@@ -636,8 +636,8 @@ function TransactionsPage() {
                 onClick={() => void setFilterType("outcome")}
                 className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                   filterType === "outcome"
-                    ? "bg-red-600 text-white shadow-sm"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                    ? "bg-expense text-brand-on shadow-card"
+                    : "bg-surface-2 text-ink hover:opacity-80"
                 }`}
               >
                 <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
@@ -650,14 +650,14 @@ function TransactionsPage() {
             {/* Filter Controls Grid */}
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="filter-category" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
+                <label htmlFor="filter-category" className="text-xs font-medium text-ink-muted">
                   {t("transactions.filterCategoryLabel")}
                 </label>
                 <select
                   id="filter-category"
                   value={categoryFilter}
                   onChange={(event) => void setCategoryFilter(event.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 >
                   <option value="">{t("transactions.filterCategoryAll")}</option>
                   {categories.map((category) => (
@@ -668,7 +668,7 @@ function TransactionsPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="filter-from" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
+                <label htmlFor="filter-from" className="text-xs font-medium text-ink-muted">
                   {t("transactions.filterDateFrom")}
                 </label>
                 <input
@@ -676,11 +676,11 @@ function TransactionsPage() {
                   type="date"
                   value={dateFrom}
                   onChange={(event) => void setDateFrom(event.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="filter-to" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
+                <label htmlFor="filter-to" className="text-xs font-medium text-ink-muted">
                   {t("transactions.filterDateTo")}
                 </label>
                 <input
@@ -688,18 +688,18 @@ function TransactionsPage() {
                   type="date"
                   value={dateTo}
                   onChange={(event) => void setDateTo(event.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="sort-transactions" className="text-xs font-medium text-gray-600 dark:text-neutral-400">
+                <label htmlFor="sort-transactions" className="text-xs font-medium text-ink-muted">
                   {t("transactions.sortLabel")}
                 </label>
                 <select
                   id="sort-transactions"
                   value={sortOption}
                   onChange={(event) => void setSortOption(event.target.value as SortOption)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                  className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 >
                   <option value="newest">{t("transactions.sortNewest")}</option>
                   <option value="oldest">{t("transactions.sortOldest")}</option>
@@ -722,7 +722,7 @@ function TransactionsPage() {
                     void setQuery(null);
                     void setFilterType(null);
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
                     <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -736,23 +736,23 @@ function TransactionsPage() {
 
           <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           {currentRecurring.length > 0 && (
-            <details className="group rounded-lg border border-indigo-200 bg-indigo-50/70 p-4 text-sm shadow-sm dark:border-indigo-500/40 dark:bg-indigo-900/20">
+            <details className="group rounded-card border border-line bg-brand-soft p-4 text-sm shadow-card">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
                 <div>
-                  <p className="text-base font-semibold text-indigo-700 dark:text-indigo-200">{t("transactions.recurringSummaryTitle")}</p>
-                  <p className="text-xs text-indigo-600 dark:text-indigo-300">{t("transactions.recurringSummarySubtitle")}</p>
+                  <p className="text-base font-semibold text-brand">{t("transactions.recurringSummaryTitle")}</p>
+                  <p className="text-xs text-ink-muted">{t("transactions.recurringSummarySubtitle")}</p>
                 </div>
                 <span className="flex items-center gap-2">
                   <span
                     className={`text-base font-semibold ${
-                      currentRecurringTotalCents < 0 ? "text-red-600" : "text-green-600"
+                      currentRecurringTotalCents < 0 ? "text-expense" : "text-income"
                     }`}
                   >
                     {toDecimalString(fromCents(currentRecurringTotalCents))} €
                   </span>
                   <svg
                     aria-hidden="true"
-                    className="h-3.5 w-3.5 text-indigo-500 transition-transform duration-200 group-open:rotate-90"
+                    className="h-3.5 w-3.5 text-brand transition-transform duration-200 group-open:rotate-90"
                     viewBox="0 0 20 20"
                     fill="none"
                     xmlns="http://www.w3.org/2000/svg"
@@ -763,19 +763,19 @@ function TransactionsPage() {
               </summary>
               <ul className="mt-3 space-y-2">
                 {currentRecurring.map((rec) => (
-                  <li key={rec.id} className="flex flex-col gap-1 rounded-md border border-indigo-100 bg-white/70 p-3 dark:border-indigo-900/40 dark:bg-neutral-900/70">
+                  <li key={rec.id} className="flex flex-col gap-1 rounded-field border border-line bg-surface/70 p-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-900 dark:text-neutral-100">{rec.description}</p>
+                      <p className="text-sm font-medium text-ink">{rec.description}</p>
                       <span
                         className={`text-sm font-semibold ${
-                          rec.amountCents < 0 ? "text-red-600" : "text-green-600"
+                          rec.amountCents < 0 ? "text-expense" : "text-income"
                         }`}
                       >
                         {toDecimalString(fromCents(rec.amountCents))} €
                       </span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
-                      <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                      <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
                         {t("transactions.recurringBadge")}
                       </span>
                       <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
@@ -786,16 +786,16 @@ function TransactionsPage() {
             </details>
           )}
 
-          <details className="group rounded-lg border border-gray-200 bg-white/90 p-4 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
+          <details className="group rounded-card border border-line bg-surface p-4 text-sm shadow-card">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-normal text-gray-600 dark:text-neutral-300">{t("transactions.upcomingRecurring")}</p>
+                <p className="text-xs font-normal text-ink-muted">{t("transactions.upcomingRecurring")}</p>
               </div>
-              <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
+              <span className="flex items-center gap-2 text-xs text-ink-muted">
                 {format(nextDate, "LLLL yyyy", { locale: dfLocale })}
                 <svg
                   aria-hidden="true"
-                  className="h-3.5 w-3.5 text-gray-400 transition-transform duration-200 group-open:rotate-90 dark:text-neutral-400"
+                  className="h-3.5 w-3.5 text-ink-faint transition-transform duration-200 group-open:rotate-90"
                   viewBox="0 0 20 20"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
@@ -805,23 +805,23 @@ function TransactionsPage() {
               </span>
             </summary>
             {nextRecurring.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noRecurringScheduled")}</p>
+              <p className="mt-3 text-sm text-ink-muted">{t("transactions.noRecurringScheduled")}</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {nextRecurring.map((rec) => {
                   const checked = !skipsNext.has(rec.id);
                   return (
-                    <li key={rec.id} className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50/80 p-3 dark:border-neutral-800 dark:bg-neutral-800/60">
-                      <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-neutral-100">
+                    <li key={rec.id} className="flex items-center justify-between gap-3 rounded-field border border-line bg-surface-2 p-3">
+                      <label className="flex items-center gap-3 text-sm text-ink">
                         <input
                           type="checkbox"
                           checked={checked}
                           onChange={(event) => toggleSkip(rec.id, event.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus-visible:ring-indigo-500"
+                          className="h-4 w-4 rounded border-line-strong text-brand focus-visible:ring-brand"
                         />
                         <span>{rec.description}</span>
                       </label>
-                      <span className={`text-sm font-semibold ${rec.amountCents < 0 ? "text-red-600" : "text-green-600"}`}>
+                      <span className={`text-sm font-semibold ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
                         {toDecimalString(fromCents(rec.amountCents))} €
                       </span>
                     </li>
@@ -834,22 +834,22 @@ function TransactionsPage() {
 
           {filteredTotals.count > 0 && (
             <div
-              className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800/70"
+              className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm"
               aria-live="polite"
             >
-              <span className="text-gray-600 dark:text-neutral-300">
+              <span className="text-ink-muted">
                 {hasFilters
                   ? t("transactions.filteredTotalLabel", { count: filteredTotals.count })
                   : t("transactions.allTotalLabel", { count: filteredTotals.count })}
               </span>
               <span className="flex flex-wrap items-center gap-2 font-semibold tabular-nums">
                 {filteredTotals.incomeCents > 0 && (
-                  <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-green-700 dark:bg-green-900/30 dark:text-green-200">
+                  <span className="inline-flex items-center rounded-full bg-income-soft px-2.5 py-0.5 text-income">
                     +{toDecimalString(fromCents(filteredTotals.incomeCents))} €
                   </span>
                 )}
                 {filteredTotals.outcomeCents > 0 && (
-                  <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-red-700 dark:bg-red-900/30 dark:text-red-200">
+                  <span className="inline-flex items-center rounded-full bg-expense-soft px-2.5 py-0.5 text-expense">
                     -{toDecimalString(fromCents(filteredTotals.outcomeCents))} €
                   </span>
                 )}
@@ -857,8 +857,8 @@ function TransactionsPage() {
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 ${
                       filteredTotals.netCents >= 0
-                        ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-100"
-                        : "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-100"
+                        ? "bg-income-soft text-income"
+                        : "bg-expense-soft text-expense"
                     }`}
                   >
                     {t("transactions.netLabel")}: {filteredTotals.netCents >= 0 ? "+" : "-"}
@@ -873,26 +873,26 @@ function TransactionsPage() {
             {sortedItems.map((tx) => (
               <li
                 key={tx.id}
-                className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm transition hover:border-indigo-200 focus-within:border-indigo-300 dark:border-neutral-700 dark:bg-neutral-900/90"
+                className="rounded-card border border-line bg-surface p-3 text-sm shadow-card transition hover:border-brand/40 focus-within:border-brand"
               >
                 <div className="flex items-stretch justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">
+                      <p className="text-sm font-semibold text-ink">
                         {tx.description}
                       </p>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                       <time dateTime={tx.occurredAt}>
                         {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
                       </time>
                       {pendingTxIds.has(tx.id) && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                        <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">
                           {t("transactions.pendingSync")}
                         </span>
                       )}
                       {tx.categoryId && (
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted">
                           {t("transactions.categoryLabel")}: {categoriesById[tx.categoryId] ?? tx.categoryId}
                         </span>
                       )}
@@ -901,14 +901,14 @@ function TransactionsPage() {
                   <div className="flex w-1/3 flex-col items-end justify-between self-stretch">
                     <span
                       className={`text-sm font-semibold text-right ${
-                        tx.amountCents < 0 ? "text-red-600" : "text-green-600"
+                        tx.amountCents < 0 ? "text-expense" : "text-income"
                       }`}
                     >
                       {toDecimalString(fromCents(tx.amountCents))} €
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-40 dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-brand transition hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:opacity-40"
                       disabled={pendingTxIds.has(tx.id)}
                       onClick={(event) => {
                         if (pendingTxIds.has(tx.id)) return;
@@ -929,10 +929,10 @@ function TransactionsPage() {
               </li>
             ))}
             {items.length === 0 && !error && (
-              <li className="text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noTransactionsYet")}</li>
+              <li className="text-sm text-ink-muted">{t("transactions.noTransactionsYet")}</li>
             )}
             {items.length > 0 && filteredItems.length === 0 && hasFilters && (
-              <li className="text-sm text-gray-500 dark:text-neutral-400" role="status">
+              <li className="text-sm text-ink-muted" role="status">
                 {normalizedQuery ? t("transactions.noSearchMatches") : t("transactions.noFilterMatches")}
               </li>
             )}
@@ -949,15 +949,15 @@ function TransactionsPage() {
           tabIndex={0}
         >
           {recurringError && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-danger">
               {recurringError}
             </p>
           )}
-          <div className="flex items-center justify-end gap-2 text-sm text-gray-700 dark:text-neutral-200">
+          <div className="flex items-center justify-end gap-2 text-sm text-ink">
             <span>{t("transactions.recurringTotalLabel")}</span>
             <span
               className={`inline-flex items-center rounded-full px-3 py-1 font-semibold ${
-                recurringTotalCents < 0 ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200" : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-200"
+                recurringTotalCents < 0 ? "bg-expense-soft text-expense" : "bg-income-soft text-income"
               }`}
             >
               {toDecimalString(fromCents(recurringTotalCents))} €
@@ -965,31 +965,31 @@ function TransactionsPage() {
           </div>
           <ul className="grid gap-2 xl:grid-cols-2">
             {filteredRecurringItems.map((rec) => (
-              <li key={rec.id} className="rounded-lg border border-gray-200 bg-white/90 p-3 text-sm shadow-sm dark:border-neutral-700 dark:bg-neutral-900/90">
+              <li key={rec.id} className="rounded-card border border-line bg-surface p-3 text-sm shadow-card">
                 <div className="flex items-stretch justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">{rec.description}</p>
+                      <p className="text-sm font-semibold text-ink">{rec.description}</p>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                       <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted">
                         {t("transactions.nextLabel", { date: format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }) })}
                       </span>
                       {rec.categoryId && (
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
+                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted">
                           {t("transactions.categoryLabel")}: {categoriesById[rec.categoryId] ?? rec.categoryId}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="flex w-1/3 flex-col items-end justify-between self-stretch">
-                    <span className={`text-sm font-semibold text-right ${rec.amountCents < 0 ? "text-red-600" : "text-green-600"}`}>
+                    <span className={`text-sm font-semibold text-right ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
                       {toDecimalString(fromCents(rec.amountCents))} €
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-brand transition hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingRecurring(rec);
@@ -1008,10 +1008,10 @@ function TransactionsPage() {
               </li>
             ))}
             {recurringItems.length === 0 && (
-              <li className="text-sm text-gray-500 dark:text-neutral-400">{t("transactions.noRecurringYet")}</li>
+              <li className="text-sm text-ink-muted">{t("transactions.noRecurringYet")}</li>
             )}
             {recurringItems.length > 0 && filteredRecurringItems.length === 0 && normalizedRecurringQuery && (
-              <li className="text-sm text-gray-500 dark:text-neutral-400" role="status">
+              <li className="text-sm text-ink-muted" role="status">
                 {t("transactions.noRecurringMatches")}
               </li>
             )}
@@ -1087,7 +1087,7 @@ export default function TransactionsPageWithSuspense() {
   const { t } = useI18n();
 
   return (
-    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">{t("transactions.loading")}</p></main>}>
+    <Suspense fallback={<main className="p-6"><p className="text-sm text-ink-muted">{t("transactions.loading")}</p></main>}>
       <TransactionsPage />
     </Suspense>
   );

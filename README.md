@@ -32,7 +32,7 @@ Core technologies (derived from workspace manifests and config):
 - Runtime: Node.js (>= 22.12.0, pinned in `.nvmrc`)
 - Framework: Next.js 14.2.5 (App Router)
 - Language: TypeScript (strict) / React 18.3.1
-- Styling: Tailwind CSS 3.4.x + @tailwindcss/forms
+- Styling: Tailwind CSS 3.4.x + @tailwindcss/forms — "Calm Finance" design system with semantic tokens (light + dark, see [`docs/design/`](docs/design/))
 - Data Layer: Prisma ORM 5.19.x with PostgreSQL & generated client
 - Validation: Zod
 - Charts/Visualization: chart.js + react-chartjs-2 + chartjs-plugin-datalabels
@@ -207,6 +207,7 @@ Current implemented features include:
 - Domain utilities (money formatting, numeric handling, string helpers, sync merge logic) in `@doewe/shared`.
 - Chart visualization using Chart.js to display spending patterns.
 - Accessible, mobile‑first UI components styled with Tailwind, with reusable toast + spinner feedback primitives.
+- **"Calm Finance" design system**: semantic design tokens (surfaces, ink, brand, income/expense/savings, status) that adapt to light and dark automatically, applied across every screen and component. Source & spec live in [`docs/design/`](docs/design/) (`design-system.html`, `claude-design-prompt.md`, brand logos).
 
 Planned / extensible areas:
 - Advanced anomaly detection across spending categories.
@@ -396,9 +397,10 @@ npm run lint && npm run typecheck && npm run test
 
 - Enhanced analytics (trend lines, category forecasts)
 - Export/import (CSV, OFX) and optional bank connections
-- Design-system rollout (tokens + component refresh)
 - Fine-grained household permissions
 - Performance budget & bundle size tracking
+
+> ✅ **Shipped:** the "Calm Finance" design-system rollout (semantic tokens + full component/screen refresh, light + dark) is complete — see [`docs/design/`](docs/design/).
 
 ---
 

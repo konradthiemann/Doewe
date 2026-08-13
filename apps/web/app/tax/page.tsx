@@ -74,7 +74,7 @@ export default function TaxPage() {
   const years = Array.from({ length: YEAR_RANGE }, (_, i) => currentYear - i);
   const totalCents = data?.categorySums.reduce((sum, entry) => sum + entry.totalCents, 0) ?? 0;
   const cardClass =
-    "rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95";
+    "rounded-card border border-line bg-surface/95 p-4 shadow-card";
 
   return (
     <main id="maincontent" className="py-6 md:py-8">
@@ -83,7 +83,7 @@ export default function TaxPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-lg font-medium">{t("tax.title")}</h1>
-              <p className="mt-1 text-sm text-gray-600 dark:text-neutral-300">{t("tax.description")}</p>
+              <p className="mt-1 text-sm text-ink-muted">{t("tax.description")}</p>
             </div>
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium" htmlFor="tax-year">
@@ -93,7 +93,7 @@ export default function TaxPage() {
                 id="tax-year"
                 value={year}
                 onChange={(event) => setYear(Number(event.target.value))}
-                className="rounded-md border-gray-300 text-sm dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                className="rounded-field border-line-strong bg-surface text-sm text-ink focus:border-brand focus:ring-brand"
               >
                 {years.map((option) => (
                   <option key={option} value={option}>
@@ -106,19 +106,19 @@ export default function TaxPage() {
         </div>
 
         {error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
         {loading && (
-          <p role="status" className="text-sm text-gray-600 dark:text-neutral-300">
+          <p role="status" className="text-sm text-ink-muted">
             {t("tax.loading")}
           </p>
         )}
 
         {data && data.transactions.length === 0 && !loading && (
           <div className={cardClass}>
-            <p className="text-sm text-gray-600 dark:text-neutral-300">{t("tax.empty")}</p>
+            <p className="text-sm text-ink-muted">{t("tax.empty")}</p>
           </div>
         )}
 
@@ -128,12 +128,12 @@ export default function TaxPage() {
               <h2 id="tax-sums-heading" className="text-base font-medium">
                 {t("tax.categorySumsTitle")}
               </h2>
-              <ul className="mt-3 divide-y divide-gray-100 dark:divide-neutral-800">
+              <ul className="mt-3 divide-y divide-line">
                 {data.categorySums.map((entry) => (
                   <li key={entry.categoryId ?? "uncategorized"} className="flex items-center justify-between gap-3 py-2 text-sm">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{entry.categoryName ?? t("tax.uncategorized")}</p>
-                      <p className="text-xs text-gray-500 dark:text-neutral-400">
+                      <p className="text-xs text-ink-muted">
                         {t("tax.receiptRatio", { with: entry.withReceiptCount, total: entry.count })}
                       </p>
                     </div>
@@ -143,7 +143,7 @@ export default function TaxPage() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-2 flex items-center justify-between border-t border-gray-200 pt-2 text-sm font-semibold dark:border-neutral-700">
+              <div className="mt-2 flex items-center justify-between border-t border-line pt-2 text-sm font-semibold">
                 <span>{t("tax.total")}</span>
                 <span className="tabular-nums">{toDecimalString(fromCents(totalCents))} €</span>
               </div>
@@ -153,7 +153,7 @@ export default function TaxPage() {
               <h2 id="tax-transactions-heading" className="text-base font-medium">
                 {t("tax.transactionsTitle")}
               </h2>
-              <ul className="mt-3 divide-y divide-gray-100 dark:divide-neutral-800">
+              <ul className="mt-3 divide-y divide-line">
                 {data.transactions.map((tx) => {
                   const isExpanded = expanded.has(tx.id);
                   const hasReceipt = tx.attachments.length > 0;
@@ -164,22 +164,22 @@ export default function TaxPage() {
                         onClick={() => toggleExpanded(tx.id)}
                         aria-expanded={isExpanded}
                         aria-controls={`tax-tx-${tx.id}`}
-                        className="flex w-full items-center justify-between gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-md"
+                        className="flex w-full items-center justify-between gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 rounded-field"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{tx.description}</p>
-                          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-neutral-400">
+                          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                             <span>{format(parseISO(tx.occurredAt), "P", { locale: dfLocale })}</span>
                             {tx.category && (
-                              <span className="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-700 dark:bg-neutral-800 dark:text-neutral-300">
+                              <span className="rounded-full bg-surface-2 px-2 py-0.5 font-medium text-ink">
                                 {tx.category.name}
                               </span>
                             )}
                             <span
                               className={`rounded-full px-2 py-0.5 font-semibold ${
                                 hasReceipt
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
-                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                                  ? "bg-success-soft text-success"
+                                  : "bg-warning-soft text-warning"
                               }`}
                             >
                               {hasReceipt ? t("tax.receiptPresent") : t("tax.receiptMissing")}
@@ -188,7 +188,7 @@ export default function TaxPage() {
                         </div>
                         <span
                           className={`shrink-0 text-sm font-semibold tabular-nums ${
-                            tx.amountCents >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                            tx.amountCents >= 0 ? "text-income" : "text-expense"
                           }`}
                         >
                           {toDecimalString(fromCents(tx.amountCents))} €
@@ -203,7 +203,7 @@ export default function TaxPage() {
                                 href={`/api/attachments/${attachment.id}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="flex items-center gap-2 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                                className="flex items-center gap-2 text-xs font-medium text-brand hover:underline"
                               >
                                 <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3.5 w-3.5">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
@@ -212,7 +212,7 @@ export default function TaxPage() {
                               </a>
                             ))
                           ) : (
-                            <p className="text-xs text-gray-500 dark:text-neutral-400">{t("tax.receiptMissingHint")}</p>
+                            <p className="text-xs text-ink-muted">{t("tax.receiptMissingHint")}</p>
                           )}
                         </div>
                       )}

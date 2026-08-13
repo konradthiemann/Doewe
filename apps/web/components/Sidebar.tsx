@@ -19,9 +19,9 @@ import { useI18n } from "../lib/i18n";
  */
 
 const rowBase =
-  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500";
-const rowActive = "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300";
-const rowIdle = "text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-800";
+  "flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+const rowActive = "bg-brand-soft text-brand";
+const rowIdle = "text-ink-muted hover:bg-surface-2 hover:text-ink";
 
 const iconClass = "h-5 w-5 shrink-0";
 
@@ -162,10 +162,10 @@ export default function Sidebar() {
   }, [pathname, t]);
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-gray-100 bg-white md:flex lg:w-64 dark:border-neutral-800 dark:bg-neutral-950">
+    <aside className="fixed inset-y-0 left-0 z-header hidden w-56 flex-col border-r border-line bg-surface md:flex lg:w-64">
       {/* Brand */}
       <div className="flex h-14 items-center px-5">
-        <span className="text-base font-semibold tracking-tight text-gray-900 dark:text-neutral-100">
+        <span className="text-base font-semibold tracking-tight text-ink">
           Doewe
         </span>
       </div>
@@ -174,7 +174,7 @@ export default function Sidebar() {
       <div className="px-3 pb-2">
         <Link
           href={primaryAction.href}
-          className="flex items-center gap-3 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-neutral-950"
+          className="flex items-center gap-3 rounded-field bg-brand px-3 py-2.5 text-sm font-semibold text-brand-on shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
         >
           {primaryAction.icon}
           {primaryAction.label}
@@ -200,7 +200,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Secondary links */}
-      <div className="space-y-1 border-t border-gray-100 px-3 py-3 dark:border-neutral-800">
+      <div className="space-y-1 border-t border-line px-3 py-3">
         {secondaryLinks.map(({ href, label, icon }) => {
           const active = pathname === href;
           return (
@@ -218,7 +218,7 @@ export default function Sidebar() {
         <button
           type="button"
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/40"
+          className="flex w-full items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium text-danger transition hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
         >
           <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

@@ -5,5 +5,5 @@ import { cn } from "../../lib/cn";
  * Ersetzt "Lädt…"-Texte: hält das Layout stabil und wirkt schneller.
  */
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden="true" className={cn("animate-pulse rounded-md bg-gray-200 dark:bg-neutral-800", className)} />;
+  return <div aria-hidden="true" className={cn("animate-pulse rounded-field bg-surface-2 motion-reduce:animate-none", className)} />;
 }

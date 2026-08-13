@@ -144,21 +144,21 @@ export default function NotificationsCard() {
   }
 
   const cardClass =
-    "rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95";
+    "rounded-card border border-line bg-surface/95 p-4 shadow-card";
 
   if (!mounted) return null;
 
   return (
     <div className={cardClass}>
       <h2 className="text-lg font-medium">{t("notifications.title")}</h2>
-      <p className="text-sm text-gray-600 dark:text-neutral-300">{t("notifications.description")}</p>
+      <p className="text-sm text-ink-muted">{t("notifications.description")}</p>
 
       {!pushSupported() ? (
-        <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">{t("notifications.unsupported")}</p>
+        <p className="mt-3 text-sm text-ink-muted">{t("notifications.unsupported")}</p>
       ) : ios && !standalone ? (
-        <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">{t("notifications.iosInstallHint")}</p>
+        <p className="mt-3 text-sm text-ink-muted">{t("notifications.iosInstallHint")}</p>
       ) : !vapidConfigured() ? (
-        <p className="mt-3 text-sm text-gray-500 dark:text-neutral-400">{t("notifications.unconfigured")}</p>
+        <p className="mt-3 text-sm text-ink-muted">{t("notifications.unconfigured")}</p>
       ) : (
         <div className="mt-3 space-y-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -179,45 +179,45 @@ export default function NotificationsCard() {
           </div>
 
           {subscribed && settings && (
-            <div className="space-y-4 border-t border-gray-100 pt-4 dark:border-neutral-800">
+            <div className="space-y-4 border-t border-line pt-4">
               <label className="flex items-center justify-between gap-3">
-                <span className="text-sm text-gray-700 dark:text-neutral-200">{t("notifications.budgetAlerts")}</span>
+                <span className="text-sm text-ink">{t("notifications.budgetAlerts")}</span>
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-brand focus:ring-brand"
                   checked={settings.notifyBudgetAlerts}
                   onChange={(e) => updateFlag("notifyBudgetAlerts", e.target.checked)}
                 />
               </label>
 
               <label className="flex items-center justify-between gap-3">
-                <span className="text-sm text-gray-700 dark:text-neutral-200">{t("notifications.monthlyReview")}</span>
+                <span className="text-sm text-ink">{t("notifications.monthlyReview")}</span>
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-brand focus:ring-brand"
                   checked={settings.notifyMonthlyReview}
                   onChange={(e) => updateFlag("notifyMonthlyReview", e.target.checked)}
                 />
               </label>
 
-              <div className="border-t border-gray-100 pt-4 dark:border-neutral-800">
+              <div className="border-t border-line pt-4">
                 <label className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-gray-700 dark:text-neutral-200">
+                  <span className="text-sm font-medium text-ink">
                     {t("notifications.reminderTitle")}
                   </span>
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="h-4 w-4 rounded border-line-strong text-brand focus:ring-brand"
                     checked={settings.reminder.enabled}
                     onChange={(e) => updateReminder({ enabled: e.target.checked })}
                   />
                 </label>
-                <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">{t("notifications.reminderHint")}</p>
+                <p className="mt-1 text-xs text-ink-muted">{t("notifications.reminderHint")}</p>
 
                 {settings.reminder.enabled && (
                   <div className="mt-3 space-y-3">
                     <div className="flex items-center gap-3">
-                      <label htmlFor="reminder-time" className="text-sm text-gray-700 dark:text-neutral-200">
+                      <label htmlFor="reminder-time" className="text-sm text-ink">
                         {t("notifications.reminderTime")}
                       </label>
                       <input
@@ -225,12 +225,12 @@ export default function NotificationsCard() {
                         type="time"
                         value={settings.reminder.time}
                         onChange={(e) => updateReminder({ time: e.target.value })}
-                        className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                        className="rounded-field border border-line-strong bg-surface px-2 py-1 text-sm text-ink shadow-card focus:border-brand focus:outline-none"
                       />
                     </div>
 
                     <fieldset>
-                      <legend className="text-sm text-gray-700 dark:text-neutral-200">
+                      <legend className="text-sm text-ink">
                         {t("notifications.reminderWeekdays")}
                       </legend>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -242,10 +242,10 @@ export default function NotificationsCard() {
                               type="button"
                               onClick={() => toggleWeekday(bit)}
                               aria-pressed={active}
-                              className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                              className={`rounded-field border px-2.5 py-1 text-xs font-medium transition-colors ${
                                 active
-                                  ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                                  : "border-gray-300 bg-white text-gray-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                                  ? "border-brand bg-brand-soft text-brand"
+                                  : "border-line-strong bg-surface text-ink-muted"
                               }`}
                             >
                               {t(`notifications.weekday.${key}`)}
@@ -256,12 +256,12 @@ export default function NotificationsCard() {
                     </fieldset>
 
                     <label className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-gray-700 dark:text-neutral-200">
+                      <span className="text-sm text-ink">
                         {t("notifications.smartSuppress")}
                       </span>
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        className="h-4 w-4 rounded border-line-strong text-brand focus:ring-brand"
                         checked={settings.reminder.smartSuppress}
                         onChange={(e) => updateReminder({ smartSuppress: e.target.checked })}
                       />

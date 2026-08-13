@@ -203,59 +203,59 @@ export default function CategoriesPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-lg font-medium">{t("settings.categories.title")}</h1>
-            <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.categories.subtitle")}</p>
+            <p className="text-sm text-ink-muted">{t("settings.categories.subtitle")}</p>
           </div>
           <button
             type="button"
             onClick={() => void categoriesQuery.refetch()}
-            className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+            className="inline-flex items-center rounded-field border border-line-strong px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-surface-2 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             {catLoading ? t("settings.categories.loading") : t("settings.categories.refresh")}
           </button>
         </div>
 
-        {catError && <p className="text-sm text-red-600" role="alert">{catError}</p>}
-        {catMessage && <p className="text-sm text-green-700" role="status">{catMessage}</p>}
+        {catError && <p className="text-sm text-danger" role="alert">{catError}</p>}
+        {catMessage && <p className="text-sm text-success" role="status">{catMessage}</p>}
 
-        {catLoading && <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.categories.loading")}</p>}
-        {noCategories && <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.categories.listEmpty")}</p>}
+        {catLoading && <p className="text-sm text-ink-muted">{t("settings.categories.loading")}</p>}
+        {noCategories && <p className="text-sm text-ink-muted">{t("settings.categories.listEmpty")}</p>}
 
         <div className="space-y-3">
           {categories.map((category) => {
             const isExpanded = expandedCategories.has(category.id);
             const isProtected = isProtectedCategory(category.name);
             return (
-            <div key={category.id} className="rounded-lg border border-gray-200 bg-white/80 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/80">
+            <div key={category.id} className="rounded-card border border-line bg-surface/80 shadow-card">
               <button
                 type="button"
                 onClick={() => toggleCategoryExpanded(category.id)}
                 aria-expanded={isExpanded}
                 aria-controls={`category-content-${category.id}`}
-                className="flex w-full items-center justify-between p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded-lg"
+                className="flex w-full items-center justify-between p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 rounded-card"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-neutral-100">{category.name}</p>
+                  <p className="text-sm font-semibold text-ink">{category.name}</p>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    category.isIncome ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                    category.isIncome ? "bg-income-soft text-income" : "bg-expense-soft text-expense"
                   }`}>
                     {category.isIncome ? t("settings.categories.badgeIncome") : t("settings.categories.badgeOutcome")}
                   </span>
                   {category.isTaxRelevant && (
-                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">
+                    <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">
                       {t("settings.categories.badgeTax")}
                     </span>
                   )}
                   {isProtected && (
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
+                    <span className="rounded-full bg-info-soft px-2 py-0.5 text-xs font-semibold text-info">
                       {t("settings.categories.badgeProtected")}
                     </span>
                   )}
                   {isBusy(category.id) && (
-                    <span className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.working")}</span>
+                    <span className="text-xs text-ink-muted">{t("settings.categories.working")}</span>
                   )}
                 </div>
                 <svg
-                  className={`h-4 w-4 text-gray-500 transition-transform duration-200 dark:text-neutral-400 ${isExpanded ? "rotate-180" : ""}`}
+                  className={`h-4 w-4 text-ink-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -271,7 +271,7 @@ export default function CategoriesPage() {
                 hidden={!isExpanded}
               >
                 {isProtected ? (
-                  <p className="text-sm text-gray-500 dark:text-neutral-400">{t("settings.categories.protectedHint")}</p>
+                  <p className="text-sm text-ink-muted">{t("settings.categories.protectedHint")}</p>
                 ) : (
               <>
               <div className="mt-3 flex items-start gap-2">
@@ -281,20 +281,20 @@ export default function CategoriesPage() {
                   checked={category.isTaxRelevant}
                   disabled={isBusy(category.id)}
                   onChange={(event) => handleTaxToggle(category.id, event.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-800"
+                  className="mt-0.5 h-4 w-4 rounded border-line-strong text-brand focus:ring-brand"
                 />
                 <label htmlFor={`tax-${category.id}`} className="flex flex-col">
-                  <span className="text-xs font-medium text-gray-700 dark:text-neutral-200">
+                  <span className="text-xs font-medium text-ink">
                     {t("settings.categories.taxToggleLabel")}
                   </span>
-                  <span className="text-xs text-gray-500 dark:text-neutral-400">
+                  <span className="text-xs text-ink-muted">
                     {t("settings.categories.taxToggleHint")}
                   </span>
                 </label>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-700 dark:text-neutral-200" htmlFor={`rename-${category.id}`}>
+                  <label className="text-xs font-medium text-ink" htmlFor={`rename-${category.id}`}>
                     {t("settings.categories.renameLabel")}
                   </label>
                   <div className="flex gap-2">
@@ -302,13 +302,13 @@ export default function CategoriesPage() {
                       id={`rename-${category.id}`}
                       value={renameDraft[category.id] ?? category.name}
                       onChange={(event) => setRenameDraft((current) => ({ ...current, [category.id]: event.target.value }))}
-                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                      className="w-full rounded-field border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink shadow-card focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                     />
                     <button
                       type="button"
                       onClick={() => handleRename(category.id)}
                       disabled={isBusy(category.id)}
-                      className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-60"
+                      className="inline-flex items-center rounded-field bg-brand px-3 py-1.5 text-xs font-semibold text-brand-on shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-60"
                     >
                       {t("settings.categories.renameSubmit")}
                     </button>
@@ -316,7 +316,7 @@ export default function CategoriesPage() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-700 dark:text-neutral-200" htmlFor={`merge-${category.id}`}>
+                  <label className="text-xs font-medium text-ink" htmlFor={`merge-${category.id}`}>
                     {t("settings.categories.mergeLabel")}
                   </label>
                   <div className="flex gap-2">
@@ -324,7 +324,7 @@ export default function CategoriesPage() {
                       id={`merge-${category.id}`}
                       value={mergeTarget[category.id] ?? ""}
                       onChange={(event) => setMergeTarget((current) => ({ ...current, [category.id]: event.target.value }))}
-                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                      className="w-full rounded-field border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink shadow-card focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                     >
                       <option value="">{t("settings.categories.selectPlaceholder")}</option>
                       {otherCategories(category.id).map((option) => (
@@ -337,16 +337,16 @@ export default function CategoriesPage() {
                       type="button"
                       onClick={() => handleMerge(category.id)}
                       disabled={isBusy(category.id)}
-                      className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-60 dark:border-neutral-600 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                      className="inline-flex items-center rounded-field border border-line-strong px-3 py-1.5 text-xs font-semibold text-ink shadow-card transition hover:bg-surface-2 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-60"
                     >
                       {t("settings.categories.mergeSubmit")}
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.mergeHint")}</p>
+                  <p className="text-xs text-ink-muted">{t("settings.categories.mergeHint")}</p>
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-700 dark:text-neutral-200" htmlFor={`fallback-${category.id}`}>
+                  <label className="text-xs font-medium text-ink" htmlFor={`fallback-${category.id}`}>
                     {t("settings.categories.deleteLabel")}
                   </label>
                   <div className="flex gap-2">
@@ -354,7 +354,7 @@ export default function CategoriesPage() {
                       id={`fallback-${category.id}`}
                       value={fallbackTarget[category.id] ?? ""}
                       onChange={(event) => setFallbackTarget((current) => ({ ...current, [category.id]: event.target.value }))}
-                      className="w-1/2 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                      className="w-1/2 rounded-field border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink shadow-card focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                     >
                       <option value="">{t("settings.categories.selectPlaceholder")}</option>
                       {otherCategories(category.id).map((option) => (
@@ -367,18 +367,18 @@ export default function CategoriesPage() {
                       placeholder={t("settings.categories.fallbackNamePlaceholder")}
                       value={fallbackName[category.id] ?? ""}
                       onChange={(event) => setFallbackName((current) => ({ ...current, [category.id]: event.target.value }))}
-                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                      className="w-full rounded-field border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink shadow-card focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                     />
                     <button
                       type="button"
                       onClick={() => handleDelete(category.id)}
                       disabled={isBusy(category.id)}
-                      className="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-red-500 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-60"
+                      className="inline-flex items-center rounded-field bg-danger px-3 py-1.5 text-xs font-semibold text-brand-on shadow-card transition hover:opacity-90 focus:outline-none focus-visible:ring focus-visible:ring-danger focus-visible:ring-offset-2 disabled:opacity-60"
                     >
                       {t("settings.categories.deleteSubmit")}
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">{t("settings.categories.deleteHint")}</p>
+                  <p className="text-xs text-ink-muted">{t("settings.categories.deleteHint")}</p>
                 </div>
               </div>
               </>

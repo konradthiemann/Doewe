@@ -1,3 +1,13 @@
+## [0.1.6] - 2026-08-13
+### Added
+- **"Calm Finance" Design-System** — semantische Design-Tokens (Surfaces, Ink, Brand, Income/Expense/Savings, Status) als Tailwind-Klassen, die sich automatisch an Light- und Dark-Mode anpassen. Quelle & Spezifikation in `docs/design/` (`design-system.html`, `claude-design-prompt.md`, Marken-Logos als SVG).
+### Changed
+- Vollständiger Rollout der Tokens über alle Screens (Dashboard, Transactions, Saving Plan, Review, Categories, Settings, Tax, Login/Auth, Household-Join, Legal) und Komponenten — rohe Tailwind-Farben (`indigo-`, `gray-`, `red-`/`emerald-` etc.) durch Tokens ersetzt, redundante `dark:`-Neutral-Varianten entfernt.
+### Why
+- Ein ruhiges, konsistentes und WCAG-2.2-AA-taugliches Erscheinungsbild in Light + Dark; ein einziger Token-Satz statt verstreuter Hardcodes.
+### How
+- Tokens aus CSS-Variablen (RGB-Triplets für `<alpha-value>`), `darkMode: "class"`; Farbentscheidungen kontextsensitiv (finanzielles Rot = `expense`, Formularfehler = `danger`, Budget-Gesundheit = `success`/`warning`).
+
 ## [0.1.5] - 2026-08-13
 ### Added
 - **Phase 3b — Zwei-Wege-Sync mit Konfliktbehandlung** (#45): `POST /api/sync/push` (Batch-Ops mit Idempotenz via `mutationId`), `GET /api/sync/pull` (Haushalts-Snapshot mit ETag/304), `GET /api/sync/conflicts` (Konflikt-Journal für UI-Hinweise).

@@ -446,14 +446,14 @@ export default function TransactionForm({
         aria-hidden
         className={`pointer-events-none absolute -inset-1 rounded-xl blur-sm transition-opacity duration-700 ${
           txType === "income"
-            ? "bg-gradient-to-r from-green-500/20 via-emerald-400/20 to-green-400/20 opacity-100 animate-pulse"
-            : "bg-gradient-to-r from-rose-500/20 via-red-400/20 to-rose-400/20 opacity-100 animate-pulse"
+            ? "bg-income/15 opacity-100 animate-pulse motion-reduce:animate-none"
+            : "bg-expense/15 opacity-100 animate-pulse motion-reduce:animate-none"
         }`}
         style={{ animationDuration: "3.5s" }}
       />
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-xl border border-white/40 bg-white/95 p-4 text-left shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-neutral-800/95 sm:p-6"
+        className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-card border border-line bg-surface p-4 text-left shadow-raised sm:p-6"
         aria-describedby={submitError ? "form-error" : undefined}
       >
         <div className="flex items-center justify-between">
@@ -465,7 +465,7 @@ export default function TransactionForm({
               type="button"
               onClick={onClose}
               aria-label={t("common.close")}
-              className="rounded p-1 hover:bg-black/5 dark:hover:bg-white/10"
+              className="rounded p-1 text-ink-muted hover:bg-surface-2 hover:text-ink"
             >
               ×
             </button>
@@ -482,8 +482,8 @@ export default function TransactionForm({
             className={cn(
               "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "income"
-                ? "text-white focus-visible:ring-green-500"
-                : "text-green-700 dark:text-green-300 focus-visible:ring-green-500"
+                ? "text-brand-on focus-visible:ring-income"
+                : "text-income focus-visible:ring-income"
             )}
             aria-pressed={txType === "income"}
             onClick={() => {
@@ -496,7 +496,7 @@ export default function TransactionForm({
             {txType === "income" && (
               <span
                 aria-hidden
-                className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500 via-emerald-500 to-green-400 animate-pulse opacity-80"
+                className="absolute inset-0 rounded-field bg-income animate-pulse opacity-90 motion-reduce:animate-none"
                 style={{ animationDuration: "2.8s" }}
               />
             )}
@@ -506,8 +506,8 @@ export default function TransactionForm({
             className={cn(
               "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "outcome"
-                ? "text-white focus-visible:ring-red-500"
-                : "text-red-700 dark:text-red-300 focus-visible:ring-red-500"
+                ? "text-brand-on focus-visible:ring-expense"
+                : "text-expense focus-visible:ring-expense"
             )}
             aria-pressed={txType === "outcome"}
             onClick={() => {
@@ -520,7 +520,7 @@ export default function TransactionForm({
             {txType === "outcome" && (
               <span
                 aria-hidden
-                className="absolute inset-0 rounded-md bg-gradient-to-r from-red-500 via-rose-500 to-red-400 animate-pulse opacity-80"
+                className="absolute inset-0 rounded-field bg-expense animate-pulse opacity-90 motion-reduce:animate-none"
                 style={{ animationDuration: "2.8s" }}
               />
             )}
@@ -530,13 +530,13 @@ export default function TransactionForm({
         {appConfig.enableAccountSelection && (
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="tx-account">
-              {t("transactionForm.accountLabel")} <span className="text-red-600">*</span>
+              {t("transactionForm.accountLabel")} <span className="text-danger">*</span>
             </label>
             <select
               {...register("accountId")}
               id="tx-account"
               aria-invalid={!!errors.accountId}
-              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+              className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
             >
               <option value="" disabled>
                 {t("transactionForm.accountPlaceholder")}
@@ -548,7 +548,7 @@ export default function TransactionForm({
               ))}
             </select>
             {errors.accountId && (
-              <p role="alert" className="mt-1 text-xs text-red-600">{errors.accountId.message}</p>
+              <p role="alert" className="mt-1 text-xs text-danger">{errors.accountId.message}</p>
             )}
           </div>
         )}
@@ -591,7 +591,7 @@ export default function TransactionForm({
                 ref={newCategoryRef}
                 value={newCategoryName}
                 onChange={(event) => setNewCategoryName(event.target.value)}
-                className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
                 aria-invalid={!!newCategoryError}
                 aria-describedby={newCategoryError ? "tx-category-error" : undefined}
               />
@@ -619,7 +619,7 @@ export default function TransactionForm({
                 </Button>
               </div>
               {newCategoryError && (
-                <p id="tx-category-error" role="alert" className="text-sm text-red-600">
+                <p id="tx-category-error" role="alert" className="text-sm text-danger">
                   {newCategoryError}
                 </p>
               )}
@@ -629,7 +629,7 @@ export default function TransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-description">
-            {t("transactionForm.descriptionLabel")} <span className="text-red-600">*</span>
+            {t("transactionForm.descriptionLabel")} <span className="text-danger">*</span>
           </label>
           <input
             {...register("description")}
@@ -639,16 +639,16 @@ export default function TransactionForm({
             }}
             id="tx-description"
             aria-invalid={!!errors.description}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
           {errors.description && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.description.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.description.message}</p>
           )}
         </div>
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="tx-amount">
-            {t("transactionForm.amountLabel")} <span className="text-red-600">*</span>
+            {t("transactionForm.amountLabel")} <span className="text-danger">*</span>
           </label>
           <input
             {...register("amount")}
@@ -657,20 +657,20 @@ export default function TransactionForm({
             placeholder={t("transactionForm.amountPlaceholder")}
             aria-invalid={!!errors.amount}
             aria-describedby="tx-amount-hint"
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
-          <p id="tx-amount-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
+          <p id="tx-amount-hint" className="mt-1 text-xs text-ink-muted">
             {t("transactionForm.amountHint")}
           </p>
           {errors.amount && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.amount.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.amount.message}</p>
           )}
         </div>
 
         {!isRecurring && (
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="tx-date">
-              {t("transactionForm.dateLabel")} <span className="text-red-600">*</span>
+              {t("transactionForm.dateLabel")} <span className="text-danger">*</span>
             </label>
             <input
               {...register("occurredAt")}
@@ -678,20 +678,20 @@ export default function TransactionForm({
               type="date"
               aria-invalid={!!errors.occurredAt}
               aria-describedby="tx-date-hint"
-              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+              className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
             />
-            <p id="tx-date-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
+            <p id="tx-date-hint" className="mt-1 text-xs text-ink-muted">
               {t("transactionForm.dateHint")}
             </p>
             {errors.occurredAt && (
-              <p role="alert" className="mt-1 text-xs text-red-600">{errors.occurredAt.message}</p>
+              <p role="alert" className="mt-1 text-xs text-danger">{errors.occurredAt.message}</p>
             )}
           </div>
         )}
 
         {!isRecurring && (
           <div className="space-y-3">
-            <div className="rounded-lg bg-amber-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-amber-900/20 dark:text-neutral-200">
+            <div className="rounded-field bg-warning-soft px-3 py-2 text-sm text-ink shadow-card">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium">
@@ -702,12 +702,12 @@ export default function TransactionForm({
                       aria-expanded={taxHintOpen}
                       aria-controls="tx-tax-hint"
                       aria-label={t("transactionForm.taxHintToggle")}
-                      className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400 text-xs font-semibold text-amber-700 hover:bg-amber-100 focus:outline-none focus-visible:ring focus-visible:ring-amber-500 dark:border-amber-500 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                      className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-warning text-xs font-semibold text-warning hover:bg-warning-soft focus:outline-none focus-visible:ring focus-visible:ring-warning"
                     >
                       i
                     </button>
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  <p className="text-xs text-ink-muted">
                     {t("transactionForm.taxToggleDescription")}
                   </p>
                 </div>
@@ -722,12 +722,12 @@ export default function TransactionForm({
                     }}
                     aria-checked={taxRelevant}
                   />
-                  <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-amber-600 dark:bg-neutral-700" />
-                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                  <span className="h-6 w-11 rounded-full bg-surface-2 transition peer-checked:bg-warning" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform peer-checked:translate-x-5" />
                 </label>
               </div>
               {taxHintOpen && (
-                <p id="tx-tax-hint" className="mt-2 text-xs text-gray-600 dark:text-neutral-300">
+                <p id="tx-tax-hint" className="mt-2 text-xs text-ink-muted">
                   {t("transactionForm.taxHint")}
                 </p>
               )}
@@ -745,10 +745,10 @@ export default function TransactionForm({
 
         {mode === "create" && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg bg-indigo-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-indigo-900/20 dark:text-neutral-200">
+            <div className="flex items-center justify-between rounded-field bg-brand-soft px-3 py-2 text-sm text-ink shadow-card">
               <div>
                 <p className="font-medium">{t("transactionForm.recurringToggleTitle")}</p>
-                <p className="text-xs text-gray-500 dark:text-neutral-400">
+                <p className="text-xs text-ink-muted">
                   {t("transactionForm.recurringToggleDescription")}
                 </p>
               </div>
@@ -760,14 +760,14 @@ export default function TransactionForm({
                   onChange={(event) => setIsRecurring(event.target.checked)}
                   aria-checked={isRecurring}
                 />
-                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-indigo-600 dark:bg-neutral-700" />
-                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                <span className="h-6 w-11 rounded-full bg-surface-2 transition peer-checked:bg-brand" />
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform peer-checked:translate-x-5" />
               </label>
             </div>
-            <div className="flex items-center justify-between rounded-lg bg-emerald-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-emerald-900/20 dark:text-neutral-200">
+            <div className="flex items-center justify-between rounded-field bg-savings-soft px-3 py-2 text-sm text-ink shadow-card">
               <div>
                 <p className="font-medium">{t("transactionForm.savingGoalToggleTitle")}</p>
-                <p className="text-xs text-gray-500 dark:text-neutral-400">
+                <p className="text-xs text-ink-muted">
                   {t("transactionForm.savingGoalToggleDescription")}
                 </p>
               </div>
@@ -782,20 +782,20 @@ export default function TransactionForm({
                   }}
                   aria-checked={isSavingGoal}
                 />
-                <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-emerald-600 dark:bg-neutral-700" />
-                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                <span className="h-6 w-11 rounded-full bg-surface-2 transition peer-checked:bg-savings" />
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform peer-checked:translate-x-5" />
               </label>
             </div>
             {isSavingGoal && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium" htmlFor="tx-saving-goal">
-                  {t("transactionForm.savingGoalLabel")} <span className="text-red-600">*</span>
+                  {t("transactionForm.savingGoalLabel")} <span className="text-danger">*</span>
                 </label>
                 <select
                   id="tx-saving-goal"
                   value={selectedSavingGoalId}
                   onChange={(event) => setSelectedSavingGoalId(event.target.value)}
-                  className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-emerald-500 focus:ring-emerald-500"
+                  className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-savings focus:ring-savings"
                 >
                   <option value="" disabled>
                     {t("transactionForm.savingGoalPlaceholder")}
@@ -812,7 +812,7 @@ export default function TransactionForm({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-medium" htmlFor="tx-interval-months">
-                    {t("transactionForm.intervalLabel")} <span className="text-red-600">*</span>
+                    {t("transactionForm.intervalLabel")} <span className="text-danger">*</span>
                   </label>
                   <input
                     id="tx-interval-months"
@@ -821,18 +821,18 @@ export default function TransactionForm({
                     max={24}
                     value={intervalMonths}
                     onChange={(event) => setIntervalMonths(Number(event.target.value))}
-                    className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                    className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
                     aria-required="true"
                     aria-invalid={!!recurringError}
                     aria-describedby={recurringError ? "tx-recurring-error" : undefined}
                   />
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  <p className="text-xs text-ink-muted">
                     {t("transactionForm.intervalHelper")}
                   </p>
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium" htmlFor="tx-day-of-month">
-                    {t("transactionForm.dayOfMonthLabel")} <span className="text-red-600">*</span>
+                    {t("transactionForm.dayOfMonthLabel")} <span className="text-danger">*</span>
                   </label>
                   <input
                     id="tx-day-of-month"
@@ -841,11 +841,11 @@ export default function TransactionForm({
                     max={31}
                     value={dayOfMonth}
                     onChange={(event) => setDayOfMonth(Number(event.target.value))}
-                    className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                    className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
                     aria-required="true"
                     aria-invalid={!!recurringError}
                   />
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  <p className="text-xs text-ink-muted">
                     {t("transactionForm.dayOfMonthHelper")}
                   </p>
                 </div>
@@ -858,14 +858,14 @@ export default function TransactionForm({
                     type="date"
                     value={startDate}
                     onChange={(event) => setStartDate(event.target.value)}
-                    className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+                    className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
                   />
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                  <p className="text-xs text-ink-muted">
                     {t("transactionForm.startDateHelper")}
                   </p>
                 </div>
                 {recurringError && (
-                  <p id="tx-recurring-error" role="alert" className="text-sm text-red-600">
+                  <p id="tx-recurring-error" role="alert" className="text-sm text-danger">
                     {recurringError}
                   </p>
                 )}
@@ -886,19 +886,19 @@ export default function TransactionForm({
         </div>
 
         {submitError && (
-          <p id="form-error" role="alert" className="text-sm text-red-600">
+          <p id="form-error" role="alert" className="text-sm text-danger">
             {submitError}
           </p>
         )}
 
         {attachmentUploadError && (
-          <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">
+          <p role="alert" className="text-sm text-warning">
             {attachmentUploadError}
           </p>
         )}
 
         {mode === "edit" && (
-          <div className="border-t border-gray-200 pt-4 dark:border-neutral-700">
+          <div className="border-t border-line pt-4">
             {!deleteConfirm ? (
               <button
                 type="button"
@@ -906,17 +906,17 @@ export default function TransactionForm({
                   setDeleteConfirm(true);
                   setDeleteError(null);
                 }}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-700 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-danger hover:opacity-80 focus:outline-none focus-visible:ring focus-visible:ring-danger focus-visible:ring-offset-2"
               >
                 {t("transactionForm.deleteAction")}
               </button>
             ) : (
               <div className="space-y-3">
-                <p className="text-sm text-gray-700 dark:text-neutral-300">
+                <p className="text-sm text-ink-muted">
                   {t("transactionForm.deleteConfirmText")}
                 </p>
                 {deleteError && (
-                  <p role="alert" className="text-sm text-red-600">
+                  <p role="alert" className="text-sm text-danger">
                     {deleteError}
                   </p>
                 )}

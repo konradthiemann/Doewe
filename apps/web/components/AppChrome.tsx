@@ -45,8 +45,8 @@ export default function AppChrome() {
       <Sidebar />
 
       {/* Top bar — phones only (< md); the sidebar replaces it from md up */}
-      <header className="fixed top-0 left-0 right-0 z-40 flex h-12 items-center justify-between border-b border-gray-100 bg-white/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden dark:border-neutral-800 dark:bg-neutral-950/95 dark:supports-[backdrop-filter]:bg-neutral-950/80">
-        <span className="text-sm font-semibold tracking-tight text-gray-900 dark:text-neutral-100">
+      <header className="fixed top-0 left-0 right-0 z-header flex h-12 items-center justify-between border-b border-line bg-surface/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-surface/80 md:hidden">
+        <span className="text-sm font-semibold tracking-tight text-ink">
           Doewe
         </span>
         <button
@@ -54,7 +54,7 @@ export default function AppChrome() {
           onClick={() => setMenuOpen(true)}
           aria-label={t("menu.open")}
           aria-expanded={menuOpen}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-600 transition hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          className="flex h-8 w-8 items-center justify-center rounded-field text-ink-muted transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <svg
             aria-hidden="true"
@@ -73,8 +73,8 @@ export default function AppChrome() {
       {/* Drawer overlay */}
       {menuOpen && (
         <div
-          /* z-[60]: must stack above the bottom pill nav (Header.tsx, z-50), which follows in DOM order */
-          className="fixed inset-0 z-[60] flex justify-end"
+          /* z-overlay: must stack above the bottom pill nav (Header.tsx, z-nav), which follows in DOM order */
+          className="fixed inset-0 z-overlay flex justify-end"
           role="dialog"
           aria-modal="true"
           aria-label={t("menu.title")}
@@ -87,17 +87,17 @@ export default function AppChrome() {
           />
 
           {/* Slide-in panel */}
-          <div className="relative flex w-72 flex-col bg-white shadow-2xl dark:bg-neutral-900">
+          <div className="relative flex w-72 flex-col bg-surface shadow-raised">
             {/* Panel header */}
-            <div className="flex h-12 items-center justify-between border-b border-gray-100 px-4 dark:border-neutral-800">
-              <span className="text-sm font-semibold text-gray-900 dark:text-neutral-100">
+            <div className="flex h-12 items-center justify-between border-b border-line px-4">
+              <span className="text-sm font-semibold text-ink">
                 {t("menu.title")}
               </span>
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
                 aria-label={t("common.close")}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                className="flex h-8 w-8 items-center justify-center rounded-field text-ink-muted transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <svg
                   aria-hidden="true"
@@ -117,10 +117,10 @@ export default function AppChrome() {
             <nav className="flex-1 space-y-1 px-3 py-4">
               <Link
                 href="/settings"
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                className={`flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   pathname === "/settings"
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
-                    : "text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    ? "bg-brand-soft text-brand"
+                    : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                 }`}
               >
                 <svg
@@ -141,10 +141,10 @@ export default function AppChrome() {
 
               <Link
                 href="/categories"
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                className={`flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   pathname === "/categories"
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
-                    : "text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    ? "bg-brand-soft text-brand"
+                    : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                 }`}
               >
                 <svg
@@ -165,10 +165,10 @@ export default function AppChrome() {
 
               <Link
                 href="/tax"
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                className={`flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   pathname === "/tax"
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
-                    : "text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    ? "bg-brand-soft text-brand"
+                    : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                 }`}
               >
                 <svg
@@ -189,14 +189,14 @@ export default function AppChrome() {
                 {t("nav.tax")}
               </Link>
 
-              <div className="my-2 h-px bg-gray-100 dark:bg-neutral-800" aria-hidden="true" />
+              <div className="my-2 h-px bg-line" aria-hidden="true" />
 
               <Link
                 href="/impressum"
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                className={`flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   pathname === "/impressum"
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
-                    : "text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    ? "bg-brand-soft text-brand"
+                    : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                 }`}
               >
                 <svg
@@ -217,10 +217,10 @@ export default function AppChrome() {
 
               <Link
                 href="/datenschutz"
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                className={`flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   pathname === "/datenschutz"
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
-                    : "text-gray-700 hover:bg-gray-100 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                    ? "bg-brand-soft text-brand"
+                    : "text-ink-muted hover:bg-surface-2 hover:text-ink"
                 }`}
               >
                 <svg
@@ -240,11 +240,11 @@ export default function AppChrome() {
             </nav>
 
             {/* Sign out */}
-            <div className="border-t border-gray-100 px-3 py-3 dark:border-neutral-800">
+            <div className="border-t border-line px-3 py-3">
               <button
                 type="button"
                 onClick={() => signOut({ callbackUrl: "/login" })}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-950/40"
+                className="flex w-full items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium text-danger transition hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
               >
                 <svg
                   aria-hidden="true"

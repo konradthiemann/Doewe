@@ -163,9 +163,9 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
   }
 
   const chipClass =
-    "flex items-center gap-2 rounded-lg border border-gray-200 bg-white/80 px-2 py-1.5 text-xs text-gray-700 dark:border-neutral-600 dark:bg-neutral-700/60 dark:text-neutral-200";
+    "flex items-center gap-2 rounded-field border border-line bg-surface-2 px-2 py-1.5 text-xs text-ink";
   const removeButtonClass =
-    "ml-auto rounded p-0.5 text-gray-500 hover:bg-black/5 hover:text-red-600 focus:outline-none focus-visible:ring focus-visible:ring-red-500 dark:text-neutral-400 dark:hover:bg-white/10";
+    "ml-auto rounded p-0.5 text-ink-muted hover:bg-surface-2 hover:text-danger focus:outline-none focus-visible:ring focus-visible:ring-danger";
 
   return (
     <div className="space-y-2">
@@ -197,7 +197,7 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
           type="button"
           onClick={() => cameraInputRef.current?.click()}
           disabled={busy || totalCount >= ATTACHMENTS_MAX_PER_TRANSACTION}
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700"
+          className="inline-flex items-center gap-1.5 rounded-field border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-brand"
         >
           <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
@@ -209,7 +209,7 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={busy || totalCount >= ATTACHMENTS_MAX_PER_TRANSACTION}
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-700"
+          className="inline-flex items-center gap-1.5 rounded-field border border-line-strong px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-2 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-brand"
         >
           <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
@@ -218,7 +218,7 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
         </button>
       </div>
       {busy && (
-        <p className="flex items-center gap-2 text-xs text-gray-500 dark:text-neutral-400" role="status">
+        <p className="flex items-center gap-2 text-xs text-ink-muted" role="status">
           <Spinner size="sm" />
           {t("transactionForm.attachmentsUploading")}
         </p>
@@ -232,12 +232,12 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
                 href={`/api/attachments/${attachment.id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="truncate font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                className="truncate font-medium text-brand hover:underline"
                 title={t("transactionForm.attachmentsOpen")}
               >
                 {attachment.fileName}
               </a>
-              <span className="shrink-0 text-gray-400 dark:text-neutral-500">{formatBytes(attachment.sizeBytes)}</span>
+              <span className="shrink-0 text-ink-faint">{formatBytes(attachment.sizeBytes)}</span>
               <button
                 type="button"
                 onClick={() => handleDeleteExisting(attachment.id)}
@@ -252,7 +252,7 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
             <li key={`${file.name}-${index}`} className={chipClass}>
               <FileIcon mimeType={file.type} />
               <span className="truncate font-medium">{file.name}</span>
-              <span className="shrink-0 text-gray-400 dark:text-neutral-500">{formatBytes(file.size)}</span>
+              <span className="shrink-0 text-ink-faint">{formatBytes(file.size)}</span>
               <button
                 type="button"
                 onClick={() => handleRemovePending(index)}
@@ -266,7 +266,7 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
         </ul>
       )}
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}

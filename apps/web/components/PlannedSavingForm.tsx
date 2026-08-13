@@ -183,14 +183,14 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
     <form
       onSubmit={handleSubmit(onSubmit)}
       aria-describedby={displayError ? "saving-plan-error" : undefined}
-      className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-xl border border-white/30 bg-white/95 p-4 text-left shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-neutral-800/95 sm:p-6"
+      className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-card border border-line bg-surface p-4 text-left shadow-raised sm:p-6"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 id={headingId} className="text-lg font-semibold">
             {isEditMode ? t("savingPlan.form.editTitle") : t("savingPlan.form.title")}
           </h3>
-          <p className="text-xs text-gray-500 dark:text-neutral-400">
+          <p className="text-xs text-ink-muted">
             {isEditMode
               ? t("savingPlan.form.editSubtitle")
               : scheduled
@@ -203,7 +203,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             type="button"
             onClick={onClose}
             aria-label={t("common.close")}
-            className="rounded-md p-1.5 transition hover:bg-black/5 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:hover:bg-white/10 dark:focus-visible:ring-offset-neutral-900"
+            className="rounded-field p-1.5 text-ink-muted transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           >
             <span aria-hidden="true" className="text-xl leading-none">
               ×
@@ -214,7 +214,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
 
       <div>
         <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-title">
-          {t("savingPlan.form.goalName")} <span className="text-red-600">*</span>
+          {t("savingPlan.form.goalName")} <span className="text-danger">*</span>
         </label>
         <input
           {...register("title")}
@@ -224,23 +224,23 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
           }}
           id="saving-plan-title"
           aria-invalid={!!errors.title}
-          className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+          className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
         />
         {errors.title && (
-          <p role="alert" className="mt-1 text-xs text-red-600">{errors.title.message}</p>
+          <p role="alert" className="mt-1 text-xs text-danger">{errors.title.message}</p>
         )}
       </div>
 
       {appConfig.enableAccountSelection && (
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-account">
-            {t("savingPlan.form.account")} <span className="text-red-600">*</span>
+            {t("savingPlan.form.account")} <span className="text-danger">*</span>
           </label>
           <select
             {...register("accountId")}
             id="saving-plan-account"
             aria-invalid={!!errors.accountId}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           >
             <option value="" disabled>
               {t("savingPlan.form.accountPlaceholder")}
@@ -252,15 +252,15 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             ))}
           </select>
           {errors.accountId && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.accountId.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.accountId.message}</p>
           )}
         </div>
       )}
 
-      <div className="flex items-center justify-between rounded-lg bg-indigo-50/70 px-3 py-2 text-sm text-gray-700 shadow-sm dark:bg-indigo-900/20 dark:text-neutral-200">
+      <div className="flex items-center justify-between rounded-field bg-savings-soft px-3 py-2 text-sm text-ink shadow-card">
         <div>
           <p className="font-medium">{t("savingPlan.form.scheduleToggleTitle")}</p>
-          <p className="text-xs text-gray-500 dark:text-neutral-400">
+          <p className="text-xs text-ink-muted">
             {t("savingPlan.form.scheduleToggleDescription")}
           </p>
         </div>
@@ -273,8 +273,8 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             aria-checked={scheduled}
             aria-label={t("savingPlan.form.scheduleToggleTitle")}
           />
-          <span className="h-6 w-11 rounded-full bg-gray-200 transition peer-checked:bg-indigo-600 dark:bg-neutral-700" />
-          <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+          <span className="h-6 w-11 rounded-full bg-surface-2 transition peer-checked:bg-savings" />
+          <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform peer-checked:translate-x-5" />
         </label>
       </div>
 
@@ -282,27 +282,27 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
         {scheduled && (
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-due">
-              {t("savingPlan.form.targetMonth")} <span className="text-red-600">*</span>
+              {t("savingPlan.form.targetMonth")} <span className="text-danger">*</span>
             </label>
             <input
               {...register("targetMonth")}
               id="saving-plan-due"
               type="month"
               aria-invalid={!!errors.targetMonth}
-              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+              className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400" aria-live="polite">
+            <p className="mt-1 text-xs text-ink-muted" aria-live="polite">
               {dueLabel}
             </p>
             {errors.targetMonth && (
-              <p role="alert" className="mt-1 text-xs text-red-600">{errors.targetMonth.message}</p>
+              <p role="alert" className="mt-1 text-xs text-danger">{errors.targetMonth.message}</p>
             )}
           </div>
         )}
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-amount">
             {t("savingPlan.form.amount")}{" "}
-            <span className="text-xs font-normal text-gray-400 dark:text-neutral-500">
+            <span className="text-xs font-normal text-ink-faint">
               {t("savingPlan.form.amountOptional")}
             </span>
           </label>
@@ -313,13 +313,13 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             aria-invalid={!!errors.amount}
             placeholder={t("savingPlan.form.amountPlaceholder")}
             aria-describedby="saving-amount-hint"
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
-          <p id="saving-amount-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
+          <p id="saving-amount-hint" className="mt-1 text-xs text-ink-muted">
             {scheduled ? t("savingPlan.form.amountHint") : t("savingPlan.form.amountUndatedHint")}
           </p>
           {errors.amount && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.amount.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.amount.message}</p>
           )}
         </div>
       </div>
@@ -336,7 +336,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
       </div>
 
       {displayError && (
-        <p id="saving-plan-error" role="alert" className="text-sm text-red-600">
+        <p id="saving-plan-error" role="alert" className="text-sm text-danger">
           {displayError}
         </p>
       )}

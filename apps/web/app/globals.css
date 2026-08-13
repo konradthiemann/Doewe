@@ -2,6 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Doewe Design Tokens v1 — "Calm Finance"
+   RGB-Triplets, damit Tailwind <alpha-value> funktioniert.
+   Finanzfarben: gleiche OKLCH-Lightness/Chroma, Hue variiert.
+   AA-geprüft auf bg/surface beider Themes. */
+:root {
+  --bg: 247 247 246;          /* #f7f7f6 Seite        */
+  --surface: 255 255 255;     /* #ffffff Karte        */
+  --surface-2: 242 242 241;   /* #f2f2f1 Inset/Track  */
+  --line: 229 229 227;        /* #e5e5e3 Border       */
+  --line-strong: 209 209 206; /* #d1d1ce Input-Border */
+  --ink: 29 29 27;            /* #1d1d1b Text         */
+  --ink-muted: 92 92 88;      /* #5c5c58 Sekundär     */
+  --ink-faint: 139 139 134;   /* #8b8b86 Hints        */
+
+  --brand: 42 111 101;        /* #2a6f65 Teal 5.5:1   */
+  --brand-hover: 53 133 122;  /* #35857a              */
+  --brand-soft: 231 242 239;  /* #e7f2ef Tint         */
+  --brand-on: 255 255 255;
+
+  --income: 46 125 84;        /* #2e7d54 gedämpft     */
+  --income-soft: 229 242 234;
+  --expense: 168 90 81;       /* #a85a51 Terrakotta,  */
+  --expense-soft: 247 235 232;/*   kein Alarm-Rot     */
+  --savings: 78 111 163;      /* #4e6fa3 ruhiges Blau */
+  --savings-soft: 233 239 247;
+
+  --success: 46 125 84;
+  --success-soft: 229 242 234;
+  --warning: 138 97 22;       /* #8a6116 Text-sicher  */
+  --warning-soft: 247 239 220;
+  --danger: 176 67 60;        /* #b0433c NUR wenn     */
+  --danger-soft: 249 233 231; /*   Handlung nötig     */
+  --info: 61 111 142;
+  --info-soft: 232 240 245;
+}
+
+.dark {
+  --bg: 19 19 18;             /* #131312 */
+  --surface: 28 28 27;        /* #1c1c1b */
+  --surface-2: 38 38 36;      /* #262624 */
+  --line: 50 50 47;           /* #32322f */
+  --line-strong: 69 69 65;    /* #454541 */
+  --ink: 236 236 234;         /* #ececea */
+  --ink-muted: 165 165 160;   /* #a5a5a0 */
+  --ink-faint: 119 119 114;   /* #777772 */
+
+  --brand: 88 179 165;        /* #58b3a5 */
+  --brand-hover: 111 196 183;
+  --brand-soft: 27 51 47;
+  --brand-on: 15 37 35;       /* dunkler Text auf FAB */
+
+  --income: 116 195 151;      /* #74c397 */
+  --income-soft: 24 43 33;
+  --expense: 217 154 143;     /* #d99a8f */
+  --expense-soft: 48 32 29;
+  --savings: 143 171 214;     /* #8fabd6 */
+  --savings-soft: 30 38 51;
+
+  --success: 116 195 151;
+  --success-soft: 24 43 33;
+  --warning: 211 169 78;      /* #d3a94e */
+  --warning-soft: 51 41 22;
+  --danger: 217 128 121;      /* #d98079 */
+  --danger-soft: 54 30 28;
+  --info: 127 177 201;
+  --info-soft: 27 40 48;
+}
+
 /* Accessibility helper for skip link */
 .sr-only:not(:focus):not(:active) {
   clip: rect(0 0 0 0);
@@ -14,7 +82,7 @@
 }
 
 html, body {
-  @apply min-h-screen bg-white text-gray-900 dark:bg-neutral-900 dark:text-neutral-100;
+  @apply min-h-screen bg-bg text-ink;
   font-family: theme('fontFamily.sans');
 }
 

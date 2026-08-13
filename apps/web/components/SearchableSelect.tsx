@@ -163,13 +163,13 @@ export default function SearchableSelect({
         aria-expanded={isOpen}
         aria-describedby={ariaDescribedBy}
         data-invalid={ariaInvalid || undefined}
-        className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 disabled:opacity-50"
+        className="flex w-full items-center justify-between rounded-field border border-line-strong bg-surface px-3 py-2 text-left text-sm text-ink shadow-card focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:opacity-50"
       >
-        <span className={displayValue ? "" : "text-gray-400 dark:text-neutral-500"}>
+        <span className={displayValue ? "" : "text-ink-faint"}>
           {displayValue || placeholder}
         </span>
         <svg
-          className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-ink-faint transition-transform ${isOpen ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -180,9 +180,9 @@ export default function SearchableSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg dark:border-neutral-600 dark:bg-neutral-800">
+        <div className="absolute z-modal mt-1 w-full rounded-field border border-line bg-surface shadow-raised">
           {/* Search input */}
-          <div className="border-b border-gray-200 p-2 dark:border-neutral-600">
+          <div className="border-b border-line p-2">
             <input
               ref={inputRef}
               type="text"
@@ -190,7 +190,7 @@ export default function SearchableSelect({
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={searchPlaceholder}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
+              className="w-full rounded-field border border-line-strong bg-surface px-2 py-1.5 text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
               aria-label={searchPlaceholder}
             />
           </div>
@@ -203,7 +203,7 @@ export default function SearchableSelect({
             className="max-h-60 overflow-y-auto py-1"
           >
             {displayOptions.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-gray-500 dark:text-neutral-400">
+              <li className="px-3 py-2 text-sm text-ink-muted">
                 {noResultsText}
               </li>
             ) : (
@@ -216,10 +216,10 @@ export default function SearchableSelect({
                   onMouseEnter={() => setHighlightedIndex(index)}
                   className={`flex cursor-pointer items-center justify-between px-3 py-2 text-sm ${
                     index === highlightedIndex
-                      ? "bg-indigo-50 text-indigo-900 dark:bg-indigo-900/30 dark:text-indigo-100"
-                      : "text-gray-900 dark:text-neutral-100"
+                      ? "bg-brand-soft text-brand"
+                      : "text-ink"
                   } ${opt.id === value ? "font-semibold" : ""} ${
-                    opt.isAddNew ? "border-t border-gray-200 text-indigo-600 dark:border-neutral-600 dark:text-indigo-400" : ""
+                    opt.isAddNew ? "border-t border-line text-brand" : ""
                   }`}
                 >
                   <span className="flex items-center gap-2">
@@ -231,12 +231,12 @@ export default function SearchableSelect({
                     {opt.label}
                   </span>
                   {opt.usageCount !== undefined && opt.usageCount > 0 && !opt.isAddNew && (
-                    <span className="text-xs text-gray-400 dark:text-neutral-500">
+                    <span className="text-xs text-ink-faint">
                       {opt.usageCount}×
                     </span>
                   )}
                   {opt.id === value && !opt.isAddNew && (
-                    <svg className="h-4 w-4 text-indigo-600 dark:text-indigo-400" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="h-4 w-4 text-brand" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   )}

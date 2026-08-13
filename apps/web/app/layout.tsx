@@ -35,10 +35,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Inhalte dürfen bis in die Safe-Areas laufen (Bottom-Nav padded bereits via env(safe-area-inset-bottom))
   viewportFit: "cover",
-  // Browser-Chrome/Statusbar-Farbe folgt dem OS-Farbschema (bg-white / neutral-900)
+  // Browser-Chrome/Statusbar-Farbe folgt dem OS-Farbschema (--bg light / dark)
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#171717" }
+    { media: "(prefers-color-scheme: light)", color: "#f7f7f6" },
+    { media: "(prefers-color-scheme: dark)", color: "#131312" }
   ]
 };
 

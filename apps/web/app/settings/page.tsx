@@ -30,16 +30,16 @@ export default function SettingsPage() {
     <main id="maincontent" className="py-6 md:py-8">
       <PageContainer className="max-w-4xl space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
-      <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+      <div className="rounded-card border border-line bg-surface/95 p-4 shadow-card">
         <h2 className="text-lg font-medium">{t("settings.accountTitle")}</h2>
-        <p className="text-sm text-gray-600 dark:text-neutral-300">
+        <p className="text-sm text-ink-muted">
           {t("settings.signedInAs", { email: data?.user?.email ?? t("settings.unknown") })}
         </p>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+      <div className="rounded-card border border-line bg-surface/95 p-4 shadow-card">
         <h2 className="text-lg font-medium">{t("settings.languageTitle")}</h2>
-        <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.languageDescription")}</p>
+        <p className="text-sm text-ink-muted">{t("settings.languageDescription")}</p>
         <div className="mt-3">
           <label htmlFor="settings-language" className="sr-only">
             {t("settings.languageTitle")}
@@ -48,7 +48,7 @@ export default function SettingsPage() {
             id="settings-language"
             value={locale}
             onChange={(event) => handleLocaleChange(event.target.value === "en" ? "en" : "de")}
-            className="w-full max-w-xs rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+            className="w-full max-w-xs rounded-field border border-line-strong bg-surface px-3 py-2 text-sm text-ink shadow-card focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             <option value="de">{t("settings.languageOptionDe")}</option>
             <option value="en">{t("settings.languageOptionEn")}</option>
@@ -67,19 +67,19 @@ export default function SettingsPage() {
       <NotificationsCard />
 
       {/* Theme Section */}
-      <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+      <div className="rounded-card border border-line bg-surface/95 p-4 shadow-card">
         <h2 className="text-lg font-medium">{t("settings.themeTitle")}</h2>
-        <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.themeDescription")}</p>
+        <p className="text-sm text-ink-muted">{t("settings.themeDescription")}</p>
         <fieldset className="mt-3">
           <legend className="sr-only">{t("settings.themeTitle")}</legend>
           <div className="flex flex-wrap gap-3">
             {(["light", "dark", "system"] as Theme[]).map((option) => (
               <label
                 key={option}
-                className={`relative flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 shadow-sm transition-all ${
+                className={`relative flex cursor-pointer items-center gap-2 rounded-field border px-4 py-2.5 shadow-card transition-all ${
                   theme === option
-                    ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500 dark:bg-indigo-950"
-                    : "border-gray-300 bg-white hover:border-gray-400 dark:border-neutral-600 dark:bg-neutral-800 dark:hover:border-neutral-500"
+                    ? "border-brand bg-brand-soft ring-2 ring-brand"
+                    : "border-line-strong bg-surface hover:border-line-strong"
                 }`}
               >
                 <input
@@ -93,7 +93,7 @@ export default function SettingsPage() {
                 <span className="text-lg" aria-hidden="true">
                   {option === "light" ? "☀️" : option === "dark" ? "🌙" : "💻"}
                 </span>
-                <span className={`text-sm font-medium ${theme === option ? "text-indigo-700 dark:text-indigo-300" : "text-gray-700 dark:text-neutral-200"}`}>
+                <span className={`text-sm font-medium ${theme === option ? "text-brand" : "text-ink"}`}>
                   {t(`settings.theme${option.charAt(0).toUpperCase() + option.slice(1)}`)}
                 </span>
               </label>

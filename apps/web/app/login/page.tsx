@@ -168,19 +168,19 @@ export default function LoginPage() {
     <main id="maincontent" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-8 text-center space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Doewe</h1>
-        <p className="text-sm text-gray-500 dark:text-neutral-400">
+        <p className="text-sm text-ink-muted">
           Eure Finanzen. Gemeinsam im Blick.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white/95 p-6 shadow-md backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
+      <div className="rounded-card border border-line bg-surface/95 p-6 shadow-raised backdrop-blur">
         <div className="mb-4 flex items-center gap-2" role="tablist" aria-label="Auth mode">
           <button
             type="button"
             role="tab"
             aria-selected={mode === "login"}
-            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
-              mode === "login" ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-neutral-200"
+            className={`flex-1 rounded-field px-3 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 ${
+              mode === "login" ? "bg-brand text-brand-on" : "bg-surface-2 text-ink"
             }`}
             onClick={() => setMode("login")}
           >
@@ -190,8 +190,8 @@ export default function LoginPage() {
             type="button"
             role="tab"
             aria-selected={mode === "register"}
-            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
-              mode === "register" ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-neutral-200"
+            className={`flex-1 rounded-field px-3 py-2 text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 ${
+              mode === "register" ? "bg-brand text-brand-on" : "bg-surface-2 text-ink"
             }`}
             onClick={() => setMode("register")}
           >
@@ -210,7 +210,7 @@ export default function LoginPage() {
                 name="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                className="w-full rounded-field border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
                 autoComplete="name"
               />
             </div>
@@ -218,7 +218,7 @@ export default function LoginPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium" htmlFor="email">
-              Email <span className="text-red-600">*</span>
+              Email <span className="text-danger">*</span>
             </label>
             <input
               id="email"
@@ -227,14 +227,14 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+              className="w-full rounded-field border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
               autoComplete={mode === "login" ? "email" : "new-email"}
             />
           </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium" htmlFor="password">
-              Password <span className="text-red-600">*</span>
+              Password <span className="text-danger">*</span>
             </label>
             <input
               id="password"
@@ -243,16 +243,16 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+              className="w-full rounded-field border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">Use at least 8 characters.</p>
+            <p className="mt-1 text-xs text-ink-muted">Use at least 8 characters.</p>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            className="flex w-full items-center justify-center rounded-field bg-brand px-4 py-2 text-sm font-semibold text-brand-on shadow-card transition hover:bg-brand-hover disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             {loading && <Spinner size="sm" className="mr-2" />}
             {loading ? "Please wait…" : mode === "login" ? "Login" : "Create account"}
@@ -262,7 +262,7 @@ export default function LoginPage() {
             <p className="text-center text-sm">
               <Link
                 href="/forgot-password"
-                className="font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:text-indigo-400 dark:hover:text-indigo-300"
+                className="font-medium text-brand hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
               >
                 Passwort vergessen?
               </Link>
@@ -270,23 +270,23 @@ export default function LoginPage() {
           )}
 
           {error && (
-            <p id="auth-error" role="alert" className="text-sm text-red-600">
+            <p id="auth-error" role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
           {message && (
-            <p role="status" className="text-sm text-emerald-600">
+            <p role="status" className="text-sm text-success">
               {message}
             </p>
           )}
         </form>
 
         <div className="mt-6 flex items-center gap-3" aria-hidden="true">
-          <span className="h-px flex-1 bg-gray-200 dark:bg-neutral-700" />
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-neutral-500">
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
             oder
           </span>
-          <span className="h-px flex-1 bg-gray-200 dark:bg-neutral-700" />
+          <span className="h-px flex-1 bg-line" />
         </div>
 
         {googleEnabled && (
@@ -294,7 +294,7 @@ export default function LoginPage() {
             type="button"
             onClick={handleGoogle}
             disabled={loading}
-            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
+            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-field border border-line-strong bg-surface px-4 py-2 text-sm font-semibold text-ink transition hover:bg-surface-2 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             <GoogleLogo />
             Mit Google anmelden
@@ -305,12 +305,12 @@ export default function LoginPage() {
           type="button"
           onClick={handleDemo}
           disabled={loading}
-          className="mt-4 flex w-full items-center justify-center rounded-md border border-indigo-600 px-4 py-2 text-sm font-semibold text-indigo-600 transition hover:bg-indigo-50 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-indigo-400 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+          className="mt-4 flex w-full items-center justify-center rounded-field border border-brand px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand-soft disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           {loading && <Spinner size="sm" className="mr-2" />}
           {loading ? "Bitte warten…" : "Im Demo-Modus testen"}
         </button>
-        <p className="mt-2 text-center text-xs text-gray-500 dark:text-neutral-400">
+        <p className="mt-2 text-center text-xs text-ink-muted">
           Ohne Anmeldung mit Beispieldaten der letzten 3 Jahre.
         </p>
       </div>

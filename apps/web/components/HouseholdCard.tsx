@@ -39,9 +39,9 @@ type PendingInvite = {
 };
 
 const cardClass =
-  "rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95";
+  "rounded-card border border-line bg-surface/95 p-4 shadow-card";
 const inputClass =
-  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
+  "w-full rounded-field border border-line-strong bg-surface px-3 py-2 text-sm text-ink shadow-card focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2";
 
 export default function HouseholdCard() {
   const { t } = useI18n();
@@ -185,7 +185,7 @@ export default function HouseholdCard() {
   return (
     <div className={cardClass}>
       <h2 className="text-lg font-medium">{t("household.title")}</h2>
-      <p className="text-sm text-gray-600 dark:text-neutral-300">{t("household.description")}</p>
+      <p className="text-sm text-ink-muted">{t("household.description")}</p>
 
       <div className="mt-4 space-y-6">
         {/* Name */}
@@ -212,22 +212,22 @@ export default function HouseholdCard() {
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-gray-900 dark:text-neutral-100">{household.name}</p>
+            <p className="text-sm text-ink">{household.name}</p>
           )}
         </div>
 
         {/* Members */}
-        <div className="border-t border-gray-100 pt-4 dark:border-neutral-800">
+        <div className="border-t border-line pt-4">
           <h3 className="text-sm font-medium">{t("household.membersTitle")}</h3>
           <ul className="mt-2 space-y-2">
             {household.members.map((m) => (
               <li key={m.userId} className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-gray-900 dark:text-neutral-100">
+                  <p className="truncate text-sm text-ink">
                     {m.name ?? m.email ?? "—"}
-                    {m.isMe && <span className="ml-1 text-gray-500 dark:text-neutral-400">({t("household.you")})</span>}
+                    {m.isMe && <span className="ml-1 text-ink-muted">({t("household.you")})</span>}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">{roleLabel(m.role)}</p>
+                  <p className="text-xs text-ink-muted">{roleLabel(m.role)}</p>
                 </div>
                 {isOwner && !m.isMe && (
                   <Button variant="ghost" size="sm" onClick={() => handleRemoveMember(m)} disabled={busy}>
@@ -241,9 +241,9 @@ export default function HouseholdCard() {
 
         {/* Invite (OWNER only) */}
         {isOwner && (
-          <div className="border-t border-gray-100 pt-4 dark:border-neutral-800">
+          <div className="border-t border-line pt-4">
             <h3 className="text-sm font-medium">{t("household.inviteTitle")}</h3>
-            <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">{t("household.inviteDescription")}</p>
+            <p className="mt-1 text-xs text-ink-muted">{t("household.inviteDescription")}</p>
             <div className="mt-3">
               <Button onClick={handleCreateInvite} loading={busy}>
                 {t("household.createInvite")}
@@ -252,7 +252,7 @@ export default function HouseholdCard() {
 
             {inviteUrl && (
               <div className="mt-3 space-y-2">
-                <p className="break-all rounded-md bg-gray-50 p-2 text-xs text-gray-700 dark:bg-neutral-800 dark:text-neutral-200">
+                <p className="break-all rounded-field bg-surface-2 p-2 text-xs text-ink">
                   {inviteUrl}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -269,16 +269,16 @@ export default function HouseholdCard() {
             )}
 
             <div className="mt-4">
-              <h4 className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-neutral-400">
+              <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                 {t("household.pendingInvites")}
               </h4>
               {invites.length === 0 ? (
-                <p className="mt-2 text-sm text-gray-500 dark:text-neutral-400">{t("household.noPendingInvites")}</p>
+                <p className="mt-2 text-sm text-ink-muted">{t("household.noPendingInvites")}</p>
               ) : (
                 <ul className="mt-2 space-y-2">
                   {invites.map((inv) => (
                     <li key={inv.id} className="flex items-center justify-between gap-3">
-                      <p className="min-w-0 truncate text-sm text-gray-700 dark:text-neutral-200">
+                      <p className="min-w-0 truncate text-sm text-ink">
                         {inv.email ?? t("household.expiresAt", { date: new Date(inv.expiresAt).toLocaleDateString() })}
                       </p>
                       <Button variant="ghost" size="sm" onClick={() => handleRevoke(inv.id)} disabled={busy}>
@@ -294,7 +294,7 @@ export default function HouseholdCard() {
 
         {/* Leave (MEMBER only) */}
         {!isOwner && (
-          <div className="border-t border-gray-100 pt-4 dark:border-neutral-800">
+          <div className="border-t border-line pt-4">
             <Button variant="danger" onClick={handleLeave} loading={busy}>
               {t("household.leave")}
             </Button>

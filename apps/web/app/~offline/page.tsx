@@ -18,8 +18,8 @@ export default function OfflinePage() {
         <p className="text-5xl" aria-hidden="true">
           📡
         </p>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-neutral-100">{t("offline.title")}</h1>
-        <p className="text-sm text-gray-600 dark:text-neutral-300">{t("offline.body")}</p>
+        <h1 className="text-xl font-semibold text-ink">{t("offline.title")}</h1>
+        <p className="text-sm text-ink-muted">{t("offline.body")}</p>
         <Button onClick={() => window.location.reload()}>{t("offline.retry")}</Button>
       </div>
     </main>
