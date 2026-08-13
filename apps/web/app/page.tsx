@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Bar } from "react-chartjs-2";
 
+import OnboardingWizard from "../components/OnboardingWizard";
 import PageContainer from "../components/PageContainer";
 import { Skeleton } from "../components/ui/Skeleton";
 import { useApiQuery } from "../lib/api/useApiQuery";
@@ -90,6 +91,7 @@ const EMPTY_SUMMARY: SummaryData = {
 export default function HomePage() {
   const { locale, t } = useI18n();
   const [isMobile, setIsMobile] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
   // Phase 2 „Offline lesen": Daten kommen aus dem persistierten Query-Cache —
@@ -358,12 +360,21 @@ export default function HomePage() {
                 {t("dashboard.welcomeTitle")}
               </h2>
               <p className="text-sm text-ink-muted">{t("dashboard.welcomeBody")}</p>
-              <Link
-                href="/transactions"
-                className="inline-flex items-center justify-center rounded-field bg-brand px-4 py-2 text-sm font-semibold text-brand-on shadow-card transition duration-quick ease-calm hover:bg-brand-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
-              >
-                {t("dashboard.welcomeCta")}
-              </Link>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => setWizardOpen(true)}
+                  className="inline-flex items-center justify-center rounded-field bg-brand px-4 py-2 text-sm font-semibold text-brand-on shadow-card transition duration-quick ease-calm hover:bg-brand-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                >
+                  {t("dashboard.welcomeWizardCta")}
+                </button>
+                <Link
+                  href="/transactions"
+                  className="inline-flex items-center justify-center rounded-field px-4 py-2 text-sm font-medium text-ink-muted transition duration-quick ease-calm hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                >
+                  {t("dashboard.welcomeCta")}
+                </Link>
+              </div>
             </div>
           ) : (
             <>
@@ -881,6 +892,7 @@ export default function HomePage() {
       </section>
 
       </PageContainer>
+      <OnboardingWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </main>
   );
 }

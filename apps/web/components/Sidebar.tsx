@@ -7,6 +7,8 @@ import { useMemo } from "react";
 
 import { useI18n } from "../lib/i18n";
 
+import { BrandLockup } from "./Brand";
+
 /**
  * Persistent navigation sidebar for tablet/desktop (>= md, 768px).
  * Hidden on phones via `hidden md:flex` — the floating bottom nav (Header.tsx)
@@ -165,9 +167,7 @@ export default function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-header hidden w-56 flex-col border-r border-line bg-surface md:flex lg:w-64">
       {/* Brand */}
       <div className="flex h-14 items-center px-5">
-        <span className="text-base font-semibold tracking-tight text-ink">
-          Doewe
-        </span>
+        <BrandLockup />
       </div>
 
       {/* Primary action */}
