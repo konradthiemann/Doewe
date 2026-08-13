@@ -531,5 +531,14 @@ export const de: Record<string, string> = {
   "settings.installDescription": "Doewe auf dem Home-Bildschirm: startet im Vollbild und fühlt sich wie eine native App an.",
   "settings.installButton": "App installieren",
   "settings.installIosHint": "Auf iPhone/iPad: In Safari das Teilen-Menü öffnen und „Zum Home-Bildschirm“ wählen.",
-  "settings.installGenericHint": "Die Installation findest du im Browser-Menü (z. B. „App installieren“ oder „Zum Startbildschirm hinzufügen“)."
+  "settings.installGenericHint": "Die Installation findest du im Browser-Menü (z. B. „App installieren“ oder „Zum Startbildschirm hinzufügen“).",
+  "dashboard.heroTitle": "Verfügbar bis Monatsende",
+  "dashboard.heroHint": "inkl. noch anstehender Daueraufträge",
+  "dashboard.welcomeTitle": "Willkommen bei Doewe 👋",
+  "dashboard.welcomeBody": "Lege deine ersten Einnahmen und Ausgaben an — dann siehst du hier sofort, was dir diesen Monat bleibt.",
+  "dashboard.welcomeCta": "Erste Buchung anlegen",
+  "dashboard.budgetsShowAll": "{count} weitere Budgets anzeigen",
+  "dashboard.upcomingTitle": "Steht diesen Monat noch an",
+  "dashboard.upcomingNone": "Für den Rest des Monats steht nichts mehr an.",
+  "dashboard.recurringShowAll": "Alle {count} Daueraufträge anzeigen"
 };

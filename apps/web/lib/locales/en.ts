@@ -531,5 +531,14 @@ export const en: Record<string, string> = {
   "settings.installDescription": "Doewe on your home screen: launches full-screen and feels like a native app.",
   "settings.installButton": "Install app",
   "settings.installIosHint": "On iPhone/iPad: open Safari's share menu and choose “Add to Home Screen”.",
-  "settings.installGenericHint": "You'll find installation in your browser menu (e.g. “Install app” or “Add to home screen”)."
+  "settings.installGenericHint": "You'll find installation in your browser menu (e.g. “Install app” or “Add to home screen”).",
+  "dashboard.heroTitle": "Left to spend this month",
+  "dashboard.heroHint": "includes upcoming recurring transactions",
+  "dashboard.welcomeTitle": "Welcome to Doewe 👋",
+  "dashboard.welcomeBody": "Add your first income and expenses — you'll instantly see what's left this month.",
+  "dashboard.welcomeCta": "Add your first transaction",
+  "dashboard.budgetsShowAll": "Show {count} more budgets",
+  "dashboard.upcomingTitle": "Still due this month",
+  "dashboard.upcomingNone": "Nothing else is due for the rest of the month.",
+  "dashboard.recurringShowAll": "Show all {count} recurring transactions"
 };
