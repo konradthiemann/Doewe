@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 
+import { BrandMark } from "../../components/Brand";
 import LegalFooter from "../../components/LegalFooter";
 import { Spinner } from "../../components/ui/Spinner";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "../../lib/demoConstants";
@@ -166,7 +167,8 @@ export default function LoginPage() {
 
   return (
     <main id="maincontent" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
-      <div className="mb-8 text-center space-y-2">
+      <div className="mb-8 flex flex-col items-center text-center space-y-2">
+        <BrandMark className="mb-1 h-12 w-12 text-brand" />
         <h1 className="text-3xl font-bold tracking-tight">Doewe</h1>
         <p className="text-sm text-ink-muted">
           Eure Finanzen. Gemeinsam im Blick.

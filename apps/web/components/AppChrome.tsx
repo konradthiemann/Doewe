@@ -9,6 +9,7 @@ import { isAuthRoute } from "../lib/authRoutes";
 import { useI18n } from "../lib/i18n";
 
 import BackToTopButton from "./BackToTopButton";
+import { BrandLockup } from "./Brand";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 
@@ -46,9 +47,7 @@ export default function AppChrome() {
 
       {/* Top bar — phones only (< md); the sidebar replaces it from md up */}
       <header className="fixed top-0 left-0 right-0 z-header flex h-12 items-center justify-between border-b border-line bg-surface/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-surface/80 md:hidden">
-        <span className="text-sm font-semibold tracking-tight text-ink">
-          Doewe
-        </span>
+        <BrandLockup markClassName="h-5 w-5" className="[&>span:last-child]:text-sm" />
         <button
           type="button"
           onClick={() => setMenuOpen(true)}
