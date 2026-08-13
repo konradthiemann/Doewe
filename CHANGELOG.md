@@ -1,3 +1,78 @@
+## [0.1.5] - 2026-08-13
+### Added
+- **Phase 3b — Zwei-Wege-Sync mit Konfliktbehandlung** (#45): `POST /api/sync/push` (Batch-Ops mit Idempotenz via `mutationId`), `GET /api/sync/pull` (Haushalts-Snapshot mit ETag/304), `GET /api/sync/conflicts` (Konflikt-Journal für UI-Hinweise).
+- Soft-Delete-Tombstones (`deletedAt`) und `updatedAt` auf Transaction/Account/Category/RecurringTransaction/Budget für Sync-Konflikterkennung.
+- `ConflictLog`-Modell: Last-Write-Wins pro Feld, unterlegene Edits werden journaled; Delete gewinnt gegen Edit.
+- Pure Sync-Domänenlogik in `@doewe/shared` (`mergeFields`, `detectFieldConflicts`, `updateBlockedByDelete`) mit Unit-Tests + API-Integrationstests.
+### Why
+- Mehrere Geräte im Haushalt können offline erfassen/ändern und ohne Datenverlust zusammengeführt werden.
+### How
+- Prisma Client Extension filtert Tombstones aus normalen Reads; Sync-Routes sehen sie via `findUnique`. Migration `20260813150000_add_sync_columns`.
+
+## [0.1.4] - 2026-08-13
+### Added
+- **Teil D — Haushalts-Sharing** (#44): Haushalt als Mandanten-Grenze, Rollen (OWNER/MEMBER), Einladungslinks; alle Domänen-Queries scopen über `householdId`.
+- **Teil C — Web Push** (#43): Budget-Warnungen, Monats-Review-Erinnerung und Erfassungs-Reminder via Web Push (VAPID).
+- **Phase 3a — Offline erfassen** (#42): Outbox mit Client-generierten IDs und Idempotenz-Keys, FIFO-Flush beim Reconnect.
+- **Phase 2 — Offline lesen** (#41): TanStack Query + IndexedDB-Persistenz für Read-Modelle.
+- **Teil F — Dashboard-Aha-Moment** (#40): Hero-Kennzahl (projiziertes verfügbares Restbudget), KPI-Grid.
+- **Phase 1 — PWA-Grundlage** (#38): installierbar mit Manifest, Icons, Service Worker; iOS-Zoom-Fix.
+### Why
+- Familien teilen einen Haushalt, erfassen unterwegs offline und werden proaktiv an Buchungen/Budgets erinnert — der „60-Sekunden-Aha-Moment" wird zum Kern der App.
+### How
+- Siehe Plan `Tickets/In-progress/pwa-offline-sync/plans/` und PRs #37–#45.
+
+## [0.1.3] - 2026-08-12
+### Added
+- Manuell wählbares Buchungsdatum in Create- und Edit-Formularen (#36).
+- Optionales Startdatum für wiederkehrende Buchungen + klarerer Intervall-Umschalter (#34).
+### Fixed
+- Radix-Dialog-A11y-Konsolenwarnungen unterdrückt (#35).
+
+## [0.1.2] - 2026-08-03
+### Added
+- Toast-Benachrichtigungen und Lade-Spinner als Standard-Feedback-Primitive statt Inline-Status (#30).
+- MIT-LICENSE und Security-Policy (#31).
+### Changed
+- README mit Sektions-Icons und Doku-Link überarbeitet (#33).
+- Repo-Hygiene: Python-Cache und lokale Claude-Preview-Config ignoriert (#32).
+
+## [0.1.1] - 2026-07-10
+### Added
+- **Steuervorbereitung** (#25): Transaktionen für die Steuererklärung vormerken, Belege (Foto/PDF) in PostgreSQL anhängen, `/tax`-Seite mit Jahres-Summen und Beleg-Status.
+- Kategorie-Steuer-Flag wirkt rückwirkend auf alle Transaktionen (#26).
+- Kategorien-Verwaltung (`/categories`) und Abmelden in Drawer & Sidebar (#28).
+### Fixed
+- Drawer-Overlay hebt sich korrekt über die mobile Bottom-Navigation (z-index) (#29).
+### How
+- Steuer-Doku in Architektur, Flows, PRD, README (#27).
+
+## [0.1.0] - 2026-07-06
+### Added
+- **Authentifizierung**: Passwort zurücksetzen & ändern mit Session-Eviction (#17), Sign-in mit Google (#19).
+- Undatierte Sparziele (Ideen-Backlog) und Sparbetrag-Auszahlung (#16).
+- Income-by-source-Breakdown in der Monats-Review (#22).
+### Fixed
+- Passwort-Reset-Seiten von der Auth-Middleware ausgenommen (#18).
+- Horizontaler Overflow in den Review-Sektionen (#20).
+### How
+- E-Mail-Transport und Prod-Migration-Deploy-Doku präzisiert (#21).
+
+## [0.0.30] - 2026-07-08
+### Added
+- **Starlight-Doku live** auf GitHub Pages inkl. vollständigem Content-Refresh (#23).
+### Fixed
+- Defekte Mermaid-Sequenzdiagramme repariert (#24).
+
+## [0.0.25] - 2026-06-24
+### Added
+- Bibliotheks-Integrationen (Charts/Feedback-Libs) (#12).
+- Realistische Demo-Daten einer 4-Personen-Familie über 36 Monate (#14).
+- Responsives Layout für Tablet und Desktop: persistente Sidebar ab `md` (#15).
+- Deployment- & CI-Guide (#13).
+### Fixed
+- Veraltete Node-Version im Deployment korrigiert (#13).
+
 ## [0.0.20] - 2026-02-05
 ### Added
 - `totalBalance`: Gesamtsaldo aller Transaktionen (monatsunabhängig) in `/api/analytics/summary`
