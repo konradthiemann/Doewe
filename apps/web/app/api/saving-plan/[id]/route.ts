@@ -161,7 +161,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await prisma.budget.delete({ where: { id } });
+  // Soft-Delete (Phase 3b): Tombstone statt Hard-Delete für die Sync-Propagation.
+  await prisma.budget.update({ where: { id }, data: { deletedAt: new Date() } });
 
   return NextResponse.json({ success: true });
 }

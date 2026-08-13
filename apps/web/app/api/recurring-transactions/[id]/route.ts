@@ -129,6 +129,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     return NextResponse.json({ error: "Recurring transaction not found" }, { status: 404 });
   }
 
-  await prisma.recurringTransaction.delete({ where: { id: params.id } });
+  // Soft-Delete (Phase 3b): Tombstone statt Hard-Delete für die Sync-Propagation.
+  await prisma.recurringTransaction.update({ where: { id: params.id }, data: { deletedAt: new Date() } });
   return new NextResponse(null, { status: 204 });
 }

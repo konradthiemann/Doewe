@@ -548,6 +548,7 @@ export const de: Record<string, string> = {
   "outbox.synced": "{count} Offline-Buchung(en) synchronisiert.",
   "outbox.dropped": "Offline-Buchung „{description}“ wurde vom Server abgelehnt und verworfen.",
   "outbox.authRequired": "Anmeldung abgelaufen — Offline-Buchungen warten auf den nächsten Login.",
+  "sync.conflictNotice": "{count} Buchung(en) wurden auf einem anderen Gerät geändert.",
   "notifications.title": "Mitteilungen",
   "notifications.description": "Erhalte Budget-Warnungen, den Monats-Review-Hinweis und einen sanften Erfassungs-Reminder direkt auf dieses Gerät.",
   "notifications.unsupported": "Dein Browser unterstützt keine Web-Mitteilungen.",

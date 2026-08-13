@@ -548,6 +548,7 @@ export const en: Record<string, string> = {
   "outbox.synced": "Synced {count} offline transaction(s).",
   "outbox.dropped": "Offline transaction “{description}” was rejected by the server and discarded.",
   "outbox.authRequired": "Session expired — offline transactions are waiting for your next sign-in.",
+  "sync.conflictNotice": "{count} transaction(s) were changed on another device.",
   "notifications.title": "Notifications",
   "notifications.description": "Get budget alerts, a monthly-review heads-up and a gentle logging reminder straight to this device.",
   "notifications.unsupported": "Your browser doesn't support web notifications.",
