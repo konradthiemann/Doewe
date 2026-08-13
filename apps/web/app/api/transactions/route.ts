@@ -38,6 +38,16 @@ export async function POST(req: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Idempotenz (Offline-Outbox, Phase 3a): Replays mit bekannter mutationId
+  // geben die gespeicherte Antwort zurück, statt doppelt zu buchen.
+  const idempotencyKey = req.headers.get("idempotency-key");
+  if (idempotencyKey) {
+    const replay = await prisma.mutationLog.findUnique({ where: { mutationId: idempotencyKey } });
+    if (replay && replay.userId === user.id) {
+      return NextResponse.json(replay.responseBody, { status: replay.responseStatus });
+    }
+  }
+
   const json = await req.json();
   const parsed = TransactionInput.safeParse(json);
   if (!parsed.success) {
@@ -68,22 +78,54 @@ export async function POST(req: Request) {
   }
 
   try {
-    const created = await prisma.transaction.create({
-      data: {
-        accountId: data.accountId,
-        categoryId: data.categoryId ?? null,
-        savingGoalId: data.savingGoalId ?? null,
-        amountCents: data.amountCents,
-        description: data.description,
-        occurredAt,
-        // Ohne explizites Flag erbt die Transaktion die Steuer-Markierung der
-        // Kategorie — so greifen auch API-Clients ohne Formular (z. B. Importe).
-        taxRelevant: data.taxRelevant ?? category?.isTaxRelevant ?? false
+    // Anlegen + Idempotenz-Log atomar: entweder beides oder nichts.
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await tx.transaction.create({
+        data: {
+          // Client-ID (Offline-Erfassung) übernehmen, sonst Server-cuid
+          ...(data.id ? { id: data.id } : {}),
+          accountId: data.accountId,
+          categoryId: data.categoryId ?? null,
+          savingGoalId: data.savingGoalId ?? null,
+          amountCents: data.amountCents,
+          description: data.description,
+          occurredAt,
+          // Ohne explizites Flag erbt die Transaktion die Steuer-Markierung der
+          // Kategorie — so greifen auch API-Clients ohne Formular (z. B. Importe).
+          taxRelevant: data.taxRelevant ?? category?.isTaxRelevant ?? false
+        }
+      });
+
+      if (idempotencyKey) {
+        await tx.mutationLog.create({
+          data: {
+            mutationId: idempotencyKey,
+            userId: user.id,
+            entity: "transaction",
+            responseStatus: 201,
+            // Wie die JSON-Antwort serialisieren (Dates → ISO-Strings)
+            responseBody: JSON.parse(JSON.stringify(row)) as Prisma.InputJsonValue
+          }
+        });
       }
+
+      return row;
     });
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      // Zwei parallele Replays derselben mutationId: der Verlierer liest die
+      // vom Gewinner gespeicherte Antwort.
+      if (idempotencyKey) {
+        const replay = await prisma.mutationLog.findUnique({ where: { mutationId: idempotencyKey } });
+        if (replay && replay.userId === user.id) {
+          return NextResponse.json(replay.responseBody, { status: replay.responseStatus });
+        }
+      }
+      // Sonst: Client-ID kollidiert mit einer bestehenden Transaktion.
+      return NextResponse.json({ error: "Duplicate transaction id" }, { status: 409 });
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
       return NextResponse.json({ error: "Invalid account or category reference" }, { status: 400 });
     }

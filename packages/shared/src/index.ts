@@ -5,3 +5,6 @@ export type { Transaction, TransactionId, AccountId, CategoryId, CreateTransacti
 export { createTransaction } from "./domain";
 
 export { type NonEmptyString, ensureNonEmpty } from "./strings";
+
+export type { FlushOutcome } from "./outbox";
+export { decideFlushStep } from "./outbox";

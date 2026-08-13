@@ -541,5 +541,11 @@ export const de: Record<string, string> = {
   "dashboard.upcomingTitle": "Steht diesen Monat noch an",
   "dashboard.upcomingNone": "Für den Rest des Monats steht nichts mehr an.",
   "dashboard.recurringShowAll": "Alle {count} Daueraufträge anzeigen",
-  "offline.banner": "Du bist offline — du siehst den letzten geladenen Stand."
+  "offline.banner": "Du bist offline — du siehst den letzten geladenen Stand.",
+  "transactionForm.savedOffline": "Offline gespeichert — wird synchronisiert, sobald du wieder online bist.",
+  "transactionForm.attachmentsOfflineSkipped": "Belege können offline nicht hochgeladen werden — bitte später über „Bearbeiten“ nachreichen.",
+  "transactions.pendingSync": "Wird synchronisiert…",
+  "outbox.synced": "{count} Offline-Buchung(en) synchronisiert.",
+  "outbox.dropped": "Offline-Buchung „{description}“ wurde vom Server abgelehnt und verworfen.",
+  "outbox.authRequired": "Anmeldung abgelaufen — Offline-Buchungen warten auf den nächsten Login."
 };

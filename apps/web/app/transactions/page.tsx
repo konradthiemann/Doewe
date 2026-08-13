@@ -28,6 +28,7 @@ import { Dialog } from "../../components/ui/Dialog";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
+import { useOutboxEntries } from "../../lib/offline/useOutbox";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -182,6 +183,20 @@ function TransactionsPage() {
     () => Object.fromEntries(categories.map(({ id, name }) => [id, name] as const)),
     [categories]
   );
+
+  // Offline erfasste, noch nicht synchronisierte Buchungen (Outbox):
+  // bekommen ein Pending-Badge und sind bis zum Sync nicht editierbar.
+  const outboxEntries = useOutboxEntries();
+  const pendingTxIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const entry of outboxEntries) {
+      if (entry.entity === "transaction" && entry.op === "create") {
+        const id = (entry.payload as { id?: string }).id;
+        if (id) ids.add(id);
+      }
+    }
+    return ids;
+  }, [outboxEntries]);
 
   const error = transactionsQuery.isError
     ? t("errors.failedLoad", { status: errorStatus(transactionsQuery.error) })
@@ -871,6 +886,11 @@ function TransactionsPage() {
                       <time dateTime={tx.occurredAt}>
                         {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
                       </time>
+                      {pendingTxIds.has(tx.id) && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                          {t("transactions.pendingSync")}
+                        </span>
+                      )}
                       {tx.categoryId && (
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-neutral-800 dark:text-neutral-300">
                           {t("transactions.categoryLabel")}: {categoriesById[tx.categoryId] ?? tx.categoryId}
@@ -888,8 +908,10 @@ function TransactionsPage() {
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-indigo-500 transition hover:text-indigo-600 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:opacity-40 dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus-visible:ring-offset-neutral-900"
+                      disabled={pendingTxIds.has(tx.id)}
                       onClick={(event) => {
+                        if (pendingTxIds.has(tx.id)) return;
                         lastFocusedRef.current = event.currentTarget;
                         setEditingTx(tx);
                       }}

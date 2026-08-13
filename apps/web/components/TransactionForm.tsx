@@ -2,6 +2,7 @@
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { createId } from "@paralleldrive/cuid2";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -12,6 +13,7 @@ import { cn } from "../lib/cn";
 import { appConfig } from "../lib/config";
 import { dateInputToISO, toDateInputValue } from "../lib/dateInput";
 import { useI18n } from "../lib/i18n";
+import { queueOfflineTransaction, type OfflineTransactionPayload } from "../lib/offline/queueOfflineTransaction";
 import { transactionFormSchema, type TransactionFormValues } from "../lib/schemas/forms";
 
 import AttachmentManager, { uploadAttachment } from "./AttachmentManager";
@@ -220,6 +222,7 @@ export default function TransactionForm({
 
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
     let uploadWarning: string | null = null;
+    let queuedOffline = false;
     const endpoint = mode === "edit" && transaction ? `/api/transactions/${transaction.id}` : "/api/transactions";
     const method = mode === "edit" ? "PATCH" : "POST";
     const payload = {
@@ -247,49 +250,87 @@ export default function TransactionForm({
           startDate: startDate || undefined,
         });
       } else {
-        const res = await fetch(endpoint, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        // Offline-Erfassen (Phase 3a): stabile Client-ID (cuid2) + Idempotency-Key.
+        // Ohne Netz wird die Buchung in die Outbox eingereiht und optimistisch
+        // angezeigt; bei Netzabbruch mitten im Request dedupliziert der Server
+        // über dieselbe mutationId (MutationLog).
+        const clientId = mode === "create" ? createId() : undefined;
+        const mutationId = mode === "create" ? crypto.randomUUID() : undefined;
+        const requestPayload = clientId ? { ...payload, id: clientId } : payload;
 
-        if (!res.ok) {
-          setSubmitError(t("transactionForm.errorSaveFailed", { status: res.status }));
-          return;
+        let res: Response | null = null;
+        if (mode === "create" && !navigator.onLine) {
+          queuedOffline = true;
+        } else {
+          try {
+            res = await fetch(endpoint, {
+              method,
+              headers: {
+                "Content-Type": "application/json",
+                ...(mutationId ? { "Idempotency-Key": mutationId } : {}),
+              },
+              body: JSON.stringify(requestPayload),
+            });
+          } catch (networkError) {
+            if (mode !== "create") throw networkError;
+            queuedOffline = true;
+          }
         }
 
-        // Im Create-Mode gequeuete Belege nach dem Anlegen hochladen. Schlägt
-        // ein Upload fehl, bleibt die Transaktion bestehen — der Nutzer kann
-        // den Beleg über "Bearbeiten" nachreichen.
-        if (mode === "create" && pendingFiles.length > 0) {
-          const created: { id: string } = await res.json();
-          const failed: File[] = [];
-          for (const file of pendingFiles) {
-            try {
-              const uploadRes = await uploadAttachment(created.id, file);
-              if (!uploadRes.ok) failed.push(file);
-            } catch {
-              failed.push(file);
-            }
-          }
-          setPendingFiles([]);
-          if (failed.length > 0) {
-            uploadWarning = t("transactionForm.attachmentsUploadFailedAfterSave", { count: String(failed.length) });
+        if (queuedOffline && mutationId && clientId) {
+          await queueOfflineTransaction(queryClient, mutationId, requestPayload as OfflineTransactionPayload);
+          if (pendingFiles.length > 0) {
+            // Belege brauchen den Server — offline nicht möglich, später nachreichen.
+            setPendingFiles([]);
+            uploadWarning = t("transactionForm.attachmentsOfflineSkipped");
             setAttachmentUploadError(uploadWarning);
+          }
+        } else if (res) {
+          if (!res.ok) {
+            setSubmitError(t("transactionForm.errorSaveFailed", { status: res.status }));
+            return;
+          }
+
+          // Im Create-Mode gequeuete Belege nach dem Anlegen hochladen. Schlägt
+          // ein Upload fehl, bleibt die Transaktion bestehen — der Nutzer kann
+          // den Beleg über "Bearbeiten" nachreichen.
+          if (mode === "create" && pendingFiles.length > 0) {
+            const created: { id: string } = await res.json();
+            const failed: File[] = [];
+            for (const file of pendingFiles) {
+              try {
+                const uploadRes = await uploadAttachment(created.id, file);
+                if (!uploadRes.ok) failed.push(file);
+              } catch {
+                failed.push(file);
+              }
+            }
+            setPendingFiles([]);
+            if (failed.length > 0) {
+              uploadWarning = t("transactionForm.attachmentsUploadFailedAfterSave", { count: String(failed.length) });
+              setAttachmentUploadError(uploadWarning);
+            }
           }
         }
       }
 
-      invalidateTransactionData();
-      if (isRecurring) {
-        void queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      if (queuedOffline) {
+        // Kein Invalidate: der Server kennt die Buchung noch nicht — die
+        // optimistische Zeile bleibt bis zum Outbox-Flush im Query-Cache.
+      } else {
+        invalidateTransactionData();
+        if (isRecurring) {
+          void queryClient.invalidateQueries({ queryKey: ["recurring"] });
+        }
       }
 
       const message = mode === "edit"
         ? t("transactionForm.updated")
         : isRecurring
           ? t("transactionForm.recurringSaved")
-          : t("transactionForm.saved");
+          : queuedOffline
+            ? t("transactionForm.savedOffline")
+            : t("transactionForm.saved");
       onSuccess?.(message, uploadWarning ? { keepOpen: true } : undefined);
 
       if (mode === "create") {
