@@ -15,6 +15,10 @@ model Account {
   userId      String
   householdId String
   createdAt   DateTime      @default(now())
+  // Sync (Phase 3b): updatedAt drives conflict detection (baseUpdatedAt compare);
+  // deletedAt is a tombstone so a delete propagates as a row instead of a gap.
+  updatedAt   DateTime      @default(now()) @updatedAt
+  deletedAt   DateTime?
   transactions Transaction[]
   recurring    RecurringTransaction[]
   budgets      Budget[]
@@ -36,6 +40,8 @@ model Category {
   // Selecting this category in the transaction form pre-enables the tax toggle.
   isTaxRelevant Boolean       @default(false)
   createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @default(now()) @updatedAt
+  deletedAt     DateTime?
   transactions Transaction[]
   recurring    RecurringTransaction[]
   budgets      Budget[]
@@ -64,6 +70,8 @@ model Transaction {
   // writes always set it from the session user.
   createdByUserId String?
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+  deletedAt     DateTime?
 
   account     Account  @relation(fields: [accountId], references: [id])
   category    Category? @relation(fields: [categoryId], references: [id])
@@ -102,6 +110,8 @@ model RecurringTransaction {
   dayOfMonth     Int       @default(1) // Day of month (1-31) when transaction occurs
   nextOccurrence DateTime
   createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+  deletedAt      DateTime?
 
   account  Account   @relation(fields: [accountId], references: [id])
   category Category? @relation(fields: [categoryId], references: [id])
@@ -136,6 +146,8 @@ model Budget {
   completedAt DateTime? // null = active goal, set = goal closed
   spentCents  Int?      // amount actually withdrawn from savings on completion (snapshot)
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  deletedAt   DateTime?
 
   account      Account       @relation(fields: [accountId], references: [id])
   category     Category?     @relation(fields: [categoryId], references: [id])
@@ -251,6 +263,24 @@ model MutationLog {
   appliedAt      DateTime @default(now())
 
   @@index([userId])
+}
+
+// Konflikt-Journal (Phase 3b Zwei-Wege-Sync): Sobald bei /api/sync/push ein
+// Feld per Last-Write-Wins überschrieben wurde, während ein anderes Gerät
+// denselben Datensatz zwischenzeitlich geändert hatte, landet der verlorene
+// Wert hier. Die UI meldet das dezent ("auf einem anderen Gerät geändert").
+// Reines Log, haushaltsweit scoped, keine Domain-Relation.
+model ConflictLog {
+  id           String   @id @default(cuid())
+  householdId  String
+  entity       String
+  entityId     String
+  field        String
+  serverValue  Json
+  clientValue  Json
+  createdAt    DateTime @default(now())
+
+  @@index([householdId])
 }
 
 // Web Push (Teil C): one row per browser/device that granted notification

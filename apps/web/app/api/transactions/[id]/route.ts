@@ -75,7 +75,15 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   }
 
   try {
-    await prisma.transaction.delete({ where: { id: params.id } });
+    // Soft-Delete (Phase 3b): Tombstone statt Hard-Delete, damit das Löschen
+    // per Sync auf andere Geräte propagiert und Edit-vs-Delete auflösbar bleibt.
+    // Belege (Bytes) einer nun getombstoneten Buchung werden nie wieder
+    // gebraucht — beim Soft-Delete mitentfernen (früher via DB-Cascade), sonst
+    // bliebe der Speicher belegt. Beides atomar.
+    await prisma.$transaction([
+      prisma.attachment.deleteMany({ where: { transactionId: params.id } }),
+      prisma.transaction.update({ where: { id: params.id }, data: { deletedAt: new Date() } })
+    ]);
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {

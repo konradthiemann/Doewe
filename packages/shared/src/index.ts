@@ -17,3 +17,18 @@ export {
   parseTimeToMinutes,
   isReminderDue
 } from "./push";
+
+export type {
+  SyncEntity,
+  SyncOpType,
+  SyncOp,
+  FieldConflict,
+  SyncOpResult
+} from "./sync";
+export {
+  valuesEqual,
+  mergeFields,
+  isConcurrentChange,
+  detectFieldConflicts,
+  updateBlockedByDelete
+} from "./sync";

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { useI18n } from "../lib/i18n";
 import { flushOutbox } from "../lib/offline/outbox";
+import { countNewConflicts, pullSnapshot } from "../lib/offline/pull";
 
 import { useToast } from "./ui/Toast";
 
@@ -13,6 +14,10 @@ import { useToast } from "./ui/Toast";
  * (iOS kennt keine Background Sync API — deshalb Vordergrund-Trigger).
  * Web Locks verhindert Doppel-Flush über mehrere Tabs; als Fallback schützt
  * serverseitig ohnehin die Idempotenz (MutationLog).
+ *
+ * Nach dem Push zieht derselbe Trigger den Server-Snapshot (Zwei-Wege-Sync,
+ * Pull) und meldet neue Konflikte dezent — so bleibt der Cache auch mit den
+ * Änderungen anderer Haushaltsgeräte aktuell.
  */
 export default function OutboxManager() {
   const queryClient = useQueryClient();
@@ -56,6 +61,18 @@ export default function OutboxManager() {
       });
     } else {
       await doFlush();
+    }
+
+    // Pull (Zwei-Wege-Sync): Server-Snapshot ziehen und Cache hydratisieren,
+    // dann abgeleitete Queries invalidieren. Läuft auch ohne Pending-Push, um
+    // Änderungen anderer Geräte zu übernehmen.
+    await pullSnapshot(queryClient);
+    void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    void queryClient.invalidateQueries({ queryKey: ["saving-plan"] });
+
+    const conflicts = await countNewConflicts();
+    if (conflicts > 0) {
+      toast.info(t("sync.conflictNotice", { count: String(conflicts) }));
     }
   }, [queryClient, t, toast]);
 
