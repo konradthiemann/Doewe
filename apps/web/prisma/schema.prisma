@@ -162,3 +162,20 @@ model PasswordResetToken {
 
   @@index([userId])
 }
+
+// Idempotenz-Log für Offline-Mutationen (Phase 3a Offline-Erfassen):
+// Der Client sendet je Mutation einen Idempotency-Key (mutationId). Replays
+// mit bekannter mutationId geben die gespeicherte Antwort zurück, statt
+// doppelt zu buchen — ein Netzabbruch NACH dem Commit ist damit ungefährlich.
+// Bewusst ohne User-Relation: reines Log, kein Domain-Objekt.
+model MutationLog {
+  id             String   @id @default(cuid())
+  mutationId     String   @unique
+  userId         String
+  entity         String
+  responseStatus Int
+  responseBody   Json
+  appliedAt      DateTime @default(now())
+
+  @@index([userId])
+}

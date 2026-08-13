@@ -541,5 +541,11 @@ export const en: Record<string, string> = {
   "dashboard.upcomingTitle": "Still due this month",
   "dashboard.upcomingNone": "Nothing else is due for the rest of the month.",
   "dashboard.recurringShowAll": "Show all {count} recurring transactions",
-  "offline.banner": "You're offline — showing the last loaded data."
+  "offline.banner": "You're offline — showing the last loaded data.",
+  "transactionForm.savedOffline": "Saved offline — will sync as soon as you're back online.",
+  "transactionForm.attachmentsOfflineSkipped": "Receipts can't be uploaded while offline — please add them later via “Edit”.",
+  "transactions.pendingSync": "Waiting to sync…",
+  "outbox.synced": "Synced {count} offline transaction(s).",
+  "outbox.dropped": "Offline transaction “{description}” was rejected by the server and discarded.",
+  "outbox.authRequired": "Session expired — offline transactions are waiting for your next sign-in."
 };
