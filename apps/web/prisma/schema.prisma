@@ -143,9 +143,20 @@ model User {
   // treated as stale and rejected, so a reset evicts existing sessions.
   passwordChangedAt DateTime?
 
+  // Server-rendered push texts need the language at the user (the UI locale
+  // lives only client-side in localStorage). The settings language switch syncs
+  // this field. Allowed: "de" | "en" (validated in the API).
+  locale             String  @default("de")
+  // Per-user opt-outs for the two push families (Teil C). Default on, but a push
+  // is only ever sent to a user who also has at least one PushSubscription.
+  notifyBudgetAlerts  Boolean @default(true)
+  notifyMonthlyReview Boolean @default(true)
+
   accounts  Account[]
   categories Category[]
   passwordResetTokens PasswordResetToken[]
+  pushSubscriptions   PushSubscription[]
+  reminderSetting     ReminderSetting?
 }
 
 // One-time tokens for the "forgot password" flow. Only the SHA-256 hash of the
@@ -178,4 +189,58 @@ model MutationLog {
   appliedAt      DateTime @default(now())
 
   @@index([userId])
+}
+
+// Web Push (Teil C): one row per browser/device that granted notification
+// permission. Several devices per user; on HTTP 404/410 during delivery the
+// endpoint is stale and the row is deleted. p256dh/auth are the client's
+// encryption keys from the PushSubscription's getKey() output.
+model PushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Dedupe for budget-threshold pushes — the unique constraint guarantees the
+// same threshold for the same category-budget month is only sent once (same
+// idempotency shape as RecurringTransactionSkip). budgetId is the Budget row id.
+model BudgetAlertLog {
+  id        String   @id @default(cuid())
+  budgetId  String
+  year      Int
+  month     Int
+  threshold Int
+  sentAt    DateTime @default(now())
+
+  @@unique([budgetId, year, month, threshold])
+  @@index([budgetId])
+}
+
+// Configurable capture reminder (Teil C, 5.3). Server-side cron scheduling
+// because the web has no client-side scheduled notifications. `weekdays` is a
+// 7-bit bitmask (bit 0 = Sunday … bit 6 = Saturday). `time` is local wall-clock
+// "HH:MM" interpreted in `timezone` (IANA). `lastSentOn` caps it to one push
+// per day even across cron overlaps/restarts.
+model ReminderSetting {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  enabled      Boolean  @default(false)
+  time         String   @default("20:00")
+  weekdays     Int      @default(127)
+  timezone     String   @default("Europe/Berlin")
+  smartSuppress Boolean @default(true)
+  lastSentOn   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

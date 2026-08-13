@@ -4,14 +4,26 @@ import { useSession } from "next-auth/react";
 
 import ChangePasswordCard from "../../components/ChangePasswordCard";
 import InstallAppCard from "../../components/InstallAppCard";
+import NotificationsCard from "../../components/NotificationsCard";
 import PageContainer from "../../components/PageContainer";
-import { useI18n } from "../../lib/i18n";
+import { useI18n, type Locale } from "../../lib/i18n";
 import { useTheme, type Theme } from "../../lib/ThemeContext";
 
 export default function SettingsPage() {
   const { data } = useSession();
   const { locale, setLocale, t } = useI18n();
   const { theme, setTheme } = useTheme();
+
+  // Sprachwahl liegt client-seitig; für server-gerenderte Push-Texte (Teil C)
+  // wird sie zusätzlich ins User-Feld synchronisiert.
+  function handleLocaleChange(next: Locale) {
+    setLocale(next);
+    void fetch("/api/me/locale", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locale: next })
+    }).catch(() => undefined);
+  }
 
   return (
     <main id="maincontent" className="py-6 md:py-8">
@@ -34,7 +46,7 @@ export default function SettingsPage() {
           <select
             id="settings-language"
             value={locale}
-            onChange={(event) => setLocale(event.target.value === "en" ? "en" : "de")}
+            onChange={(event) => handleLocaleChange(event.target.value === "en" ? "en" : "de")}
             className="w-full max-w-xs rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
           >
             <option value="de">{t("settings.languageOptionDe")}</option>
@@ -46,6 +58,9 @@ export default function SettingsPage() {
 
       {/* Change Password Section */}
       <ChangePasswordCard />
+
+      {/* Notifications Section */}
+      <NotificationsCard />
 
       {/* Theme Section */}
       <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
