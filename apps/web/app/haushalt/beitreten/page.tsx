@@ -64,40 +64,40 @@ export default function JoinHouseholdPage() {
     <main id="maincontent" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-8 text-center space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Doewe</h1>
-        <p className="text-sm text-gray-500 dark:text-neutral-400">{t("household.join.title")}</p>
+        <p className="text-sm text-ink-muted">{t("household.join.title")}</p>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white/95 p-6 shadow-md backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
+      <div className="rounded-card border border-line bg-surface/95 p-6 shadow-raised backdrop-blur">
         {status === "loading" ? (
-          <p className="flex items-center gap-2 text-sm text-gray-600 dark:text-neutral-300">
+          <p className="flex items-center gap-2 text-sm text-ink-muted">
             <Spinner size="sm" /> {t("household.join.loading")}
           </p>
         ) : done ? (
-          <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">
+          <p role="status" className="text-sm text-success">
             {t("household.join.success")}
           </p>
         ) : !token ? (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-danger">
             {t("household.join.missingToken")}
           </p>
         ) : status === "unauthenticated" ? (
           <div className="space-y-4">
-            <p className="text-sm text-gray-700 dark:text-neutral-200">{t("household.join.needLogin")}</p>
+            <p className="text-sm text-ink">{t("household.join.needLogin")}</p>
             <Link
               href={loginHref}
-              className="flex w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              className="flex w-full items-center justify-center rounded-field bg-brand px-4 py-2 text-sm font-semibold text-brand-on shadow-card transition hover:bg-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               {t("household.join.loginButton")}
             </Link>
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-gray-700 dark:text-neutral-200">{t("household.join.title")}</p>
+            <p className="text-sm text-ink">{t("household.join.title")}</p>
             <Button onClick={handleAccept} loading={busy} className="w-full">
               {busy ? t("household.join.accepting") : t("household.join.accept")}
             </Button>
             {error && (
-              <p role="alert" className="text-sm text-red-600">
+              <p role="alert" className="text-sm text-danger">
                 {error}
               </p>
             )}

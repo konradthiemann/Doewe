@@ -63,16 +63,16 @@ export default function InstallAppCard() {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+    <div className="rounded-card border border-line bg-surface/95 p-4 shadow-card">
       <h2 className="text-lg font-medium">{t("settings.installTitle")}</h2>
-      <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.installDescription")}</p>
+      <p className="text-sm text-ink-muted">{t("settings.installDescription")}</p>
       <div className="mt-3">
         {installEvent ? (
           <Button onClick={handleInstall} loading={installing}>
             {t("settings.installButton")}
           </Button>
         ) : (
-          <p className="text-sm text-gray-500 dark:text-neutral-400">
+          <p className="text-sm text-ink-muted">
             {ios ? t("settings.installIosHint") : t("settings.installGenericHint")}
           </p>
         )}

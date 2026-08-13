@@ -180,11 +180,11 @@ export default function RecurringTransactionForm({
     <div className="relative mx-auto w-full max-w-lg sm:max-w-xl">
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-1 rounded-xl blur-sm transition-opacity duration-700 bg-gradient-to-r from-indigo-500/20 via-purple-400/20 to-indigo-400/20 opacity-100"
+        className="pointer-events-none absolute -inset-1 rounded-card blur-sm transition-opacity duration-700 bg-brand/15 opacity-100"
       />
       <form
         onSubmit={handleSubmit(onSubmit)}
-        className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-xl border border-white/40 bg-white/95 p-4 text-left shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-neutral-800/95 sm:p-6"
+        className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-card border border-line bg-surface p-4 text-left shadow-raised sm:p-6"
         aria-describedby={submitError ?? loadError ? "form-error" : undefined}
       >
         <div className="flex items-center justify-between">
@@ -196,7 +196,7 @@ export default function RecurringTransactionForm({
               type="button"
               onClick={onClose}
               aria-label={t("common.close")}
-              className="rounded p-1 hover:bg-black/5 dark:hover:bg-white/10"
+              className="rounded p-1 text-ink-muted hover:bg-surface-2 hover:text-ink"
             >
               ×
             </button>
@@ -213,8 +213,8 @@ export default function RecurringTransactionForm({
             className={cn(
               "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "income"
-                ? "text-white focus-visible:ring-green-500"
-                : "text-green-700 dark:text-green-300 focus-visible:ring-green-500"
+                ? "text-brand-on focus-visible:ring-income"
+                : "text-income focus-visible:ring-income"
             )}
             aria-pressed={txType === "income"}
             onClick={() => setTxType("income")}
@@ -223,7 +223,7 @@ export default function RecurringTransactionForm({
             {txType === "income" && (
               <span
                 aria-hidden
-                className="absolute inset-0 rounded-md bg-gradient-to-r from-green-500 via-emerald-500 to-green-400 animate-pulse opacity-80"
+                className="absolute inset-0 rounded-field bg-income animate-pulse opacity-90 motion-reduce:animate-none"
                 style={{ animationDuration: "2.8s" }}
               />
             )}
@@ -233,8 +233,8 @@ export default function RecurringTransactionForm({
             className={cn(
               "relative px-3 py-1.5 rounded-md text-sm font-medium focus:outline-none focus-visible:ring focus-visible:ring-offset-2",
               txType === "outcome"
-                ? "text-white focus-visible:ring-red-500"
-                : "text-red-700 dark:text-red-300 focus-visible:ring-red-500"
+                ? "text-brand-on focus-visible:ring-expense"
+                : "text-expense focus-visible:ring-expense"
             )}
             aria-pressed={txType === "outcome"}
             onClick={() => setTxType("outcome")}
@@ -243,7 +243,7 @@ export default function RecurringTransactionForm({
             {txType === "outcome" && (
               <span
                 aria-hidden
-                className="absolute inset-0 rounded-md bg-gradient-to-r from-red-500 via-rose-500 to-red-400 animate-pulse opacity-80"
+                className="absolute inset-0 rounded-field bg-expense animate-pulse opacity-90 motion-reduce:animate-none"
                 style={{ animationDuration: "2.8s" }}
               />
             )}
@@ -253,13 +253,13 @@ export default function RecurringTransactionForm({
         {appConfig.enableAccountSelection && (
           <div>
             <label className="block text-sm font-medium mb-1" htmlFor="recurring-account">
-              {t("recurringForm.accountLabel")} <span className="text-red-600">*</span>
+              {t("recurringForm.accountLabel")} <span className="text-danger">*</span>
             </label>
             <select
               {...register("accountId")}
               id="recurring-account"
               aria-invalid={!!errors.accountId}
-              className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+              className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
             >
               <option value="" disabled>
                 {t("recurringForm.accountPlaceholder")}
@@ -271,14 +271,14 @@ export default function RecurringTransactionForm({
               ))}
             </select>
             {errors.accountId && (
-              <p role="alert" className="mt-1 text-xs text-red-600">{errors.accountId.message}</p>
+              <p role="alert" className="mt-1 text-xs text-danger">{errors.accountId.message}</p>
             )}
           </div>
         )}
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-description">
-            {t("recurringForm.descriptionLabel")} <span className="text-red-600">*</span>
+            {t("recurringForm.descriptionLabel")} <span className="text-danger">*</span>
           </label>
           <input
             {...register("description")}
@@ -288,16 +288,16 @@ export default function RecurringTransactionForm({
             }}
             id="recurring-description"
             aria-invalid={!!errors.description}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
           {errors.description && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.description.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.description.message}</p>
           )}
         </div>
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-amount">
-            {t("recurringForm.amountLabel")} <span className="text-red-600">*</span>
+            {t("recurringForm.amountLabel")} <span className="text-danger">*</span>
           </label>
           <input
             {...register("amount")}
@@ -306,13 +306,13 @@ export default function RecurringTransactionForm({
             placeholder={t("recurringForm.amountPlaceholder")}
             aria-invalid={!!errors.amount}
             aria-describedby="recurring-amount-hint"
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
-          <p id="recurring-amount-hint" className="mt-1 text-xs text-gray-500 dark:text-neutral-400">
+          <p id="recurring-amount-hint" className="mt-1 text-xs text-ink-muted">
             {t("recurringForm.amountHint")}
           </p>
           {errors.amount && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.amount.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.amount.message}</p>
           )}
         </div>
 
@@ -323,7 +323,7 @@ export default function RecurringTransactionForm({
           <select
             {...register("categoryId")}
             id="recurring-category"
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           >
             <option value="">{t("recurringForm.categoryNone")}</option>
             {filteredCategories.map((category) => (
@@ -336,7 +336,7 @@ export default function RecurringTransactionForm({
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-interval">
-            {t("recurringForm.intervalLabel")} <span className="text-red-600">*</span>
+            {t("recurringForm.intervalLabel")} <span className="text-danger">*</span>
           </label>
           <input
             {...register("intervalMonths", { valueAsNumber: true })}
@@ -345,17 +345,17 @@ export default function RecurringTransactionForm({
             min={1}
             max={24}
             aria-invalid={!!errors.intervalMonths}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
-          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.intervalHelper")}</p>
+          <p className="text-xs text-ink-muted">{t("recurringForm.intervalHelper")}</p>
           {errors.intervalMonths && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.intervalMonths.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.intervalMonths.message}</p>
           )}
         </div>
 
         <div>
           <label className="block text-sm font-medium mb-1" htmlFor="recurring-dayofmonth">
-            {t("recurringForm.dayOfMonthLabel")} <span className="text-red-600">*</span>
+            {t("recurringForm.dayOfMonthLabel")} <span className="text-danger">*</span>
           </label>
           <input
             {...register("dayOfMonth", { valueAsNumber: true })}
@@ -364,11 +364,11 @@ export default function RecurringTransactionForm({
             min={1}
             max={31}
             aria-invalid={!!errors.dayOfMonth}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
-          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.dayOfMonthHelper")}</p>
+          <p className="text-xs text-ink-muted">{t("recurringForm.dayOfMonthHelper")}</p>
           {errors.dayOfMonth && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.dayOfMonth.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.dayOfMonth.message}</p>
           )}
         </div>
 
@@ -381,11 +381,11 @@ export default function RecurringTransactionForm({
             id="recurring-startdate"
             type="date"
             aria-invalid={!!errors.startDate}
-            className="w-full rounded-md border-gray-300 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100 focus:border-indigo-500 focus:ring-indigo-500"
+            className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
-          <p className="text-xs text-gray-500 dark:text-neutral-400">{t("recurringForm.startDateHelper")}</p>
+          <p className="text-xs text-ink-muted">{t("recurringForm.startDateHelper")}</p>
           {errors.startDate && (
-            <p role="alert" className="mt-1 text-xs text-red-600">{errors.startDate.message}</p>
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.startDate.message}</p>
           )}
         </div>
 
@@ -401,23 +401,23 @@ export default function RecurringTransactionForm({
         </div>
 
         {(submitError ?? loadError) && (
-          <p id="form-error" role="alert" className="text-sm text-red-600">
+          <p id="form-error" role="alert" className="text-sm text-danger">
             {submitError ?? loadError}
           </p>
         )}
 
-        <div className="border-t border-gray-200 pt-3 dark:border-neutral-700">
+        <div className="border-t border-line pt-3">
           {!deleteConfirm ? (
             <button
               type="button"
               onClick={() => setDeleteConfirm(true)}
-              className="text-sm font-semibold text-red-600 hover:text-red-500 focus:outline-none focus-visible:ring focus-visible:ring-red-500 focus-visible:ring-offset-2"
+              className="text-sm font-semibold text-danger hover:opacity-80 focus:outline-none focus-visible:ring focus-visible:ring-danger focus-visible:ring-offset-2"
             >
               {t("recurringForm.deleteAction")}
             </button>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-red-600">{t("recurringForm.deletePrompt")}</p>
+              <p className="text-sm text-danger">{t("recurringForm.deletePrompt")}</p>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -441,7 +441,7 @@ export default function RecurringTransactionForm({
                 </Button>
               </div>
               {deleteError && (
-                <p role="alert" className="text-sm text-red-600">
+                <p role="alert" className="text-sm text-danger">
                   {deleteError}
                 </p>
               )}

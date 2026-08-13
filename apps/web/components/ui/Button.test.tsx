@@ -14,26 +14,26 @@ describe("Button", () => {
   it("applies primary variant classes by default", () => {
     render(<Button>Save</Button>);
     const btn = screen.getByRole("button");
-    expect(btn.className).toContain("bg-indigo-600");
+    expect(btn.className).toContain("bg-brand");
   });
 
   it("applies secondary variant classes", () => {
     render(<Button variant="secondary">Cancel</Button>);
     const btn = screen.getByRole("button");
-    expect(btn.className).toContain("border-gray-300");
+    expect(btn.className).toContain("border-line-strong");
   });
 
   it("applies danger variant classes", () => {
     render(<Button variant="danger">Delete</Button>);
     const btn = screen.getByRole("button");
-    expect(btn.className).toContain("bg-red-600");
+    expect(btn.className).toContain("bg-danger");
   });
 
   it("merges custom className without conflicts", () => {
     render(<Button className="flex-1">Submit</Button>);
     const btn = screen.getByRole("button");
     expect(btn.className).toContain("flex-1");
-    expect(btn.className).toContain("bg-indigo-600");
+    expect(btn.className).toContain("bg-brand");
   });
 
   it("is disabled when disabled prop is set", () => {

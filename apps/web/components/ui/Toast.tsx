@@ -115,7 +115,7 @@ function ToastViewport({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: 
   // no transform/overflow/filter ancestor that would trap it.
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-4 z-[100] flex flex-col items-center gap-2 px-4"
+      className="pointer-events-none fixed inset-x-0 top-4 z-toast flex flex-col items-center gap-2 px-4"
       aria-label={t("common.notifications")}
     >
       {toasts.map((toast) => (
@@ -126,11 +126,9 @@ function ToastViewport({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: 
 }
 
 const variantStyles: Record<ToastVariant, string> = {
-  success:
-    "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-950/90 dark:text-emerald-100",
-  error:
-    "border-red-200 bg-red-50 text-red-800 dark:border-red-500/40 dark:bg-red-950/90 dark:text-red-100",
-  info: "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-500/40 dark:bg-indigo-950/90 dark:text-indigo-100",
+  success: "border-success/25 bg-success-soft text-success",
+  error: "border-danger/25 bg-danger-soft text-danger",
+  info: "border-info/25 bg-info-soft text-info",
 };
 
 function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: number) => void }) {

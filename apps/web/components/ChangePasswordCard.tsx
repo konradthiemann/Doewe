@@ -9,7 +9,7 @@ import { Button } from "./ui/Button";
 const MIN_PASSWORD_LENGTH = 8;
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
+  "w-full rounded-field border border-line-strong bg-surface px-3 py-2 text-sm text-ink shadow-card focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2";
 
 export default function ChangePasswordCard() {
   const { t } = useI18n();
@@ -68,9 +68,9 @@ export default function ChangePasswordCard() {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white/95 p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+    <div className="rounded-card border border-line bg-surface/95 p-4 shadow-card">
       <h2 className="text-lg font-medium">{t("settings.password.title")}</h2>
-      <p className="text-sm text-gray-600 dark:text-neutral-300">{t("settings.password.description")}</p>
+      <p className="text-sm text-ink-muted">{t("settings.password.description")}</p>
 
       <form onSubmit={handleSubmit} className="mt-3 grid gap-3 sm:max-w-sm" aria-describedby={error ? "change-pw-error" : undefined}>
         <div>
@@ -101,7 +101,7 @@ export default function ChangePasswordCard() {
             className={inputClass}
             autoComplete="new-password"
           />
-          <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">{t("settings.password.hint")}</p>
+          <p className="mt-1 text-xs text-ink-muted">{t("settings.password.hint")}</p>
         </div>
 
         <div>
@@ -128,14 +128,14 @@ export default function ChangePasswordCard() {
         {/* Persistent live regions so screen readers announce status changes. */}
         <div role="alert" aria-live="assertive">
           {error && (
-            <p id="change-pw-error" className="text-sm text-red-600">
+            <p id="change-pw-error" className="text-sm text-danger">
               {error}
             </p>
           )}
         </div>
         <div role="status" aria-live="polite">
           {message && (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            <p className="text-sm text-success">
               {message}
             </p>
           )}

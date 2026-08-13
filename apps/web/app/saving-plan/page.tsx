@@ -365,14 +365,14 @@ function SavingPlanPage() {
     <main id="maincontent" className="py-6 md:py-8">
       <PageContainer className="space-y-8">
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-900/20 dark:text-red-200">
+        <div className="rounded-field border border-danger/30 bg-danger-soft p-4 text-sm text-danger">
           {error}
         </div>
       )}
 
       <section
         aria-labelledby="saving-plan-summary"
-        className="grid gap-4 rounded-xl border border-gray-200 bg-white/95 p-5 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/90"
+        className="grid gap-4 rounded-card border border-line bg-surface/95 p-5 shadow-card backdrop-blur"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="saving-plan-summary" className="text-lg font-medium">
@@ -383,7 +383,7 @@ function SavingPlanPage() {
             onClick={openWithdrawDialog}
             disabled={availableCents <= 0}
             title={availableCents <= 0 ? t("savingPlan.withdraw.nothingAvailable") : undefined}
-            className="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-500/40 dark:bg-neutral-800 dark:text-indigo-300 dark:hover:bg-indigo-900/20"
+            className="inline-flex items-center gap-1.5 rounded-field border border-brand/40 bg-surface px-3 py-1.5 text-xs font-medium text-brand shadow-card transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
               <path fillRule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3.75A.75.75 0 0 1 10 3Z" clipRule="evenodd" />
@@ -392,25 +392,25 @@ function SavingPlanPage() {
           </button>
         </div>
         <div className="grid gap-4 sm:grid-cols-4">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryAvailable")}</p>
+          <div className="rounded-field border border-line bg-surface-2 p-4 text-ink">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryAvailable")}</p>
             <p className="text-xl font-semibold">{formatCurrency(availableCents)}</p>
-            <p className="text-xs text-slate-600 dark:text-neutral-400">{t("savingPlan.summaryAvailableHelp")}</p>
+            <p className="text-xs text-ink-muted">{t("savingPlan.summaryAvailableHelp")}</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryPlannedTotal")}</p>
+          <div className="rounded-field border border-line bg-surface-2 p-4 text-ink">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryPlannedTotal")}</p>
             <p className="text-xl font-semibold">{formatCurrency(plan?.totals.totalTargetCents ?? 0)}</p>
-            <p className="text-xs text-slate-600 dark:text-neutral-400">{t("savingPlan.summaryPlannedHelp")}</p>
+            <p className="text-xs text-ink-muted">{t("savingPlan.summaryPlannedHelp")}</p>
           </div>
-          <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 dark:border-indigo-500/40 dark:bg-indigo-900/20 dark:text-indigo-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">{t("savingPlan.summarySuggestedMonthly")}</p>
+          <div className="rounded-field border border-line bg-savings-soft p-4 text-ink">
+            <p className="text-xs font-semibold uppercase tracking-wide text-savings">{t("savingPlan.summarySuggestedMonthly")}</p>
             <p className="text-xl font-semibold">{formatCurrency(plan?.totals.suggestedMonthlyCents ?? 0)}</p>
-            <p className="text-xs text-indigo-700 dark:text-indigo-300">{t("savingPlan.summarySuggestedMonthlyHelp")}</p>
+            <p className="text-xs text-ink-muted">{t("savingPlan.summarySuggestedMonthlyHelp")}</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.summaryRemainingAfter")}</p>
+          <div className="rounded-field border border-line bg-surface-2 p-4 text-ink">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryRemainingAfter")}</p>
             <p className="text-xl font-semibold">{formatCurrency(remainingAfterGoals)}</p>
-            <p className="text-xs text-slate-600 dark:text-neutral-400">
+            <p className="text-xs text-ink-muted">
               {remainingAfterGoals > 0
                 ? t("savingPlan.summaryRemainingHelpPositive")
                 : t("savingPlan.summaryRemainingHelpNegative")}
@@ -418,12 +418,12 @@ function SavingPlanPage() {
           </div>
         </div>
         {shortfall > 0 && (
-          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200">
+          <p className="rounded-field border border-warning/30 bg-warning-soft p-3 text-sm text-warning">
             {t("savingPlan.shortfall", { amount: formatCurrency(shortfall) })}
           </p>
         )}
         {withdrawnForCompletedCents > 0 && (
-          <p className="text-xs text-slate-500 dark:text-neutral-400">
+          <p className="text-xs text-ink-muted">
             {t("savingPlan.summaryWithdrawnForCompleted", { amount: formatCurrency(withdrawnForCompletedCents) })}
           </p>
         )}
@@ -434,16 +434,16 @@ function SavingPlanPage() {
           <h2 id="saving-plan-timeline" className="text-lg font-medium">
             {t("savingPlan.timelineTitle")}
           </h2>
-          <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-neutral-400">{t("savingPlan.timelineHint")}</span>
+          <span className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineHint")}</span>
         </div>
         {loading ? (
-          <p className="text-sm text-gray-500 dark:text-neutral-400">{t("savingPlan.timelineLoading")}</p>
+          <p className="text-sm text-ink-muted">{t("savingPlan.timelineLoading")}</p>
         ) : timelineEmpty ? (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-white/60 p-8 text-center text-sm text-gray-500 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400">
+          <div className="rounded-card border border-dashed border-line-strong bg-surface/60 p-8 text-center text-sm text-ink-muted shadow-card">
             <p>{t("savingPlan.timelineEmpty")}</p>
           </div>
         ) : (
-          <ol className="relative max-w-3xl border-l border-slate-200 pl-6 dark:border-neutral-700">
+          <ol className="relative max-w-3xl border-l border-line pl-6">
             {goalsWithProgress.map((goal, index) => {
               const isLast = index === goalsWithProgress.length - 1;
               const dueDate =
@@ -455,55 +455,55 @@ function SavingPlanPage() {
                   : "";
               const percentClamped = Math.min(goal.percent, 100);
               const statusClasses = {
-                complete: "bg-emerald-500 text-emerald-500",
-                current: "bg-indigo-500 text-indigo-500",
-                upcoming: "bg-slate-400 text-slate-400"
+                complete: "bg-success text-success",
+                current: "bg-brand text-brand",
+                upcoming: "bg-line-strong text-ink-faint"
               }[goal.status];
-              const progressColor = goal.status === "complete" ? "bg-emerald-500" : goal.status === "current" ? "bg-indigo-500" : "bg-slate-300 dark:bg-neutral-600";
-              const badgeColor = goal.status === "complete" ? "border-emerald-500" : goal.status === "current" ? "border-indigo-500" : "border-slate-300 dark:border-neutral-600";
+              const progressColor = goal.status === "complete" ? "bg-success" : goal.status === "current" ? "bg-brand" : "bg-line-strong";
+              const badgeColor = goal.status === "complete" ? "border-success" : goal.status === "current" ? "border-brand" : "border-line-strong";
 
               return (
                 <li key={goal.id} className={`relative pb-10 last:pb-0`} aria-current={goal.status === "current" ? "step" : undefined}>
                   <span
-                    className={`absolute -left-[9px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-white dark:bg-neutral-900 ${badgeColor}`}
+                    className={`absolute -left-[9px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-surface ${badgeColor}`}
                   >
                     <span className={`h-2 w-2 rounded-full ${statusClasses}`} aria-hidden="true" />
                   </span>
                   {!isLast && (
                     <span
                       aria-hidden="true"
-                      className="absolute left-0 top-5 h-full w-px bg-slate-200 dark:bg-neutral-700"
+                      className="absolute left-0 top-5 h-full w-px bg-line"
                     />
                   )}
-                  <div className="ml-4 space-y-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90">
+                  <div className="ml-4 space-y-3 rounded-card border border-line bg-surface/95 p-4 shadow-card backdrop-blur">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                           {dueDate}
                         </p>
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{goal.title}</h3>
+                        <h3 className="text-lg font-semibold text-ink">{goal.title}</h3>
                         {goal.categoryName && (
-                          <p className="text-xs text-slate-500 dark:text-neutral-400">
+                          <p className="text-xs text-ink-muted">
                             {t("savingPlan.timelineCategory")}: {goal.categoryName}
                           </p>
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.timelineGoal")}</p>
-                        <p className="text-xl font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(goal.amountCents ?? 0)}</p>
-                        <p className="text-xs text-slate-500 dark:text-neutral-400">
+                        <p className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineGoal")}</p>
+                        <p className="text-xl font-semibold text-ink">{formatCurrency(goal.amountCents ?? 0)}</p>
+                        <p className="text-xs text-ink-muted">
                           {t("savingPlan.timelineSaved", { amount: formatCurrency(goal.achievedCents) })}
                         </p>
                       </div>
                     </div>
                     <div>
-                      <div className="flex justify-between text-xs text-slate-500 dark:text-neutral-400">
+                      <div className="flex justify-between text-xs text-ink-muted">
                         <span>{t("savingPlan.timelinePercentComplete", { percent: percentClamped })}</span>
                         <span>
                           {t("savingPlan.timelineTarget", { amount: formatCurrency(goal.cumulativeTargetCents) })}
                         </span>
                       </div>
-                      <div className="mt-1 h-2 w-full rounded-full bg-slate-200 dark:bg-neutral-700" aria-hidden="true">
+                      <div className="mt-1 h-2 w-full rounded-full bg-surface-2" aria-hidden="true">
                         <div
                           className={`h-2 rounded-full transition-all ${progressColor}`}
                           style={{ width: `${percentClamped}%` }}
@@ -514,13 +514,13 @@ function SavingPlanPage() {
                         const spentPercent = amount > 0 ? Math.min(Math.round((goal.transactionSpentCents / amount) * 100), 100) : 0;
                         return (
                           <div className="mt-2">
-                            <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
+                            <div className="flex justify-between text-xs text-warning">
                               <span>{t("savingPlan.timelineSpentPercent", { percent: spentPercent })}</span>
                               <span>{t("savingPlan.timelineSpent", { amount: formatCurrency(goal.transactionSpentCents) })}</span>
                             </div>
-                            <div className="mt-1 h-2 w-full rounded-full bg-amber-100 dark:bg-amber-900/30" aria-hidden="true">
+                            <div className="mt-1 h-2 w-full rounded-full bg-warning-soft" aria-hidden="true">
                               <div
-                                className="h-2 rounded-full bg-amber-500 transition-all dark:bg-amber-400"
+                                className="h-2 rounded-full bg-warning transition-all"
                                 style={{ width: `${spentPercent}%` }}
                               />
                             </div>
@@ -528,12 +528,12 @@ function SavingPlanPage() {
                         );
                       })()}
                       {goal.status === "current" && (
-                        <p className="mt-2 text-xs font-medium text-indigo-600 dark:text-indigo-300">
+                        <p className="mt-2 text-xs font-medium text-brand">
                           {t("savingPlan.timelineCurrent")}
                         </p>
                       )}
                       {goal.status === "upcoming" && (
-                        <p className="mt-2 text-xs text-slate-500 dark:text-neutral-400">
+                        <p className="mt-2 text-xs text-ink-muted">
                           {t("savingPlan.timelineUpcoming", { amount: formatCurrency(goal.cumulativeTargetCents - (goal.amountCents ?? 0)) })}
                         </p>
                       )}
@@ -541,21 +541,21 @@ function SavingPlanPage() {
                         <button
                           type="button"
                           onClick={() => openCompleteDialog(goal)}
-                          className="inline-flex items-center rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 shadow-sm hover:bg-emerald-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-emerald-500/40 dark:bg-neutral-800 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                          className="inline-flex items-center rounded-field border border-success/40 bg-surface px-3 py-1.5 text-xs font-medium text-success shadow-card hover:bg-success-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2"
                         >
                           {t("savingPlan.markComplete")}
                         </button>
                         <button
                           type="button"
                           onClick={() => openEditDialog(goal)}
-                          className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                          className="inline-flex items-center rounded-field border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                         >
                           {t("savingPlan.edit")}
                         </button>
                         <button
                           type="button"
                           onClick={() => setDeleteConfirm(goal)}
-                          className="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:border-red-500/40 dark:bg-neutral-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                          className="inline-flex items-center rounded-field border border-danger/40 bg-surface px-3 py-1.5 text-xs font-medium text-danger shadow-card hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2"
                         >
                           {t("savingPlan.delete")}
                         </button>
@@ -575,22 +575,22 @@ function SavingPlanPage() {
             <h2 id="saving-plan-undated" className="text-lg font-medium">
               {t("savingPlan.undatedTitle")}
             </h2>
-            <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-neutral-400">
+            <span className="text-xs uppercase tracking-wide text-ink-muted">
               {t("savingPlan.undatedHint")}
             </span>
           </div>
-          <p className="text-sm text-gray-500 dark:text-neutral-400">{t("savingPlan.undatedSubtitle")}</p>
+          <p className="text-sm text-ink-muted">{t("savingPlan.undatedSubtitle")}</p>
           <ul className="grid gap-3 sm:grid-cols-2">
             {undatedGoals.map((goal) => (
               <li
                 key={goal.id}
-                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90"
+                className="flex flex-col gap-3 rounded-card border border-line bg-surface/95 p-4 shadow-card backdrop-blur"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="truncate text-base font-semibold text-slate-900 dark:text-neutral-100">{goal.title}</h3>
+                    <h3 className="truncate text-base font-semibold text-ink">{goal.title}</h3>
                     {goal.categoryName && (
-                      <p className="text-xs text-slate-500 dark:text-neutral-400">
+                      <p className="text-xs text-ink-muted">
                         {t("savingPlan.timelineCategory")}: {goal.categoryName}
                       </p>
                     )}
@@ -598,11 +598,11 @@ function SavingPlanPage() {
                   <div className="shrink-0 text-right">
                     {goal.amountCents != null ? (
                       <>
-                        <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.timelineGoal")}</p>
-                        <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(goal.amountCents)}</p>
+                        <p className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineGoal")}</p>
+                        <p className="text-lg font-semibold text-ink">{formatCurrency(goal.amountCents)}</p>
                       </>
                     ) : (
-                      <p className="text-xs italic text-slate-400 dark:text-neutral-500">{t("savingPlan.undatedNoAmount")}</p>
+                      <p className="text-xs italic text-ink-faint">{t("savingPlan.undatedNoAmount")}</p>
                     )}
                   </div>
                 </div>
@@ -610,21 +610,21 @@ function SavingPlanPage() {
                   <button
                     type="button"
                     onClick={() => openEditDialog(goal, true)}
-                    className="inline-flex items-center rounded-md border border-indigo-300 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-indigo-500/40 dark:bg-neutral-800 dark:text-indigo-300 dark:hover:bg-indigo-900/20"
+                    className="inline-flex items-center rounded-field border border-brand/40 bg-surface px-3 py-1.5 text-xs font-medium text-brand shadow-card hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                   >
                     {t("savingPlan.undatedSchedule")}
                   </button>
                   <button
                     type="button"
                     onClick={() => openEditDialog(goal)}
-                    className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                    className="inline-flex items-center rounded-field border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                   >
                     {t("savingPlan.edit")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setDeleteConfirm(goal)}
-                    className="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:border-red-500/40 dark:bg-neutral-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                    className="inline-flex items-center rounded-field border border-danger/40 bg-surface px-3 py-1.5 text-xs font-medium text-danger shadow-card hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2"
                   >
                     {t("savingPlan.delete")}
                   </button>
@@ -641,12 +641,12 @@ function SavingPlanPage() {
             type="button"
             onClick={() => setCompletedExpanded((value) => !value)}
             aria-expanded={completedExpanded}
-            className="flex w-full items-center justify-between rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            className="flex w-full items-center justify-between rounded-field text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             <h2 id="saving-plan-completed" className="text-lg font-medium">
               {t("savingPlan.completedSectionTitle", { count: completedGoals.length })}
             </h2>
-            <span aria-hidden="true" className="text-sm text-gray-500 dark:text-neutral-400">
+            <span aria-hidden="true" className="text-sm text-ink-muted">
               {completedExpanded ? "▾" : "▸"}
             </span>
           </button>
@@ -672,30 +672,30 @@ function SavingPlanPage() {
                 return (
                   <li
                     key={goal.id}
-                    className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-900/10"
+                    className="rounded-card border border-success/30 bg-success-soft p-4 shadow-card"
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-success">
                           {dueDate}
                         </p>
-                        <h3 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{goal.title}</h3>
+                        <h3 className="text-lg font-semibold text-ink">{goal.title}</h3>
                         {completedDate && (
-                          <p className="text-xs text-slate-500 dark:text-neutral-400">
+                          <p className="text-xs text-ink-muted">
                             {t("savingPlan.completedOn", { date: completedDate })}
                           </p>
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-neutral-400">{t("savingPlan.timelineGoal")}</p>
-                        <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(goal.amountCents ?? 0)}</p>
-                        <p className="text-xs text-slate-600 dark:text-neutral-300">
+                        <p className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineGoal")}</p>
+                        <p className="text-lg font-semibold text-ink">{formatCurrency(goal.amountCents ?? 0)}</p>
+                        <p className="text-xs text-ink-muted">
                           {t("savingPlan.completedWithdrawn", { amount: formatCurrency(spent) })}
                         </p>
                       </div>
                     </div>
                     {diff !== 0 && (
-                      <p className="mt-2 text-xs text-slate-500 dark:text-neutral-400">
+                      <p className="mt-2 text-xs text-ink-muted">
                         {diff > 0
                           ? t("savingPlan.completedOverTarget", { amount: formatCurrency(diff) })
                           : t("savingPlan.completedUnderTarget", { amount: formatCurrency(-diff) })}
@@ -706,7 +706,7 @@ function SavingPlanPage() {
                         type="button"
                         onClick={() => handleReopen(goal)}
                         disabled={reopeningId === goal.id}
-                        className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                        className="inline-flex items-center rounded-field border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-50"
                       >
                         {reopeningId === goal.id && <Spinner size="sm" className="mr-2" />}
                         {reopeningId === goal.id ? t("savingPlan.reopening") : t("savingPlan.reopen")}
@@ -759,13 +759,13 @@ function SavingPlanPage() {
             aria-modal="true"
             aria-labelledby="delete-confirm-heading"
             aria-describedby="delete-confirm-message"
-            className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg focus:outline-none dark:bg-neutral-800"
+            className="relative z-10 mx-4 w-full max-w-md rounded-card bg-surface p-6 shadow-raised focus:outline-none"
             tabIndex={-1}
           >
-            <h2 id="delete-confirm-heading" className="text-lg font-semibold text-gray-900 dark:text-neutral-100">
+            <h2 id="delete-confirm-heading" className="text-lg font-semibold text-ink">
               {t("savingPlan.confirmDeleteTitle")}
             </h2>
-            <p id="delete-confirm-message" className="mt-2 text-sm text-gray-600 dark:text-neutral-400">
+            <p id="delete-confirm-message" className="mt-2 text-sm text-ink-muted">
               {t("savingPlan.confirmDeleteMessage", { title: deleteConfirm.title })}
             </p>
             <div className="mt-4 flex justify-end gap-3">
@@ -773,7 +773,7 @@ function SavingPlanPage() {
                 type="button"
                 onClick={() => setDeleteConfirm(null)}
                 disabled={deleting}
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+                className="inline-flex items-center rounded-field border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {t("savingPlan.confirmDeleteCancel")}
               </button>
@@ -781,7 +781,7 @@ function SavingPlanPage() {
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className="inline-flex items-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
+                className="inline-flex items-center rounded-field border border-transparent bg-danger px-4 py-2 text-sm font-medium text-brand-on shadow-card hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {deleting && <Spinner size="sm" className="mr-2" />}
                 {deleting ? t("savingPlan.deleting") : t("savingPlan.confirmDeleteConfirm")}
@@ -800,17 +800,17 @@ function SavingPlanPage() {
             aria-modal="true"
             aria-labelledby="complete-confirm-heading"
             aria-describedby="complete-confirm-message"
-            className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg focus:outline-none dark:bg-neutral-800"
+            className="relative z-10 mx-4 w-full max-w-md rounded-card bg-surface p-6 shadow-raised focus:outline-none"
             tabIndex={-1}
           >
-            <h2 id="complete-confirm-heading" className="text-lg font-semibold text-gray-900 dark:text-neutral-100">
+            <h2 id="complete-confirm-heading" className="text-lg font-semibold text-ink">
               {t("savingPlan.completeDialogTitle")}
             </h2>
-            <p id="complete-confirm-message" className="mt-2 text-sm text-gray-600 dark:text-neutral-400">
+            <p id="complete-confirm-message" className="mt-2 text-sm text-ink-muted">
               {t("savingPlan.completeDialogMessage", { title: completeTarget.title })}
             </p>
             <div className="mt-4">
-              <label htmlFor="complete-spent" className="block text-sm font-medium text-gray-700 dark:text-neutral-200">
+              <label htmlFor="complete-spent" className="block text-sm font-medium text-ink">
                 {t("savingPlan.completeSpentLabel")}
               </label>
               <input
@@ -819,11 +819,11 @@ function SavingPlanPage() {
                 inputMode="decimal"
                 value={completeSpent}
                 onChange={(event) => setCompleteSpent(event.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
+                className="mt-1 block w-full rounded-field border-line-strong bg-surface shadow-card focus:border-brand focus:ring-brand"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">{t("savingPlan.completeSpentHint")}</p>
+              <p className="mt-1 text-xs text-ink-muted">{t("savingPlan.completeSpentHint")}</p>
               {completeError && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{completeError}</p>
+                <p className="mt-1 text-xs text-danger">{completeError}</p>
               )}
             </div>
             <div className="mt-4 flex justify-end gap-3">
@@ -831,7 +831,7 @@ function SavingPlanPage() {
                 type="button"
                 onClick={closeCompleteDialog}
                 disabled={completing}
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+                className="inline-flex items-center rounded-field border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {t("savingPlan.confirmDeleteCancel")}
               </button>
@@ -839,7 +839,7 @@ function SavingPlanPage() {
                 type="button"
                 onClick={handleComplete}
                 disabled={completing}
-                className="inline-flex items-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:opacity-50"
+                className="inline-flex items-center rounded-field border border-transparent bg-success px-4 py-2 text-sm font-medium text-brand-on shadow-card hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {completing && <Spinner size="sm" className="mr-2" />}
                 {completing ? t("savingPlan.completing") : t("savingPlan.completeConfirm")}
@@ -858,21 +858,21 @@ function SavingPlanPage() {
             aria-modal="true"
             aria-labelledby="withdraw-heading"
             aria-describedby="withdraw-message"
-            className="relative z-10 mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg focus:outline-none dark:bg-neutral-800"
+            className="relative z-10 mx-4 w-full max-w-md rounded-card bg-surface p-6 shadow-raised focus:outline-none"
             tabIndex={-1}
           >
-            <h2 id="withdraw-heading" className="text-lg font-semibold text-gray-900 dark:text-neutral-100">
+            <h2 id="withdraw-heading" className="text-lg font-semibold text-ink">
               {t("savingPlan.withdraw.dialogTitle")}
             </h2>
-            <p id="withdraw-message" className="mt-2 text-sm text-gray-600 dark:text-neutral-400">
+            <p id="withdraw-message" className="mt-2 text-sm text-ink-muted">
               {t("savingPlan.withdraw.dialogMessage")}
             </p>
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800/60">
-              <span className="text-slate-500 dark:text-neutral-400">{t("savingPlan.withdraw.availableLabel")}: </span>
-              <span className="font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(availableCents)}</span>
+            <div className="mt-3 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
+              <span className="text-ink-muted">{t("savingPlan.withdraw.availableLabel")}: </span>
+              <span className="font-semibold text-ink">{formatCurrency(availableCents)}</span>
             </div>
             <div className="mt-4">
-              <label htmlFor="withdraw-amount" className="block text-sm font-medium text-gray-700 dark:text-neutral-200">
+              <label htmlFor="withdraw-amount" className="block text-sm font-medium text-ink">
                 {t("savingPlan.withdraw.amountLabel")}
               </label>
               <div className="mt-1 flex gap-2">
@@ -883,19 +883,19 @@ function SavingPlanPage() {
                   value={withdrawAmount}
                   onChange={(event) => setWithdrawAmount(event.target.value)}
                   placeholder={t("savingPlan.form.amountPlaceholder")}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-100"
+                  className="block w-full rounded-field border-line-strong bg-surface shadow-card focus:border-brand focus:ring-brand"
                 />
                 <button
                   type="button"
                   onClick={() => setWithdrawAmount(toDecimalString(fromCents(availableCents)))}
-                  className="shrink-0 rounded-md border border-gray-300 px-3 text-xs font-medium text-gray-600 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-700"
+                  className="shrink-0 rounded-field border border-line-strong px-3 text-xs font-medium text-ink-muted hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                 >
                   {t("savingPlan.withdraw.max")}
                 </button>
               </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-neutral-400">{t("savingPlan.withdraw.amountHint")}</p>
+              <p className="mt-1 text-xs text-ink-muted">{t("savingPlan.withdraw.amountHint")}</p>
               {withdrawError && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{withdrawError}</p>
+                <p className="mt-1 text-xs text-danger">{withdrawError}</p>
               )}
             </div>
             <div className="mt-4 flex justify-end gap-3">
@@ -903,7 +903,7 @@ function SavingPlanPage() {
                 type="button"
                 onClick={closeWithdrawDialog}
                 disabled={withdrawing}
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-600"
+                className="inline-flex items-center rounded-field border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {t("savingPlan.confirmDeleteCancel")}
               </button>
@@ -911,7 +911,7 @@ function SavingPlanPage() {
                 type="button"
                 onClick={handleWithdraw}
                 disabled={withdrawing}
-                className="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50"
+                className="inline-flex items-center rounded-field border border-transparent bg-brand px-4 py-2 text-sm font-medium text-brand-on shadow-card hover:bg-brand-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 {withdrawing && <Spinner size="sm" className="mr-2" />}
                 {withdrawing ? t("savingPlan.withdraw.submitting") : t("savingPlan.withdraw.confirm")}
@@ -928,7 +928,7 @@ export default function SavingPlanPageWithSuspense() {
   const { t } = useI18n();
 
   return (
-    <Suspense fallback={<main className="p-6"><p className="text-sm text-gray-500">{t("savingPlan.loading")}</p></main>}>
+    <Suspense fallback={<main className="p-6"><p className="text-sm text-ink-muted">{t("savingPlan.loading")}</p></main>}>
       <SavingPlanPage />
     </Suspense>
   );

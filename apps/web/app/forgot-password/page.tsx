@@ -41,15 +41,15 @@ export default function ForgotPasswordPage() {
     <main id="maincontent" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-8 text-center space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Doewe</h1>
-        <p className="text-sm text-gray-500 dark:text-neutral-400">{t("forgotPassword.title")}</p>
+        <p className="text-sm text-ink-muted">{t("forgotPassword.title")}</p>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white/95 p-6 shadow-md backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/95">
+      <div className="rounded-card border border-line bg-surface/95 p-6 shadow-raised backdrop-blur">
         {/* Persistent live region so screen readers announce the confirmation
             (a region mounted together with its text may not be announced). */}
         <div role="status" aria-live="polite">
           {submitted && (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            <p className="text-sm text-success">
               {t("forgotPassword.success")}
             </p>
           )}
@@ -57,11 +57,11 @@ export default function ForgotPasswordPage() {
 
         {!submitted && (
           <form onSubmit={handleSubmit} className="space-y-4" aria-describedby={error ? "forgot-error" : undefined}>
-            <p className="text-sm text-gray-600 dark:text-neutral-300">{t("forgotPassword.description")}</p>
+            <p className="text-sm text-ink-muted">{t("forgotPassword.description")}</p>
 
             <div>
               <label className="mb-1 block text-sm font-medium" htmlFor="email">
-                {t("forgotPassword.emailLabel")} <span className="text-red-600">*</span>
+                {t("forgotPassword.emailLabel")} <span className="text-danger">*</span>
               </label>
               <input
                 id="email"
@@ -70,7 +70,7 @@ export default function ForgotPasswordPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                className="w-full rounded-field border border-line-strong bg-surface px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
                 autoComplete="email"
               />
             </div>
@@ -78,14 +78,14 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              className="flex w-full items-center justify-center rounded-field bg-brand px-4 py-2 text-sm font-semibold text-brand-on shadow-card transition hover:bg-brand-hover disabled:opacity-50 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               {loading && <Spinner size="sm" className="mr-2" />}
               {loading ? t("forgotPassword.submitting") : t("forgotPassword.submit")}
             </button>
 
             {error && (
-              <p id="forgot-error" role="alert" className="text-sm text-red-600">
+              <p id="forgot-error" role="alert" className="text-sm text-danger">
                 {error}
               </p>
             )}
@@ -95,7 +95,7 @@ export default function ForgotPasswordPage() {
         <p className="mt-6 text-center text-sm">
           <Link
             href="/login"
-            className="font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus-visible:ring focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:text-indigo-400 dark:hover:text-indigo-300"
+            className="font-medium text-brand hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             {t("forgotPassword.backToLogin")}
           </Link>

@@ -13,7 +13,7 @@ function link(href: string, label: string) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-indigo-600 hover:underline dark:text-indigo-400"
+      className="text-brand hover:underline"
     >
       {label}
     </a>
@@ -31,12 +31,12 @@ const controllerBlock = (
     Deutschland
     <br />
     Telefon:{" "}
-    <a href={PHONE_HREF} className="text-indigo-600 hover:underline dark:text-indigo-400">
+    <a href={PHONE_HREF} className="text-brand hover:underline">
       {PHONE_DISPLAY}
     </a>
     <br />
     E-Mail:{" "}
-    <a href={`mailto:${EMAIL}`} className="text-indigo-600 hover:underline dark:text-indigo-400">
+    <a href={`mailto:${EMAIL}`} className="text-brand hover:underline">
       {EMAIL}
     </a>
   </>
@@ -55,7 +55,7 @@ const authorityBlockDe = (
     E-Mail:{" "}
     <a
       href="mailto:poststelle@lfd.niedersachsen.de"
-      className="text-indigo-600 hover:underline dark:text-indigo-400"
+      className="text-brand hover:underline"
     >
       poststelle@lfd.niedersachsen.de
     </a>
@@ -178,7 +178,7 @@ const authorityBlockEn = (
     Email:{" "}
     <a
       href="mailto:poststelle@lfd.niedersachsen.de"
-      className="text-indigo-600 hover:underline dark:text-indigo-400"
+      className="text-brand hover:underline"
     >
       poststelle@lfd.niedersachsen.de
     </a>

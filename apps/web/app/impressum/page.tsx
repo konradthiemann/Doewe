@@ -11,12 +11,12 @@ function contactBlock() {
   return (
     <>
       Telefon:{" "}
-      <a href={PHONE_HREF} className="text-indigo-600 hover:underline dark:text-indigo-400">
+      <a href={PHONE_HREF} className="text-brand hover:underline">
         {PHONE_DISPLAY}
       </a>
       <br />
       E-Mail:{" "}
-      <a href={`mailto:${EMAIL}`} className="text-indigo-600 hover:underline dark:text-indigo-400">
+      <a href={`mailto:${EMAIL}`} className="text-brand hover:underline">
         {EMAIL}
       </a>
     </>

@@ -15,18 +15,18 @@ export default function LegalFooter({ className = "" }: { className?: string }) 
 
   return (
     <footer
-      className={`flex items-center justify-center gap-3 text-xs text-gray-500 dark:text-neutral-400 ${className}`}
+      className={`flex items-center justify-center gap-3 text-xs text-ink-muted ${className}`}
     >
       <Link
         href="/impressum"
-        className="transition hover:text-gray-700 hover:underline dark:hover:text-neutral-200"
+        className="transition hover:text-ink hover:underline"
       >
         {t("legal.impressum")}
       </Link>
       <span aria-hidden="true">·</span>
       <Link
         href="/datenschutz"
-        className="transition hover:text-gray-700 hover:underline dark:hover:text-neutral-200"
+        className="transition hover:text-ink hover:underline"
       >
         {t("legal.privacy")}
       </Link>
