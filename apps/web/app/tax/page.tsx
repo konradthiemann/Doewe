@@ -3,9 +3,10 @@
 import { fromCents, toDecimalString } from "@doewe/shared";
 import { format, parseISO } from "date-fns";
 import { de, enUS } from "date-fns/locale";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
+import { useApiQuery } from "../../lib/api/useApiQuery";
 import { type AttachmentMeta } from "../../lib/attachments";
 import { useI18n } from "../../lib/i18n";
 
@@ -40,33 +41,23 @@ export default function TaxPage() {
 
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
-  const [data, setData] = useState<TaxResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const load = useCallback(async (targetYear: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/tax?year=${targetYear}`, { cache: "no-store" });
-      if (!res.ok) {
-        setError(t("tax.errorLoad", { status: res.status }));
-        setData(null);
-        return;
-      }
-      setData(await res.json());
-    } catch {
-      setError(t("tax.errorLoadFallback"));
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  // Jahr steckt im Query-Key: Jahreswechsel ändert den Key, react-query refetcht automatisch.
+  const taxQuery = useApiQuery<TaxResponse>(["tax", year], `/api/tax?year=${year}`);
 
-  useEffect(() => {
-    void load(year);
-  }, [load, year]);
+  // Wie zuvor: bei Fehler keine (ggf. veralteten) Daten anzeigen. Der HTTP-Status
+  // wird aus der getJson-Fehlermeldung extrahiert, um den bestehenden Fehlertext
+  // mit Status beizubehalten; Netzwerkfehler fallen auf den Fallback-Text zurück.
+  const data = taxQuery.isError ? null : (taxQuery.data ?? null);
+  const loading = taxQuery.isPending;
+  const errorStatus =
+    taxQuery.error instanceof Error ? /status (\d+)$/.exec(taxQuery.error.message)?.[1] : undefined;
+  const error = taxQuery.isError
+    ? errorStatus
+      ? t("tax.errorLoad", { status: Number(errorStatus) })
+      : t("tax.errorLoadFallback")
+    : null;
 
   const toggleExpanded = (id: string) => {
     setExpanded((current) => {

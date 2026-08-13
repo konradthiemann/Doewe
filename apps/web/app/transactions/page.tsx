@@ -1,6 +1,7 @@
 "use client";
 
 import { fromCents, toDecimalString } from "@doewe/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   addMonths,
   format,
@@ -18,13 +19,14 @@ import {
   parseAsStringEnum,
   useQueryState,
 } from "nuqs";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useMemo, useRef, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
 import { Dialog } from "../../components/ui/Dialog";
 import { useToast } from "../../components/ui/Toast";
+import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -61,24 +63,29 @@ type ActiveTab = "transactions" | "recurring";
 type SortOption = "newest" | "oldest" | "amountDesc" | "amountAsc" | "description";
 type FilterType = "all" | "income" | "outcome";
 
+// getJson (useApiQuery) wirft "GET <url> failed with status <n>" — für die
+// bestehenden {status}-Fehlertexte den HTTP-Status wieder herausziehen.
+function errorStatus(error: unknown): string | number {
+  if (error instanceof Error) {
+    const match = /failed with status (\d+)/.exec(error.message);
+    return match ? Number(match[1]) : error.message;
+  }
+  return String(error);
+}
+
 function TransactionsPage() {
   const { locale, t } = useI18n();
   const toast = useToast();
-  const [items, setItems] = useState<Tx[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
-  const [recurringItems, setRecurringItems] = useState<RecurringTx[]>([]);
-  const [recurringError, setRecurringError] = useState<string | null>(null);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTx | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
-  const [categoriesById, setCategoriesById] = useState<Record<string, string>>({});
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [recurringQuery, setRecurringQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  // Skip-Toggles sind Mutationen — deren Fehler laufen nicht über useApiQuery
+  const [skipError, setSkipError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const [skipsCurrent, setSkipsCurrent] = useState<Set<string>>(new Set());
-  const [skipsNext, setSkipsNext] = useState<Set<string>>(new Set());
 
   // URL-persisted filter/view state (nuqs) — survives reload and is shareable
   const [query, setQuery] = useQueryState("q", parseAsString.withDefault(""));
@@ -121,30 +128,6 @@ function TransactionsPage() {
     tabRefs.current[nextIndex]?.focus();
   };
 
-  const refresh = useCallback(async () => {
-    setError(null);
-    const res = await fetch("/api/transactions", { cache: "no-store" });
-    if (!res.ok) {
-      setError(t("errors.failedLoad", { status: res.status }));
-      setItems([]);
-      return;
-    }
-    const json: Tx[] = await res.json();
-    setItems(json);
-  }, [t]);
-
-  const refreshRecurring = useCallback(async () => {
-    setRecurringError(null);
-    const res = await fetch("/api/recurring-transactions", { cache: "no-store" });
-    if (!res.ok) {
-      setRecurringError(t("errors.failedLoadRecurring", { status: res.status }));
-      setRecurringItems([]);
-      return;
-    }
-    const json: RecurringTx[] = await res.json();
-    setRecurringItems(json);
-  }, [t]);
-
   const now = useMemo(() => new Date(), []);
   const currentYear = useMemo(() => getYear(now), [now]);
   const currentMonth = useMemo(() => getMonth(now) + 1, [now]);
@@ -162,6 +145,50 @@ function TransactionsPage() {
     const diff = targetIndex - baseIndex;
     return diff >= 0 && diff % interval === 0;
   }, [monthIndex]);
+
+  // Phase 2 „Offline lesen": GETs laufen über den persistierten Query-Cache —
+  // offline zeigt die Seite den letzten geladenen Stand. Die Skip-Keys tragen
+  // Jahr/Monat, ein Monatswechsel refetcht damit automatisch.
+  const transactionsQuery = useApiQuery<Tx[]>(["transactions"], "/api/transactions");
+  const recurringListQuery = useApiQuery<RecurringTx[]>(["recurring"], "/api/recurring-transactions");
+  const skipsCurrentQuery = useApiQuery<RecurringSkip[]>(
+    ["recurring", "skips", currentYear, currentMonth],
+    `/api/recurring-transactions/skips?year=${currentYear}&month=${currentMonth}`
+  );
+  const skipsNextQuery = useApiQuery<RecurringSkip[]>(
+    ["recurring", "skips", nextYear, nextMonth],
+    `/api/recurring-transactions/skips?year=${nextYear}&month=${nextMonth}`
+  );
+  const categoriesQuery = useApiQuery<Array<{ id: string; name: string }>>(["categories"], "/api/categories");
+
+  const items = useMemo<Tx[]>(() => transactionsQuery.data ?? [], [transactionsQuery.data]);
+  const recurringItems = useMemo<RecurringTx[]>(
+    () => recurringListQuery.data ?? [],
+    [recurringListQuery.data]
+  );
+  const skipsCurrent = useMemo(
+    () => new Set((skipsCurrentQuery.data ?? []).map((skip) => skip.recurringId)),
+    [skipsCurrentQuery.data]
+  );
+  const skipsNext = useMemo(
+    () => new Set((skipsNextQuery.data ?? []).map((skip) => skip.recurringId)),
+    [skipsNextQuery.data]
+  );
+  const categories = useMemo(
+    () => [...(categoriesQuery.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [categoriesQuery.data]
+  );
+  const categoriesById = useMemo<Record<string, string>>(
+    () => Object.fromEntries(categories.map(({ id, name }) => [id, name] as const)),
+    [categories]
+  );
+
+  const error = transactionsQuery.isError
+    ? t("errors.failedLoad", { status: errorStatus(transactionsQuery.error) })
+    : null;
+  const recurringError = recurringListQuery.isError
+    ? t("errors.failedLoadRecurring", { status: errorStatus(recurringListQuery.error) })
+    : skipError;
 
   const closeEditDialog = useCallback(() => {
     setEditingTx(null);
@@ -191,33 +218,48 @@ function TransactionsPage() {
     else toast.success(message);
   };
 
-  const handleEditSuccess = async (message?: string) => {
-    await refresh();
+  // Nach erfolgreichen Mutationen nur invalidieren — react-query refetcht
+  // aktive Ansichten (auch Dashboard/Sparplan/Steuer) selbst.
+  const invalidateTransactionData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    void queryClient.invalidateQueries({ queryKey: ["saving-plan"] });
+    void queryClient.invalidateQueries({ queryKey: ["tax"] });
+  }, [queryClient]);
+
+  const invalidateRecurringData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["recurring"] });
+    void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+  }, [queryClient]);
+
+  const handleEditSuccess = (message?: string) => {
+    invalidateTransactionData();
     closeEditDialog();
-      showFeedback(message ?? t("transactionForm.updated"));
+    showFeedback(message ?? t("transactionForm.updated"));
   };
 
-  const handleDeleteSuccess = async (message?: string) => {
-    await refresh();
+  const handleDeleteSuccess = (message?: string) => {
+    invalidateTransactionData();
     closeEditDialog();
-      showFeedback(message ?? t("transactionForm.deleted"));
+    showFeedback(message ?? t("transactionForm.deleted"));
   };
 
-  const handleRecurringEditSuccess = async (message?: string) => {
-    await refreshRecurring();
+  const handleRecurringEditSuccess = (message?: string) => {
+    invalidateRecurringData();
     closeRecurringDialog();
     showFeedback(message ?? t("recurringForm.updated"));
   };
 
-  const handleRecurringDeleteSuccess = async (message?: string) => {
-    await refreshRecurring();
+  const handleRecurringDeleteSuccess = (message?: string) => {
+    invalidateRecurringData();
     closeRecurringDialog();
     showFeedback(message ?? t("recurringForm.deleted"));
   };
 
-  const handleCreateSuccess = async (message?: string, options?: { keepOpen?: boolean }) => {
-    await refresh();
-    await refreshRecurring();
+  const handleCreateSuccess = (message?: string, options?: { keepOpen?: boolean }) => {
+    // Das Create-Formular kann normale UND wiederkehrende Buchungen anlegen
+    invalidateTransactionData();
+    invalidateRecurringData();
     // keepOpen: Beleg-Upload schlug nach dem Anlegen fehl — Dialog offen
     // lassen, damit die Warnung im Formular sichtbar bleibt.
     if (!options?.keepOpen) {
@@ -225,40 +267,6 @@ function TransactionsPage() {
       showFeedback(message ?? t("transactionForm.saved"));
     }
   };
-
-  async function loadSkips(year: number, month: number, setter: (value: Set<string>) => void) {
-    const res = await fetch(`/api/recurring-transactions/skips?year=${year}&month=${month}`, { cache: "no-store" });
-    if (!res.ok) {
-      return;
-    }
-    const json: RecurringSkip[] = await res.json();
-    setter(new Set(json.map((skip) => skip.recurringId)));
-  }
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    refreshRecurring();
-    loadSkips(currentYear, currentMonth, setSkipsCurrent);
-    loadSkips(nextYear, nextMonth, setSkipsNext);
-  }, [currentMonth, currentYear, nextMonth, nextYear, refreshRecurring]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/categories", { cache: "no-store" });
-        if (!res.ok) return;
-        const data: Array<{ id: string; name: string }> = await res.json();
-        const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
-        setCategories(sorted);
-        setCategoriesById(Object.fromEntries(sorted.map(({ id, name }) => [id, name])));
-      } catch {
-        // ignore fetch errors for categories
-      }
-    })();
-  }, []);
 
   const dialogTitleId = editingTx ? `edit-transaction-${editingTx.id}` : undefined;
   const createDialogTitleId = creating ? "create-transaction" : undefined;
@@ -362,38 +370,48 @@ function TransactionsPage() {
 
   const toggleSkip = async (recurringId: string, shouldRun: boolean) => {
     const payload = { recurringId, year: nextYear, month: nextMonth };
+    // Optimistisch direkt im Query-Cache togglen (Checkbox reagiert sofort),
+    // bei Fehler zurückrollen, bei Erfolg Server-Stand nachladen.
+    const skipsNextKey = ["recurring", "skips", nextYear, nextMonth];
+    const addSkip = (current: RecurringSkip[] | undefined): RecurringSkip[] =>
+      current?.some((skip) => skip.recurringId === recurringId)
+        ? current
+        : [...(current ?? []), payload];
+    const removeSkip = (current: RecurringSkip[] | undefined): RecurringSkip[] =>
+      (current ?? []).filter((skip) => skip.recurringId !== recurringId);
+    const invalidateSkips = () => {
+      void queryClient.invalidateQueries({ queryKey: ["recurring", "skips"] });
+      void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    };
+
     if (!shouldRun) {
-      setSkipsNext((current) => new Set(current).add(recurringId));
+      queryClient.setQueryData<RecurringSkip[]>(skipsNextKey, addSkip);
       const res = await fetch("/api/recurring-transactions/skips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        setRecurringError(t("errors.failedSkip", { status: res.status }));
-        setSkipsNext((current) => {
-          const next = new Set(current);
-          next.delete(recurringId);
-          return next;
-        });
+        setSkipError(t("errors.failedSkip", { status: res.status }));
+        queryClient.setQueryData<RecurringSkip[]>(skipsNextKey, removeSkip);
+        return;
       }
+      invalidateSkips();
       return;
     }
 
-    setSkipsNext((current) => {
-      const next = new Set(current);
-      next.delete(recurringId);
-      return next;
-    });
+    queryClient.setQueryData<RecurringSkip[]>(skipsNextKey, removeSkip);
     const res = await fetch("/api/recurring-transactions/skips", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
     if (!res.ok) {
-      setRecurringError(t("errors.failedUnskip", { status: res.status }));
-      setSkipsNext((current) => new Set(current).add(recurringId));
+      setSkipError(t("errors.failedUnskip", { status: res.status }));
+      queryClient.setQueryData<RecurringSkip[]>(skipsNextKey, addSkip);
+      return;
     }
+    invalidateSkips();
   };
 
   return (

@@ -2,11 +2,13 @@
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { addMonths, format, parse } from "date-fns";
 import { de, enUS } from "date-fns/locale";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { useApiQuery } from "../lib/api/useApiQuery";
 import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
 import { plannedSavingFormSchema, type PlannedSavingFormValues } from "../lib/schemas/forms";
@@ -47,8 +49,10 @@ function monthYearToValue(month: number, year: number) {
 export default function PlannedSavingForm({ headingId, onClose, onSuccess, editGoal, initialScheduled }: Props) {
   const isEditMode = !!editGoal;
   const { locale, t } = useI18n();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const accountsQuery = useApiQuery<Account[]>(["accounts"], "/api/accounts");
+  const accounts = accountsQuery.data ?? [];
+  const loadError = accountsQuery.isError ? t("savingPlan.form.errorLoadAccountsFallback") : null;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const dfLocale = locale === "de" ? de : enUS;
@@ -80,30 +84,14 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   const scheduled = watch("scheduled");
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/accounts", { cache: "no-store" });
-        if (!res.ok) {
-          throw new Error(t("savingPlan.form.errorLoadAccounts", { status: res.status }));
-        }
-        const data: Account[] = await res.json();
-        if (!active) return;
-        setAccounts(data);
-        // Only set default account if accountId is still empty
-        const currentAccountId = editGoal?.accountId ?? "";
-        if (!currentAccountId && data[0]) {
-          setValue("accountId", data[0].id);
-        }
-      } catch (fetchError) {
-        if (!active) return;
-        setLoadError(fetchError instanceof Error ? fetchError.message : t("savingPlan.form.errorLoadAccountsFallback"));
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [t, editGoal?.accountId, setValue]);
+    const data = accountsQuery.data;
+    if (!data) return;
+    // Only set default account if accountId is still empty
+    const currentAccountId = editGoal?.accountId ?? "";
+    if (!currentAccountId && data[0]) {
+      setValue("accountId", data[0].id);
+    }
+  }, [accountsQuery.data, editGoal?.accountId, setValue]);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -170,6 +158,9 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
         setSubmitError(message);
         return;
       }
+
+      void queryClient.invalidateQueries({ queryKey: ["saving-plan"] });
+      void queryClient.invalidateQueries({ queryKey: ["analytics"] });
 
       const message = isEditMode ? t("savingPlan.form.updated") : t("savingPlan.form.added");
       if (!isEditMode) {

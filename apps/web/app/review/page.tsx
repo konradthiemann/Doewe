@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo } from "react";
 
 import PageContainer from "../../components/PageContainer";
+import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
 
 type ReviewData = {
@@ -110,38 +111,25 @@ function ReviewPage() {
   const searchParams = useSearchParams();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
-  const [data, setData] = useState<ReviewData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const paramMonth = searchParams.get("month");
   const paramYear = searchParams.get("year");
 
-  const fetchData = useCallback(
-    async (month?: string | null, year?: string | null) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams();
-        if (month) params.set("month", month);
-        if (year) params.set("year", year);
-        const res = await fetch(`/api/analytics/monthly-review?${params.toString()}`, {
-          cache: "no-store"
-        });
-        if (!res.ok) throw new Error(`${res.status}`);
-        setData(await res.json());
-      } catch {
-        setError(t("review.errorLoad"));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [t]
+  // Monat/Jahr stecken im Query-Key: Monatswechsel via UI ändert den Key,
+  // react-query refetcht automatisch — kein useEffect nötig.
+  const month = paramMonth ? Number(paramMonth) : null;
+  const year = paramYear ? Number(paramYear) : null;
+  const urlParams = new URLSearchParams();
+  if (paramMonth) urlParams.set("month", paramMonth);
+  if (paramYear) urlParams.set("year", paramYear);
+
+  const reviewQuery = useApiQuery<ReviewData>(
+    ["analytics", "monthly-review", month, year],
+    `/api/analytics/monthly-review?${urlParams.toString()}`
   );
 
-  useEffect(() => {
-    fetchData(paramMonth, paramYear);
-  }, [fetchData, paramMonth, paramYear]);
+  const data = reviewQuery.data ?? null;
+  const loading = reviewQuery.isPending;
+  const error = reviewQuery.isError ? t("review.errorLoad") : null;
 
   const formatCurrency = useCallback(
     (cents: number) =>

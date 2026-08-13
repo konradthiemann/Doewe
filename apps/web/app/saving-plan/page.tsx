@@ -1,6 +1,7 @@
 "use client";
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -8,6 +9,7 @@ import PageContainer from "../../components/PageContainer";
 import PlannedSavingForm from "../../components/PlannedSavingForm";
 import { Spinner } from "../../components/ui/Spinner";
 import { useToast } from "../../components/ui/Toast";
+import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
 
 type SavingGoal = {
@@ -52,9 +54,9 @@ function formatCurrency(cents: number) {
 function SavingPlanPage() {
   const { locale, t } = useI18n();
   const toast = useToast();
-  const [plan, setPlan] = useState<SavingPlanResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Mutationsfehler (Löschen/Reopen) laufen nicht über die Query — separat halten
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGoal, setEditGoal] = useState<SavingGoal | null>(null);
   const [scheduleIntent, setScheduleIntent] = useState(false);
@@ -78,27 +80,30 @@ function SavingPlanPage() {
   const searchParams = useSearchParams();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
-  const fetchPlan = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/saving-plan", { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error(t("savingPlan.errorLoad", { status: res.status }));
-      }
-      const json: SavingPlanResponse = await res.json();
-      setPlan(json);
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : t("savingPlan.errorLoadFallback"));
-      setPlan(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  // Phase 2 „Offline lesen": Plan kommt aus dem persistierten Query-Cache —
+  // offline zeigt die Seite den letzten geladenen Stand.
+  const planQuery = useApiQuery<SavingPlanResponse>(["saving-plan"], "/api/saving-plan");
+  const plan = planQuery.data ?? null;
+  const loading = planQuery.isPending;
 
-  useEffect(() => {
-    fetchPlan();
-  }, [fetchPlan]);
+  // Nach Mutationen Plan + abhängige Ansichten neu laden (Withdraw/Complete
+  // erzeugen Transaktionen; alles beeinflusst die Analytics).
+  const invalidatePlan = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["saving-plan"] });
+    void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+  }, [queryClient]);
+
+  const loadError = planQuery.isError
+    ? (() => {
+        const match =
+          planQuery.error instanceof Error ? /failed with status (\d+)/.exec(planQuery.error.message) : null;
+        return match
+          ? t("savingPlan.errorLoad", { status: Number(match[1]) })
+          : t("savingPlan.errorLoadFallback");
+      })()
+    : null;
+  const error = loadError ?? mutationError;
 
   const availableCents = useMemo(() => {
     return Math.max(plan?.totals.availableCents ?? 0, 0);
@@ -171,20 +176,21 @@ function SavingPlanPage() {
   const handleDelete = useCallback(async () => {
     if (!deleteConfirm) return;
     setDeleting(true);
+    setMutationError(null);
     try {
       const res = await fetch(`/api/saving-plan/${deleteConfirm.id}`, { method: "DELETE" });
       if (!res.ok) {
         throw new Error(t("savingPlan.errorDeleteFailed", { status: res.status }));
       }
-      await fetchPlan();
+      invalidatePlan();
       toast.success(t("savingPlan.feedbackDeleted"));
       setDeleteConfirm(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : t("savingPlan.errorDelete"));
+      setMutationError(deleteError instanceof Error ? deleteError.message : t("savingPlan.errorDelete"));
     } finally {
       setDeleting(false);
     }
-  }, [deleteConfirm, fetchPlan, t, toast]);
+  }, [deleteConfirm, invalidatePlan, t, toast]);
 
   const openCompleteDialog = useCallback((goal: GoalWithProgress) => {
     setCompleteTarget(goal);
@@ -221,7 +227,7 @@ function SavingPlanPage() {
       if (!res.ok) {
         throw new Error(t("savingPlan.errorComplete"));
       }
-      await fetchPlan();
+      invalidatePlan();
       toast.success(t("savingPlan.feedbackCompleted"));
       closeCompleteDialog();
     } catch (completeErr) {
@@ -229,25 +235,26 @@ function SavingPlanPage() {
     } finally {
       setCompleting(false);
     }
-  }, [closeCompleteDialog, completeSpent, completeTarget, fetchPlan, t, toast]);
+  }, [closeCompleteDialog, completeSpent, completeTarget, invalidatePlan, t, toast]);
 
   const handleReopen = useCallback(
     async (goal: SavingGoal) => {
       setReopeningId(goal.id);
+      setMutationError(null);
       try {
         const res = await fetch(`/api/saving-plan/${goal.id}/complete`, { method: "DELETE" });
         if (!res.ok) {
           throw new Error(t("savingPlan.errorReopen"));
         }
-        await fetchPlan();
+        invalidatePlan();
         toast.success(t("savingPlan.feedbackReopened"));
       } catch (reopenErr) {
-        setError(reopenErr instanceof Error ? reopenErr.message : t("savingPlan.errorReopen"));
+        setMutationError(reopenErr instanceof Error ? reopenErr.message : t("savingPlan.errorReopen"));
       } finally {
         setReopeningId(null);
       }
     },
-    [fetchPlan, t, toast]
+    [invalidatePlan, t, toast]
   );
 
   const openWithdrawDialog = useCallback(() => {
@@ -291,7 +298,7 @@ function SavingPlanPage() {
       if (!res.ok) {
         throw new Error(t("savingPlan.withdraw.errorFailed"));
       }
-      await fetchPlan();
+      invalidatePlan();
       toast.success(t("savingPlan.withdraw.success", { amount: formatCurrency(amountCents) }));
       closeWithdrawDialog();
     } catch (withdrawErr) {
@@ -299,7 +306,7 @@ function SavingPlanPage() {
     } finally {
       setWithdrawing(false);
     }
-  }, [availableCents, closeWithdrawDialog, fetchPlan, t, toast, withdrawAmount]);
+  }, [availableCents, closeWithdrawDialog, invalidatePlan, t, toast, withdrawAmount]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -345,11 +352,11 @@ function SavingPlanPage() {
 
   const handleSuccess = useCallback(
     async (message?: string) => {
-      await fetchPlan();
+      invalidatePlan();
       toast.success(message ?? t("savingPlan.feedbackAdded"));
       closeDialog();
     },
-    [closeDialog, fetchPlan, t, toast]
+    [closeDialog, invalidatePlan, t, toast]
   );
 
   const timelineEmpty = !loading && goalsWithProgress.length === 0;

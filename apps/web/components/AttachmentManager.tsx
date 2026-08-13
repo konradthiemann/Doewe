@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import React, { useRef, useState } from "react";
 
+import { useApiQuery } from "../lib/api/useApiQuery";
 import {
   ATTACHMENTS_MAX_PER_TRANSACTION,
   ATTACHMENT_MAX_SIZE_BYTES,
@@ -51,29 +53,20 @@ function FileIcon({ mimeType }: { mimeType: string }) {
  */
 export default function AttachmentManager({ mode, transactionId, pendingFiles, onPendingFilesChange }: Props) {
   const { t } = useI18n();
-  const [existing, setExisting] = useState<AttachmentMeta[]>([]);
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (mode !== "edit" || !transactionId) return;
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/transactions/${transactionId}/attachments`, { cache: "no-store" });
-        if (!res.ok) return;
-        const items: AttachmentMeta[] = await res.json();
-        if (active) setExisting(items);
-      } catch {
-        // non-critical, ignore
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [mode, transactionId]);
+  // Nur im Edit-Mode laden; Ladefehler sind wie zuvor unkritisch (leere Liste).
+  const attachmentsKey = ["attachments", transactionId] as const;
+  const attachmentsQuery = useApiQuery<AttachmentMeta[]>(
+    attachmentsKey,
+    `/api/transactions/${transactionId}/attachments`,
+    { enabled: mode === "edit" && Boolean(transactionId) }
+  );
+  const existing = attachmentsQuery.data ?? [];
 
   const totalCount = existing.length + pendingFiles.length;
 
@@ -119,14 +112,21 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
       }
 
       // Edit-Mode: sofort hochladen
+      let uploadedCount = 0;
       for (const file of prepared) {
         const res = await uploadAttachment(transactionId as string, file);
         if (!res.ok) {
           setError(t("transactionForm.attachmentsUploadFailed", { status: res.status }));
-          return;
+          break;
         }
-        const created: AttachmentMeta = await res.json();
-        setExisting((current) => [...current, created]);
+        uploadedCount += 1;
+      }
+      if (uploadedCount > 0) {
+        // Belege erscheinen auch auf der Steuer-Seite → beide Ressourcen invalidieren
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: attachmentsKey }),
+          queryClient.invalidateQueries({ queryKey: ["tax"] })
+        ]);
       }
     } finally {
       setBusy(false);
@@ -135,16 +135,25 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
 
   async function handleDeleteExisting(id: string) {
     setError(null);
-    const previous = existing;
-    setExisting((current) => current.filter((a) => a.id !== id));
+    // Optimistisch aus dem Cache entfernen, bei Fehlschlag zurückrollen
+    const previous = queryClient.getQueryData<AttachmentMeta[]>(attachmentsKey);
+    queryClient.setQueryData<AttachmentMeta[]>(attachmentsKey, (current) =>
+      current?.filter((a) => a.id !== id)
+    );
     try {
       const res = await fetch(`/api/attachments/${id}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) {
-        setExisting(previous);
+        queryClient.setQueryData(attachmentsKey, previous);
         setError(t("transactionForm.attachmentsDeleteFailed", { status: res.status }));
+        return;
       }
+      // Belege erscheinen auch auf der Steuer-Seite → beide Ressourcen invalidieren
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: attachmentsKey }),
+        queryClient.invalidateQueries({ queryKey: ["tax"] })
+      ]);
     } catch {
-      setExisting(previous);
+      queryClient.setQueryData(attachmentsKey, previous);
       setError(t("transactionForm.attachmentsDeleteFailed", { status: 0 }));
     }
   }

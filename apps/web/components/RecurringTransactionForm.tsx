@@ -2,9 +2,11 @@
 
 import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { useApiQuery } from "../lib/api/useApiQuery";
 import { cn } from "../lib/cn";
 import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
@@ -40,12 +42,18 @@ export default function RecurringTransactionForm({
   onDelete,
 }: Props) {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const [txType, setTxType] = useState<"income" | "outcome">(
     recurring.amountCents >= 0 ? "income" : "outcome"
   );
-  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string; isIncome: boolean }>>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const accountsQuery = useApiQuery<Array<{ id: string; name: string }>>(["accounts"], "/api/accounts");
+  const categoriesQuery = useApiQuery<Array<{ id: string; name: string; isIncome: boolean }>>(
+    ["categories"],
+    "/api/categories"
+  );
+  const accounts = accountsQuery.data ?? [];
+  const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const loadError = accountsQuery.isError || categoriesQuery.isError ? t("recurringForm.errorLoadRef") : null;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -72,40 +80,6 @@ export default function RecurringTransactionForm({
   });
 
   const categoryId = watch("categoryId");
-
-  useEffect(() => {
-    let active = true;
-
-    (async () => {
-      try {
-        const [accRes, catRes] = await Promise.all([
-          fetch("/api/accounts", { cache: "no-store" }),
-          fetch("/api/categories", { cache: "no-store" }),
-        ]);
-
-        if (!accRes.ok || !catRes.ok) {
-          throw new Error(t("recurringForm.errorLoadRef"));
-        }
-
-        const [acc, cat]: [
-          Array<{ id: string; name: string }>,
-          Array<{ id: string; name: string; isIncome: boolean }>
-        ] = await Promise.all([accRes.json(), catRes.json()]);
-
-        if (!active) return;
-
-        setAccounts(acc);
-        setCategories(cat);
-      } catch (err) {
-        if (!active) return;
-        setLoadError(err instanceof Error ? err.message : t("recurringForm.errorLoadRefFallback"));
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [t]);
 
   useEffect(() => {
     descriptionRef.current?.focus();
@@ -165,6 +139,9 @@ export default function RecurringTransactionForm({
         return;
       }
 
+      void queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+
       const message = t("recurringForm.updated");
       onSuccess?.(message);
     } catch (err) {
@@ -183,6 +160,9 @@ export default function RecurringTransactionForm({
         setDeleteLoading(false);
         return;
       }
+
+      void queryClient.invalidateQueries({ queryKey: ["recurring"] });
+      void queryClient.invalidateQueries({ queryKey: ["analytics"] });
 
       const message = t("recurringForm.deleted");
       onDelete?.(message);
