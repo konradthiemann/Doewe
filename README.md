@@ -26,6 +26,23 @@ Doewe is a personal finance tracking and insights platform. It helps you record 
 
 ---
 
+## 📚 Documentation
+
+Full documentation is hosted at <https://konradthiemann.github.io/Doewe/>. The source Markdown lives in [`docs/`](docs/) and is the single source of truth:
+
+- [Getting Started](docs/getting-started.md) — set up the local development environment
+- [Architecture](docs/architecture.md) — system and module overview
+- [Project Requirements](docs/project-requirements-document.md) — goals and requirements
+- [Data Model](docs/data-model.md) — Prisma schema and domain entities
+- [API Reference](docs/api-reference.md) — route handlers and contracts
+- [User Flows](docs/flows.md) — core application flows
+- [Data Analysis Findings](docs/data-analysis-findings.md) — findings and improvement proposals
+- [Database Management](docs/DATABASE_MANAGEMENT.md) — migrations and operations
+- [Deployment & CI](docs/deployment.md) — build pipeline, Railway deploy, and docs hosting
+- [Design System](docs/design/) — "Calm Finance" tokens, spec, and brand assets
+
+---
+
 ## 🧰 Technology Stack
 
 Core technologies (derived from workspace manifests and config):
