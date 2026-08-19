@@ -295,8 +295,55 @@ Regeln:
 4. Loading-Skeleton fuer Review-Maske
 5. Mobile-Optimierung (375px Viewport testen)
 
-### Phase E: Optional -- Erweiterungen
-1. **Tesseract.js Fallback** fuer Offline-Modus
+### Phase E: Offline Capture & Queue
+Ziel: Beleg im Laden fotografieren (offline), zu Hause im WLAN analysieren + buchen.
+
+**Architektur:**
+```
+Offline:  [Kamera] -> imageCompression.ts -> IndexedDB (Blob-Store)
+                                          -> Queue-Eintrag {type:"receipt-scan", blobKey, capturedAt, status:"pending"}
+
+Online:   OutboxManager erkennt Netz -> liest Queue
+          -> fuer jeden pending Eintrag:
+             1. Blob aus IndexedDB laden
+             2. POST /api/receipt-scan
+             3. Ergebnis zwischenspeichern (React Query / State)
+             4. Review-Maske oeffnen (oder Push-Notification)
+          -> nach Buchung: Queue-Eintrag + Blob loeschen
+```
+
+**Ablauf aus User-Sicht:**
+1. User ist im Laden (offline/schlechtes Netz)
+2. Oeffnet /scan, fotografiert Beleg
+3. Bild wird komprimiert (~0.5-1MB) + in IndexedDB gespeichert
+4. UI zeigt: "Beleg gespeichert -- wird analysiert sobald online" (Toast)
+5. Badge/Indicator: "1 Beleg wartet" (z.B. auf /scan Page oder im Nav)
+6. Spaeter (zu Hause, WLAN): App erkennt Online-Status
+7. Automatischer Upload -> Claude Vision -> Review-Maske erscheint
+8. User prueft, korrigiert Kategorien, bestaetigt -> Buchung
+
+**Technische Details:**
+- **IndexedDB Store:** Separater Object-Store `receipt-queue` (nicht die bestehende Outbox, da Blobs)
+- **Speicher:** ~0.5-1MB pro komprimiertem Beleg, IndexedDB hat typisch 50MB+ Quota
+- **Queue-Limit:** Max 20 gequeuete Belege (Speicher-Schutz)
+- **Retry:** Bei API-Fehler max 3 Versuche mit Backoff, danach manueller Retry-Button
+- **Cleanup:** Nach erfolgreicher Buchung werden Blob + Queue-Eintrag sofort geloescht
+- **Bestehende Outbox** (`lib/offline/outbox.ts`) wird NICHT erweitert (die nutzt localStorage fuer JSON);
+  stattdessen eigener IndexedDB-basierter Store fuer Binaerdaten
+- **OutboxManager-Pattern** (`lib/offline/OutboxManager.tsx`) wird als Vorbild genutzt:
+  gleicher Online-Event-Listener, gleiche Flush-Logik, aber fuer Receipt-Queue
+
+**Neue Dateien:**
+- `apps/web/lib/offline/receiptQueue.ts` -- IndexedDB CRUD (save, list, get, delete)
+- `apps/web/lib/offline/ReceiptQueueManager.tsx` -- React-Komponente, Online-Listener, Auto-Flush
+- `apps/web/components/ReceiptQueueBadge.tsx` -- "X Belege warten" Indicator
+
+**Geaenderte Dateien:**
+- `apps/web/app/scan/page.tsx` -- Offline-Erkennung, Queue statt direktem API-Call
+- `apps/web/components/ReceiptScanner.tsx` -- Fallback auf Queue wenn offline
+
+### Phase F: Optional -- Weitere Erweiterungen
+1. **Tesseract.js Fallback** fuer komplett offline OCR (schlechtere Qualitaet, aber sofortige Review-Maske)
 2. **Beleg-Historie:** Merchant-Frequenz, durchschnittlicher Einkauf
 3. **Lern-Effekt:** Kategorie-Zuordnungen merken ("Schokolade" -> Geschenke wenn User das oefter so aendert)
 4. **Duplikat-Erkennung:** Hash ueber Merchant + Datum + Total -> Warnung bei doppeltem Scan
@@ -339,7 +386,10 @@ Vernachlaessigbar gering (unter 1 EUR/Monat selbst bei intensiver Nutzung).
 - `apps/web/components/ReceiptScanner.tsx`
 - `apps/web/components/ReceiptReview.tsx`
 - `apps/web/components/ReceiptLineItemList.tsx`
+- `apps/web/components/ReceiptQueueBadge.tsx`
 - `apps/web/lib/receiptParser.ts` (Claude Vision Call + Prompt)
+- `apps/web/lib/offline/receiptQueue.ts` (IndexedDB CRUD fuer Beleg-Bilder)
+- `apps/web/lib/offline/ReceiptQueueManager.tsx` (Online-Listener, Auto-Flush)
 - `apps/web/tests/receipt-scan.test.ts`
 - `apps/web/tests/transactions-batch.test.ts`
 - `prisma/migrations/YYYYMMDD_add_receipt_line_items/migration.sql`
@@ -377,3 +427,6 @@ Folgende Komponenten existieren bereits und koennen wiederverwendet werden:
 - [ ] Beleg scannen -> Positionen bearbeiten -> Buchen -> Transaktionen korrekt angelegt
 - [ ] Einzelpositionen in Transaction-Detail sichtbar
 - [ ] Summen-Validierung (Items vs. Beleg-Total) funktioniert
+- [ ] Offline: Beleg fotografieren speichert in IndexedDB Queue
+- [ ] Online: Queue wird automatisch geflusht, Review-Maske oeffnet sich
+- [ ] Queue-Badge zeigt Anzahl wartender Belege
