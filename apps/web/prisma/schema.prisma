@@ -72,11 +72,13 @@ model Transaction {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @default(now()) @updatedAt
   deletedAt     DateTime?
+  receiptMerchant  String?
 
   account     Account  @relation(fields: [accountId], references: [id])
   category    Category? @relation(fields: [categoryId], references: [id])
   savingGoal  Budget?   @relation(fields: [savingGoalId], references: [id], onDelete: SetNull)
   attachments Attachment[]
+  receiptLineItems ReceiptLineItem[]
 }
 
 // Receipt files (photos/PDFs) attached to a transaction as tax evidence.
@@ -90,6 +92,23 @@ model Attachment {
   sizeBytes     Int
   data          Bytes
   createdAt     DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+}
+
+// Line items extracted from a scanned receipt. Each transaction created via
+// receipt scan stores its individual positions here for transparency.
+model ReceiptLineItem {
+  id             String   @id @default(cuid())
+  transactionId  String
+  name           String
+  quantity       Int      @default(1)
+  unitPriceCents Int
+  totalCents     Int
+  position       Int
+  createdAt      DateTime @default(now())
 
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 

@@ -77,6 +77,12 @@ export const env = createEnv({
      * UI shows a "not configured" hint instead of the enable button.
      */
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
+    /**
+     * Feature flag for the receipt scanner. Set to "1" to enable the /scan page
+     * and the nav link. Disabled by default until the Claude Vision AI integration
+     * (Issue #53) is connected.
+     */
+    NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED: z.string().optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -101,6 +107,7 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     NEXT_PUBLIC_GOOGLE_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_ENABLED,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED: process.env.NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });
