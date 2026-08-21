@@ -659,6 +659,8 @@ export const en: Record<string, string> = {
   "receiptScanner.analyzing": "Analyzing\u2026",
   "receiptScanner.manualMode": "AI recognition not yet available \u2014 please enter items manually.",
   "receiptScanner.error": "Could not analyze receipt.",
+  "receiptScanner.errorAiUnavailable": "AI recognition is currently unavailable — please enter items manually.",
+  "receiptScanner.errorRateLimited": "Daily receipt scan limit reached — please try again tomorrow or enter items manually.",
   "receiptScanner.merchant": "Store",
   "receiptScanner.date": "Date",
   "receiptScanner.account": "Account",

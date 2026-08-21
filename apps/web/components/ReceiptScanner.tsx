@@ -26,6 +26,15 @@ interface Props {
   categories: Array<{ id: string; name: string }>;
 }
 
+type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+/** Maps POST /api/receipt-scan error codes to translated, user-facing messages. */
+function mapScanErrorToMessage(errorCode: unknown, t: Translate): string {
+  if (errorCode === "AI_UNAVAILABLE") return t("receiptScanner.errorAiUnavailable");
+  if (errorCode === "RATE_LIMITED") return t("receiptScanner.errorRateLimited");
+  return t("receiptScanner.error");
+}
+
 export default function ReceiptScanner({ onScanResult }: Props) {
   const { t } = useI18n();
   const toast = useToast();
@@ -55,7 +64,7 @@ export default function ReceiptScanner({ onScanResult }: Props) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        toast.error(err.error || t("receiptScanner.error"));
+        toast.error(mapScanErrorToMessage(err.error, t));
         return;
       }
 

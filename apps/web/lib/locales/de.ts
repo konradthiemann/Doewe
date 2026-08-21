@@ -659,6 +659,8 @@ export const de: Record<string, string> = {
   "receiptScanner.analyzing": "Wird analysiert\u2026",
   "receiptScanner.manualMode": "KI-Erkennung noch nicht verfügbar \u2014 bitte Positionen manuell eingeben.",
   "receiptScanner.error": "Beleg konnte nicht analysiert werden.",
+  "receiptScanner.errorAiUnavailable": "KI-Erkennung gerade nicht verfügbar — bitte Positionen manuell eingeben.",
+  "receiptScanner.errorRateLimited": "Tageslimit für Beleg-Scans erreicht — bitte morgen erneut versuchen oder manuell eingeben.",
   "receiptScanner.merchant": "Geschäft",
   "receiptScanner.date": "Datum",
   "receiptScanner.account": "Konto",

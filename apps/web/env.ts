@@ -64,6 +64,11 @@ export const env = createEnv({
      * missing/wrong secret → 401. Set as a Railway cron header.
      */
     CRON_SECRET: z.string().optional(),
+    /**
+     * Claude Vision API key for the receipt scanner (Issue #53). When unset,
+     * POST /api/receipt-scan falls back to stub behavior (manual entry) — no error.
+     */
+    ANTHROPIC_API_KEY: z.string().min(1).optional(),
   },
   client: {
     /**
@@ -105,6 +110,7 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
     CRON_SECRET: process.env.CRON_SECRET,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     NEXT_PUBLIC_GOOGLE_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_ENABLED,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
     NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED: process.env.NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED,
