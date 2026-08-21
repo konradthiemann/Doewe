@@ -3,8 +3,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
+import { ATTACHMENT_MAX_SIZE_BYTES, isAllowedAttachmentMimeType } from "../lib/attachments";
 import { useI18n } from "../lib/i18n";
+import { compressImage, UnsupportedAttachmentError } from "../lib/imageCompression";
 
+import { uploadAttachment } from "./AttachmentManager";
 import { Button } from "./ui/Button";
 import { useToast } from "./ui/Toast";
 
@@ -55,10 +58,40 @@ function formatCents(cents: number): string {
   return (Math.abs(cents) / 100).toFixed(2).replace(".", ",");
 }
 
+/**
+ * Attaches the scanned receipt photo to every transaction created from it —
+ * one photo commonly splits into several transactions (one per category), and
+ * each should show the same receipt (mirrors receiptMerchant being duplicated
+ * across all of them in POST /api/transactions/batch).
+ * Returns false if the image itself was unusable or every upload failed, so
+ * the caller can warn without blocking the already-successful booking.
+ */
+export async function attachReceiptImageToTransactions(
+  receiptImage: File,
+  transactions: Array<{ id: string }>
+): Promise<boolean> {
+  let file: File;
+  try {
+    file = await compressImage(receiptImage);
+  } catch (err) {
+    if (err instanceof UnsupportedAttachmentError) return false;
+    throw err;
+  }
+  if (!isAllowedAttachmentMimeType(file.type) || file.size > ATTACHMENT_MAX_SIZE_BYTES) {
+    return false;
+  }
+
+  const results = await Promise.all(
+    transactions.map((tx) => uploadAttachment(tx.id, file))
+  );
+  return results.some((res) => res.ok);
+}
+
 export default function ReceiptReview({
   scanResult,
   categories,
   accounts,
+  receiptImage,
   onBack,
   onComplete
 }: Props) {
@@ -191,12 +224,22 @@ export default function ReceiptReview({
         throw new Error(message);
       }
 
-      return res.json();
+      return res.json() as Promise<{ transactions: Array<{ id: string }> }>;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
       toast.success(t("receiptScanner.booked"));
+
+      if (receiptImage) {
+        const attached = await attachReceiptImageToTransactions(receiptImage, data.transactions);
+        if (attached) {
+          queryClient.invalidateQueries({ queryKey: ["tax"] });
+        } else {
+          toast.error(t("receiptScanner.attachmentFailed"));
+        }
+      }
+
       onComplete();
     },
     onError: (err: Error) => {
