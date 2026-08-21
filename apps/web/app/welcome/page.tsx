@@ -276,17 +276,16 @@ export default function WelcomePage() {
         {/* Selbstbestimmt statt verbunden */}
         <section className="border-y border-line bg-surface-2">
           <div className="mx-auto max-w-3xl px-6 py-16 text-center">
-            <p className="text-sm font-semibold uppercase tracking-wide text-brand">Selbstbestimmt statt verbunden</p>
+            <p className="text-sm font-semibold uppercase tracking-wide text-brand">Selbstbestimmt statt automatisch</p>
             <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
-              Kein Bankzugriff nötig
+              Jedem Euro eine Aufgabe geben
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-ink-muted">
-              Viele Finanz-Apps verlangen, dass du deine Bank per PSD2-Schnittstelle (Open Banking)
-              verbindest — dein Kontostand und jede Bewegung landen dann automatisch bei einem
-              Drittanbieter. Doewe geht bewusst den anderen Weg: Du trägst Buchungen selbst ein oder
-              lässt sie vom Kassenbeleg-Scanner vorschlagen. Kein Kontozugriff, keine
-              Bankverbindung, keine Weitergabe deiner Bankdaten — du entscheidest, was in der App
-              landet.
+              Nach dem aus der YNAB-Methode bekannten Prinzip: Statt passiv zuzusehen, was die Bank
+              im Nachhinein meldet, entscheidest du aktiv, wohin dein Geld geht. Doewe verlangt
+              deshalb keine Bankverbindung — du trägst Buchungen bewusst selbst ein oder lässt sie
+              vom Kassenbeleg-Scanner vorschlagen. Kein Kontozugriff, keine automatische
+              Synchronisation im Hintergrund — du entscheidest, was in der App landet.
             </p>
           </div>
         </section>
