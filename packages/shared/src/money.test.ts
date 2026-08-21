@@ -49,7 +49,7 @@ describe("money", () => {
   });
 
   it("formats cents as a localized Euro amount", () => {
-    // Intl inserts a non-breaking space ( ) before the trailing "€" in de-DE.
+    // Intl inserts a non-breaking space (U+00A0) before the trailing "€" in de-DE.
     expect(formatEuro(fromCents(123456), "de")).toBe("1.234,56 €");
     expect(formatEuro(fromCents(-500), "de")).toBe("-5,00 €");
     expect(formatEuro(fromCents(123456), "en")).toBe("€1,234.56");
