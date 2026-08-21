@@ -680,5 +680,6 @@ export const en: Record<string, string> = {
   "receiptScanner.book": "Book",
   "receiptScanner.booking": "Booking\u2026",
   "receiptScanner.booked": "Transactions booked successfully.",
+  "receiptScanner.attachmentFailed": "Booked, but the receipt could not be attached.",
   "receiptScanner.lineItems": "Receipt items"
 };

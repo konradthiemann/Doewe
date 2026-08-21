@@ -680,5 +680,6 @@ export const de: Record<string, string> = {
   "receiptScanner.book": "Buchen",
   "receiptScanner.booking": "Wird gebucht\u2026",
   "receiptScanner.booked": "Transaktionen erfolgreich gebucht.",
+  "receiptScanner.attachmentFailed": "Gebucht, aber der Beleg konnte nicht angehängt werden.",
   "receiptScanner.lineItems": "Belegpositionen"
 };
