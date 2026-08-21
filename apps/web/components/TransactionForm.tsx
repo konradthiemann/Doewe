@@ -4,6 +4,7 @@ import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createId } from "@paralleldrive/cuid2";
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
@@ -18,7 +19,9 @@ import { transactionFormSchema, type TransactionFormValues } from "../lib/schema
 
 import AttachmentManager, { uploadAttachment } from "./AttachmentManager";
 import SearchableSelect from "./SearchableSelect";
-import { Button } from "./ui/Button";
+import { Button, buttonVariants } from "./ui/Button";
+
+const isReceiptScannerEnabled = process.env.NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED === "1";
 
 type TransactionDetails = {
   id: string;
@@ -471,6 +474,29 @@ export default function TransactionForm({
             </button>
           )}
         </div>
+
+        {mode === "create" && isReceiptScannerEnabled && (
+          <Link
+            href="/scan"
+            onClick={onClose}
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-2 self-start")}
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            {t("transactionForm.scanReceiptCta")}
+          </Link>
+        )}
 
         <div
           className="flex items-center justify-center gap-2"

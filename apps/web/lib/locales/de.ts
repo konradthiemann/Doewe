@@ -289,6 +289,7 @@ export const de: Record<string, string> = {
   "errors.failedUnskip": "Wiederkehrende konnte nicht aktiviert werden: {status}",
   "transactionForm.addTitle": "Transaktion hinzufügen",
   "transactionForm.editTitle": "Transaktion bearbeiten",
+  "transactionForm.scanReceiptCta": "Stattdessen Kassenbeleg scannen",
   "transactionForm.typeLabel": "Transaktionstyp",
   "transactionForm.income": "Einnahme",
   "transactionForm.outcome": "Ausgabe",
