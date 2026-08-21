@@ -2,10 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { de } from "./locales/de";
-import { en } from "./locales/en";
+import { type Locale, translate } from "./locales/translate";
 
-export type Locale = "de" | "en";
+export type { Locale };
 
 type I18nContextValue = {
   locale: Locale;
@@ -14,14 +13,8 @@ type I18nContextValue = {
 };
 
 const STORAGE_KEY = "doewe-locale";
-const MESSAGES: Record<Locale, Record<string, string>> = { de, en };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
-
-function interpolate(template: string, vars?: Record<string, string | number>) {
-  if (!vars) return template;
-  return template.replace(/\{(\w+)\}/g, (_, key: string) => `${vars[key] ?? ""}`);
-}
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("de");
@@ -44,10 +37,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     setLocaleState(value);
   }, []);
 
-  const t = useCallback((key: string, vars?: Record<string, string | number>) => {
-    const message = MESSAGES[locale][key] ?? MESSAGES.de[key] ?? key;
-    return interpolate(message, vars);
-  }, [locale]);
+  const t = useCallback((key: string, vars?: Record<string, string | number>) => translate(locale, key, vars), [
+    locale
+  ]);
 
   const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
 

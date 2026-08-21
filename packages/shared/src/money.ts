@@ -93,3 +93,23 @@ export function toDecimalString(c: Cents): string {
   const cents = abs % 100;
   return `${sign}${euros}.${cents.toString().padStart(2, "0")}`;
 }
+
+/**
+ * Formats Cents as a localized Euro amount, e.g. for the tax PDF export.
+ * Unlike {@link toDecimalString}, this includes the currency symbol and uses
+ * locale-specific grouping/decimal separators (German: "1.234,56 €").
+ *
+ * Not used by the `/tax` page UI (which keeps `toDecimalString` deliberately)
+ * — only by the PDF renderer, which needs a self-contained, locale-aware string.
+ *
+ * @example
+ * formatEuro(fromCents(123456), "de")  // → "1.234,56 €"
+ * formatEuro(fromCents(123456), "en")  // → "€1,234.56"
+ */
+export function formatEuro(c: Cents, locale: "de" | "en"): string {
+  const formatter = new Intl.NumberFormat(locale === "de" ? "de-DE" : "en-US", {
+    style: "currency",
+    currency: "EUR"
+  });
+  return formatter.format(c / 100);
+}

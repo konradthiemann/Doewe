@@ -4,7 +4,10 @@
  *
  * Authentifizierung: Pflicht (401). Autorisierung: Beleg muss über
  * Transaktion → Account dem Nutzer gehören (sonst 404). Dies ist die einzige
- * Stelle, an der die Bytes-Spalte `data` selektiert wird.
+ * Stelle, an der ein Beleg direkt (per ID) einzeln ausgeliefert wird; die
+ * Bytes-Spalte `data` wird daneben nur noch von GET /api/tax/export selektiert
+ * (Beleganhang im Steuer-PDF, ebenfalls einzeln pro Attachment, nie per
+ * findMany).
  */
 import { NextResponse } from "next/server";
 

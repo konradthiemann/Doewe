@@ -6,6 +6,7 @@
  * Kategorie und Beleg-Metadaten (nie die Datei-Bytes) sowie Summen je
  * Kategorie. year: 2000–2100, Default = aktuelles Jahr, sonst 400.
  */
+import { groupTaxTransactionsByCategory } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../lib/auth";
@@ -45,27 +46,7 @@ export async function GET(req: Request) {
     }
   });
 
-  const sums = new Map<
-    string | null,
-    { categoryId: string | null; categoryName: string | null; totalCents: number; count: number; withReceiptCount: number }
-  >();
-  for (const tx of transactions) {
-    const key = tx.category?.id ?? null;
-    const entry = sums.get(key) ?? {
-      categoryId: tx.category?.id ?? null,
-      categoryName: tx.category?.name ?? null,
-      totalCents: 0,
-      count: 0,
-      withReceiptCount: 0
-    };
-    entry.totalCents += tx.amountCents;
-    entry.count += 1;
-    if (tx.attachments.length > 0) entry.withReceiptCount += 1;
-    sums.set(key, entry);
-  }
-  const categorySums = Array.from(sums.values()).sort(
-    (a, b) => Math.abs(b.totalCents) - Math.abs(a.totalCents)
-  );
+  const { categorySums } = groupTaxTransactionsByCategory(transactions);
 
   return NextResponse.json({ year, transactions, categorySums });
 }

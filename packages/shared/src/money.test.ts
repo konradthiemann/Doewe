@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { add, fromCents, multiply, parseCents, sub, toDecimalString } from "./money";
+import { add, formatEuro, fromCents, multiply, parseCents, sub, toDecimalString } from "./money";
 
 describe("money", () => {
   it("parses valid strings to cents", () => {
@@ -46,6 +46,13 @@ describe("money", () => {
     expect(add(a, b)).toBe(323);
     expect(sub(b, a)).toBe(77);
     expect(multiply(fromCents(105), 1.1)).toBe(116); // 1.05 * 1.1 = 1.155 -> 1.16
+  });
+
+  it("formats cents as a localized Euro amount", () => {
+    // Intl inserts a non-breaking space (U+00A0) before the trailing "€" in de-DE.
+    expect(formatEuro(fromCents(123456), "de")).toBe("1.234,56 €");
+    expect(formatEuro(fromCents(-500), "de")).toBe("-5,00 €");
+    expect(formatEuro(fromCents(123456), "en")).toBe("€1,234.56");
   });
 
   it("rejects invalid parse inputs", () => {

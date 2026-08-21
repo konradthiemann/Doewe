@@ -3,11 +3,13 @@
 import { fromCents, toDecimalString } from "@doewe/shared";
 import { format, parseISO } from "date-fns";
 import { de, enUS } from "date-fns/locale";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
+import { Button } from "../../components/ui/Button";
+import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
-import { type AttachmentMeta } from "../../lib/attachments";
+import { type AttachmentMeta, TAX_EXPORT_MAX_RECEIPT_BYTES, formatAttachmentBytes } from "../../lib/attachments";
 import { useI18n } from "../../lib/i18n";
 
 type TaxTransaction = {
@@ -71,6 +73,62 @@ export default function TaxPage() {
     });
   };
 
+  // F2: 50 MB Belegbytes-Budget — Größe kommt aus den bereits geladenen
+  // sizeBytes der /api/tax-Antwort, kein zusätzlicher Request nötig.
+  const receiptBytesTotal = useMemo(
+    () =>
+      data?.transactions.reduce(
+        (sum, tx) => sum + tx.attachments.reduce((txSum, a) => txSum + a.sizeBytes, 0),
+        0
+      ) ?? 0,
+    [data]
+  );
+  const receiptsOverBudget = receiptBytesTotal > TAX_EXPORT_MAX_RECEIPT_BYTES;
+
+  const toast = useToast();
+  const [includeReceipts, setIncludeReceipts] = useState(true);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({
+        year: String(year),
+        includeReceipts: includeReceipts && !receiptsOverBudget ? "1" : "0",
+        locale
+      });
+      const res = await fetch(`/api/tax/export?${params.toString()}`);
+      if (!res.ok) {
+        if (res.status === 413) {
+          const body: { totalBytes?: number; limitBytes?: number } = await res.json().catch(() => ({}));
+          toast.error(
+            t("tax.export.errorTooLarge", {
+              totalSize: formatAttachmentBytes(body.totalBytes ?? receiptBytesTotal),
+              limitSize: formatAttachmentBytes(body.limitBytes ?? TAX_EXPORT_MAX_RECEIPT_BYTES)
+            })
+          );
+        } else {
+          toast.error(t("tax.export.errorGeneric", { status: res.status }));
+        }
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `steuer-${year}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error(t("tax.export.errorGeneric", { status: 0 }));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const years = Array.from({ length: YEAR_RANGE }, (_, i) => currentYear - i);
   const totalCents = data?.categorySums.reduce((sum, entry) => sum + entry.totalCents, 0) ?? 0;
   const cardClass =
@@ -102,6 +160,39 @@ export default function TaxPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={includeReceipts && !receiptsOverBudget}
+                disabled={receiptsOverBudget}
+                onChange={(event) => setIncludeReceipts(event.target.checked)}
+                className="h-4 w-4 rounded border-line-strong text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              />
+              {t("tax.export.includeReceiptsLabel")}
+            </label>
+            {data && receiptBytesTotal > 0 && (
+              <p className={`text-xs ${receiptsOverBudget ? "text-danger" : "text-ink-muted"}`}>
+                {receiptsOverBudget
+                  ? t("tax.export.receiptsOverLimit", {
+                      size: formatAttachmentBytes(receiptBytesTotal),
+                      limit: formatAttachmentBytes(TAX_EXPORT_MAX_RECEIPT_BYTES)
+                    })
+                  : t("tax.export.includeReceiptsSizeHint", { size: formatAttachmentBytes(receiptBytesTotal) })}
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              loading={exporting}
+              disabled={!data || loading}
+              onClick={() => void handleExport()}
+            >
+              {exporting ? t("tax.export.buttonLoading") : t("tax.export.button")}
+            </Button>
           </div>
         </div>
 
