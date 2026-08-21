@@ -21,5 +21,6 @@ export const config = {
   // ~offline: Offline-Fallback-Seite muss ohne Session erreichbar sein,
   // damit der Service Worker sie beim Install precachen kann.
   // api/cron: Cron-Endpoints authentifizieren per Secret-Header, nicht per Session.
-  matcher: ["/((?!api/auth|api/cron|api/demo|api/health|login|forgot-password|reset-password|~offline|impressum|datenschutz|_next|static|favicon.ico|assets|.*\\..*).*)"]
+  // welcome: öffentliche Landingpage (Portfolio-Link), keine Session nötig.
+  matcher: ["/((?!api/auth|api/cron|api/demo|api/health|login|forgot-password|reset-password|welcome|~offline|impressum|datenschutz|_next|static|favicon.ico|assets|.*\\..*).*)"]
 };
