@@ -289,6 +289,7 @@ export const en: Record<string, string> = {
   "errors.failedUnskip": "Failed to unskip recurring: {status}",
   "transactionForm.addTitle": "Add transaction",
   "transactionForm.editTitle": "Edit transaction",
+  "transactionForm.scanReceiptCta": "Scan a receipt instead",
   "transactionForm.typeLabel": "Transaction type",
   "transactionForm.income": "Income",
   "transactionForm.outcome": "Outcome",
