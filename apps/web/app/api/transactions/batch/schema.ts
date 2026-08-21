@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const LineItemInput = z.object({
   name: z.string().min(1),
-  quantity: z.number().int().min(1).default(1),
+  quantity: z.number().positive().default(1),
   unitPriceCents: z.number().int(),
   totalCents: z.number().int(),
   position: z.number().int().min(0)

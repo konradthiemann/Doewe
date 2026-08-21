@@ -183,4 +183,54 @@ describe("/api/transactions/batch", () => {
     const res = await routes.POST(req);
     expect(res.status).toBe(400);
   });
+
+  it("accepts fractional quantities for weight-priced items", async () => {
+    const routes = await import("../app/api/transactions/batch/route");
+
+    const body = {
+      receiptDate: "2026-08-19",
+      accountId: testAccountId,
+      groups: [
+        {
+          categoryId: testCategoryId1,
+          items: [
+            { name: "Assam Tee (0.100kg)", quantity: 0.1, unitPriceCents: 6800, totalCents: 680, position: 0 }
+          ]
+        }
+      ]
+    };
+
+    const req = new Request("http://localhost/api/transactions/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const res = await routes.POST(req);
+    expect(res.status).toBe(201);
+
+    const result = await res.json();
+    const lineItem = await prisma.receiptLineItem.findFirst({
+      where: { transactionId: result.transactions[0].id }
+    });
+    expect(lineItem?.quantity).toBeCloseTo(0.1);
+  });
+
+  it("returns a plain string error message on validation failure", async () => {
+    const routes = await import("../app/api/transactions/batch/route");
+
+    const body = {
+      receiptDate: "2026-08-19",
+      accountId: testAccountId,
+      groups: []
+    };
+
+    const req = new Request("http://localhost/api/transactions/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const res = await routes.POST(req);
+    const result = await res.json();
+    expect(typeof result.error).toBe("string");
+  });
 });

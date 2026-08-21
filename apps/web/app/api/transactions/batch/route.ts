@@ -20,7 +20,10 @@ export async function POST(req: Request) {
   const json = await req.json();
   const parsed = BatchTransactionInput.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+    const message = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    return NextResponse.json({ error: message }, { status: 400 });
   }
   const data = parsed.data;
 
