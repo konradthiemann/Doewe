@@ -734,17 +734,14 @@ function TransactionsPage() {
           </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <div className="grid gap-2 lg:grid-cols-2 lg:items-start">
           {currentRecurring.length > 0 && (
-            <details className="group rounded-card border border-line bg-brand-soft p-4 text-sm shadow-card">
+            <details className="group rounded-card border border-line bg-brand-soft p-2.5 text-sm shadow-card">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-                <div>
-                  <p className="text-base font-semibold text-brand">{t("transactions.recurringSummaryTitle")}</p>
-                  <p className="text-xs text-ink-muted">{t("transactions.recurringSummarySubtitle")}</p>
-                </div>
+                <p className="text-sm font-semibold text-brand">{t("transactions.recurringSummaryTitle")}</p>
                 <span className="flex items-center gap-2">
                   <span
-                    className={`text-base font-semibold ${
+                    className={`text-sm font-semibold ${
                       currentRecurringTotalCents < 0 ? "text-expense" : "text-income"
                     }`}
                   >
@@ -786,11 +783,9 @@ function TransactionsPage() {
             </details>
           )}
 
-          <details className="group rounded-card border border-line bg-surface p-4 text-sm shadow-card">
+          <details className="group rounded-card border border-line bg-surface p-2.5 text-sm shadow-card">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-normal text-ink-muted">{t("transactions.upcomingRecurring")}</p>
-              </div>
+              <p className="text-xs font-normal text-ink-muted">{t("transactions.upcomingRecurring")}</p>
               <span className="flex items-center gap-2 text-xs text-ink-muted">
                 {format(nextDate, "LLLL yyyy", { locale: dfLocale })}
                 <svg
@@ -834,7 +829,7 @@ function TransactionsPage() {
 
           {filteredTotals.count > 0 && (
             <div
-              className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm"
+              className="mb-2 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm"
               aria-live="polite"
             >
               <span className="text-ink-muted">
