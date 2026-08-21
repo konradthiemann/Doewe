@@ -627,6 +627,35 @@ All tax-earmarked transactions (`taxRelevant: true`) of one calendar year (UTC b
 
 ---
 
+### `GET /api/tax/export?year=…&includeReceipts=0|1&locale=de|en`
+
+Renders the same tax-earmarked transaction set as `GET /api/tax` into a single PDF: a cover page (household, generation date, position/receipt counts, separate income/expense totals plus the grand total), a category-grouped transaction table (running number, date, description, amount, receipt reference), and — when `includeReceipts=1` — a receipt appendix with one page per attachment.
+
+**Auth required:** Yes. Rate-limited to 5 exports per user per 10 minutes.
+
+**Query parameters:**
+
+| Parameter | Type | Constraints |
+|---|---|---|
+| `year` | integer | Optional, defaults to the current year. Must be 2000–2100, otherwise `400` |
+| `includeReceipts` | `"0"` \| `"1"` | Optional, defaults to `"1"`. When `"0"`, no receipt bytes are loaded and the PDF has no appendix |
+| `locale` | `"de"` \| `"en"` | Optional, defaults to the requesting user's `locale` field (falls back to `"de"`) |
+
+**Success response — `200 OK`:** binary PDF (`Content-Type: application/pdf`, `Content-Disposition: attachment; filename="steuer-<year>.pdf"`, `Cache-Control: private, no-store`).
+
+Receipt handling in the appendix: `application/pdf` receipts are embedded page-for-page (`copyPages`) with a header overlay on the first page; `image/jpeg`/`image/png` are embedded and scaled to fit; `image/webp` always gets a placeholder page (no conversion) with the file name; a receipt whose bytes fail to parse/embed also falls back to a placeholder — a single bad receipt never fails the whole export. Multiple receipts on one transaction are labelled `12a`, `12b`, … in both the table and the appendix.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Invalid `year`, `includeReceipts`, or `locale` parameter |
+| `401` | Not authenticated |
+| `413` | `includeReceipts=1` and the sum of the household's attachment `sizeBytes` for the year exceeds the 50 MB budget — body: `{ "error": "...", "totalBytes": number, "limitBytes": 52428800 }`. Retry with `includeReceipts=0` |
+| `429` | Rate limit exceeded |
+
+---
+
 ## Recurring Transactions
 
 ### `GET /api/recurring-transactions`

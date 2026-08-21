@@ -1,3 +1,13 @@
+## [0.1.7] - 2026-08-21
+### Added
+- **Steuer-PDF-Export** (`GET /api/tax/export`): Ein-Klick-Export der steuerrelevanten Transaktionen eines Jahres als PDF — Deckblatt (Haushalt, Position/Beleg-Zähler, getrennte Summen für Ausgaben/Einnahmen + Gesamt), nach Kategorie gruppierte Tabelle mit laufender Nummer/Beleg-Referenz und Kategorie-/Jahresgesamtsummen, optionaler Beleganhang (eine Seite pro Beleg). Button + „Belege einbetten"-Checkbox mit Größenvorschau auf `/tax`.
+### Changed
+- `formatEuro(cents, locale)` in `@doewe/shared` ergänzt (nur vom PDF-Export genutzt); Tax-Kategorie-Gruppierung aus `app/api/tax/route.ts` nach `packages/shared/src/tax.ts` extrahiert (jetzt mit getrennten Einnahmen-/Ausgaben-Summen) und dort unit-getestet.
+### Why
+- Belege müssen für die Steuererklärung nicht eingereicht, aber vorgehalten werden (Belegvorhaltepflicht) — ein einziges PDF mit Tabelle + Belegen ersetzt manuelles Zusammensuchen einzelner Anhänge.
+### How
+- `pdf-lib` serverseitig (kein Headless-Chromium nötig, kann fremde PDF-Belege per `copyPages` übernehmen); Belegbytes werden sequenziell einzeln nachgeladen (nie ein `findMany` mit `data`) und bleiben strikt haushaltsgescoped. Hartes 50-MB-Budget für eingebettete Belegbytes → `413` mit `{ error, totalBytes, limitBytes }`. `image/webp`-Belege bekommen eine Platzhalterseite statt Konvertierung; ein defekter Beleg fällt einzeln auf eine Platzhalterseite zurück statt den Export abzubrechen. `StandardFonts.Helvetica` (WinAnsi) mit `sanitizeWinAnsi()`-Fallback (`?`) für nicht kodierbare Zeichen.
+
 ## [0.1.6] - 2026-08-13
 ### Added
 - **"Calm Finance" Design-System** — semantische Design-Tokens (Surfaces, Ink, Brand, Income/Expense/Savings, Status) als Tailwind-Klassen, die sich automatisch an Light- und Dark-Mode anpassen. Quelle & Spezifikation in `docs/design/` (`design-system.html`, `claude-design-prompt.md`, Marken-Logos als SVG).
