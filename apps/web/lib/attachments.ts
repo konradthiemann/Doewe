@@ -14,6 +14,9 @@ export const ATTACHMENT_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 export const ATTACHMENTS_MAX_PER_TRANSACTION = 5;
 
+/** Hard budget for the total receipt bytes embedded in one tax PDF export (F2). */
+export const TAX_EXPORT_MAX_RECEIPT_BYTES = 50 * 1024 * 1024;
+
 export function isAllowedAttachmentMimeType(mimeType: string): boolean {
   return (ATTACHMENT_ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType);
 }
@@ -29,6 +32,12 @@ export function sanitizeAttachmentFileName(name: string): string {
     .trim()
     .slice(0, 200);
   return cleaned || "beleg";
+}
+
+/** Human-readable file size, e.g. "482 KB" / "1.3 MB". */
+export function formatAttachmentBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 export interface AttachmentMeta {

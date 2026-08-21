@@ -82,8 +82,10 @@ model Transaction {
 }
 
 // Receipt files (photos/PDFs) attached to a transaction as tax evidence.
-// `data` holds the raw bytes — never select it in list queries; only
-// GET /api/attachments/[id] may load it.
+// `data` holds the raw bytes — never select it in list queries. It is loaded
+// by GET /api/attachments/[id] (single download) and by GET /api/tax/export
+// (PDF receipt appendix, one attachment at a time via findUnique — never a
+// findMany with `data` selected, to keep the memory peak low).
 model Attachment {
   id            String   @id @default(cuid())
   transactionId String

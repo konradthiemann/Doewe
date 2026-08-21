@@ -7,6 +7,7 @@ import { useApiQuery } from "../lib/api/useApiQuery";
 import {
   ATTACHMENTS_MAX_PER_TRANSACTION,
   ATTACHMENT_MAX_SIZE_BYTES,
+  formatAttachmentBytes,
   isAllowedAttachmentMimeType,
   type AttachmentMeta,
 } from "../lib/attachments";
@@ -26,11 +27,6 @@ export async function uploadAttachment(transactionId: string, file: File): Promi
   const body = new FormData();
   body.append("file", file);
   return fetch(`/api/transactions/${transactionId}/attachments`, { method: "POST", body });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 function FileIcon({ mimeType }: { mimeType: string }) {
@@ -237,7 +233,7 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
               >
                 {attachment.fileName}
               </a>
-              <span className="shrink-0 text-ink-faint">{formatBytes(attachment.sizeBytes)}</span>
+              <span className="shrink-0 text-ink-faint">{formatAttachmentBytes(attachment.sizeBytes)}</span>
               <button
                 type="button"
                 onClick={() => handleDeleteExisting(attachment.id)}
@@ -252,7 +248,7 @@ export default function AttachmentManager({ mode, transactionId, pendingFiles, o
             <li key={`${file.name}-${index}`} className={chipClass}>
               <FileIcon mimeType={file.type} />
               <span className="truncate font-medium">{file.name}</span>
-              <span className="shrink-0 text-ink-faint">{formatBytes(file.size)}</span>
+              <span className="shrink-0 text-ink-faint">{formatAttachmentBytes(file.size)}</span>
               <button
                 type="button"
                 onClick={() => handleRemovePending(index)}
