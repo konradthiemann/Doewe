@@ -186,7 +186,9 @@ export default function ReceiptReview({
         const err = await res
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error || "Failed to create transactions");
+        const message =
+          typeof err.error === "string" ? err.error : "Failed to create transactions";
+        throw new Error(message);
       }
 
       return res.json();
@@ -327,11 +329,12 @@ export default function ReceiptReview({
                 </label>
                 <input
                   type="number"
-                  min="1"
+                  min="0.001"
+                  step="0.001"
                   value={item.quantity}
                   onChange={(e) =>
                     updateItem(index, {
-                      quantity: Math.max(1, parseInt(e.target.value) || 1)
+                      quantity: Math.max(0.001, parseFloat(e.target.value) || 1)
                     })
                   }
                   className="w-full rounded-field border border-line bg-bg px-2 py-1 text-sm tabular-nums text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"

@@ -104,7 +104,7 @@ model ReceiptLineItem {
   id             String   @id @default(cuid())
   transactionId  String
   name           String
-  quantity       Int      @default(1)
+  quantity       Float    @default(1)
   unitPriceCents Int
   totalCents     Int
   position       Int
