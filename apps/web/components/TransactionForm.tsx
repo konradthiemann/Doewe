@@ -19,7 +19,7 @@ import { transactionFormSchema, type TransactionFormValues } from "../lib/schema
 
 import AttachmentManager, { uploadAttachment } from "./AttachmentManager";
 import SearchableSelect from "./SearchableSelect";
-import { Button, buttonVariants } from "./ui/Button";
+import { Button } from "./ui/Button";
 
 const isReceiptScannerEnabled = process.env.NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED === "1";
 
@@ -478,23 +478,36 @@ export default function TransactionForm({
         {mode === "create" && isReceiptScannerEnabled && (
           <Link
             href="/scan"
-            onClick={onClose}
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "gap-2 self-start")}
+            className="group flex items-center gap-3 rounded-card border border-brand/30 bg-brand-soft px-4 py-3 text-left transition hover:border-brand/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           >
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="h-4 w-4"
+              className="h-8 w-8 shrink-0 text-brand"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.8"
+              strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             >
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
               <circle cx="12" cy="13" r="4" />
             </svg>
-            {t("transactionForm.scanReceiptCta")}
+            <span className="flex-1 text-sm font-medium text-ink">
+              {t("transactionForm.scanReceiptCta")}
+            </span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4 shrink-0 text-brand transition group-hover:translate-x-0.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m9 18 6-6-6-6" />
+            </svg>
           </Link>
         )}
 
