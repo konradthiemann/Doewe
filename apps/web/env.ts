@@ -65,6 +65,13 @@ export const env = createEnv({
      */
     CRON_SECRET: z.string().optional(),
     /**
+     * Shared secret guarding the admin endpoints (/api/admin/*), gelesen vom
+     * Symfony-Control-Plane-Backend. Requests müssen ihn als
+     * `Authorization: Bearer …` senden; fehlender/falscher Token → 401.
+     * Eigenständig von CRON_SECRET (getrennte Rotationsfähigkeit).
+     */
+    DOEWE_SERVICE_TOKEN: z.string().optional(),
+    /**
      * Claude Vision API key for the receipt scanner (Issue #53). When unset,
      * POST /api/receipt-scan falls back to stub behavior (manual entry) — no error.
      */
@@ -110,6 +117,7 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
     CRON_SECRET: process.env.CRON_SECRET,
+    DOEWE_SERVICE_TOKEN: process.env.DOEWE_SERVICE_TOKEN,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     NEXT_PUBLIC_GOOGLE_ENABLED: process.env.NEXT_PUBLIC_GOOGLE_ENABLED,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
