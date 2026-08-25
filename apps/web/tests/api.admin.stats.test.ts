@@ -13,7 +13,6 @@ const SOLO_USER_ID = "test-user-admin-stats-solo";
 
 let prisma: import("@prisma/client").PrismaClient;
 let multiHouseholdId: string;
-let soloHouseholdId: string;
 let testAccountId: string;
 let taxCategoryId: string;
 let plainCategoryId: string;
@@ -44,7 +43,7 @@ beforeAll(async () => {
     update: { householdId: multiHouseholdId, role: "MEMBER" },
     create: { userId: member.id, householdId: multiHouseholdId, role: "MEMBER" }
   });
-  soloHouseholdId = await ensureTestHousehold(prisma, solo.id, "Solo Test Household");
+  await ensureTestHousehold(prisma, solo.id, "Solo Test Household");
 
   const account = await prisma.account.upsert({
     where: { id: "acc_admin_stats_test" },
