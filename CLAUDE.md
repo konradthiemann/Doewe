@@ -60,6 +60,28 @@ vitest.config.ts    # Globale Vitest-Konfiguration
 - `'use client'` nur wenn nötig; Server Components by default
 - ESLint-Baseline: `shared/eslint/eslint.base.cjs`, extended per Workspace
 
+## Admin-API (Symfony-Control-Plane-Backend)
+`apps/web/app/api/admin/*` — Bearer-Token-Auth über `isAuthorizedService()`
+(`DOEWE_SERVICE_TOKEN`), NICHT Session-basiert, übergreift bewusst
+Haushaltsgrenzen. Nur vom externen `control-plane`-Repo aufgerufen.
+- `GET stats` (Aggregate), `GET users`/`households` (CRM-Listen, exkl.
+  Soft-Deletes und dem öffentlichen Demo-Account, s.u.), `GET usage`
+  (Tages-Zeitreihe: Logins/Transaktionen/Beleg-Scans)
+- `POST users/:id/suspend`, `POST users/:id/delete` (immer Soft-Delete),
+  `POST households/:id/split-member`, `POST households/:id/delete`
+  (kaskadiert Soft-Delete auf alle aktuellen Mitglieder)
+- Schreibaktionen loggen in `AdminActionLog`. Sperren/Löschen wirkt sofort
+  (`jwt`-Callback in `authOptions.ts` prüft `suspendedAt`/`deletedAt` bei
+  jedem Request, analog zum bestehenden `passwordChangedAt`-Mechanismus).
+
+**Demo-Account bei Auswertungen ausschließen:** `demo@doewe.test`
+(`lib/demoConstants.ts`) ist der öffentliche "Demo ausprobieren"-Account der
+Login-Seite, schreibt bei jedem `/api/demo/seed`-Aufruf 36 Monate
+synthetische Daten neu. Jede neue zeit-/aggregatbasierte Auswertung muss ihn
+über `DEMO_EMAIL`/`DEMO_ACCOUNT_ID` ausschließen, sonst verzerrt er das
+Ergebnis massiv (Präzedenzfall: ein Ein-Tages-Peak mit ~1400 synthetischen
+Transaktionen).
+
 ## Prisma
 - Singleton-Pattern: `apps/web/lib/prisma.ts`
 - Schema + Migrations: `apps/web/prisma/`
