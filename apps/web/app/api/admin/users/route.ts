@@ -19,6 +19,11 @@
  *
  * Der geteilte öffentliche Demo-Account (`DEMO_EMAIL`, siehe `lib/demoConstants`)
  * wird ausgeschlossen — synthetische Showcase-Daten, kein echter Nutzer.
+ *
+ * Soft-gelöschte Nutzer (`deletedAt` gesetzt) werden ebenfalls ausgeblendet —
+ * einmal gelöscht, verschwinden sie aus der Übersicht statt mit einem
+ * "gelöscht"-Status stehen zu bleiben. Gesperrte Nutzer (`suspendedAt`)
+ * bleiben sichtbar, da eine Sperre reversibel ist und aktiv verwaltet wird.
  */
 import { NextResponse } from "next/server";
 
@@ -46,10 +51,11 @@ export async function GET(req: Request) {
   // The shared public demo account (see lib/demoConstants) is synthetic
   // showcase data, not a real registered user — exclude it so the admin CRM
   // reflects genuine usage.
+  const activeUsersWhere = { email: { not: DEMO_EMAIL }, deletedAt: null };
   const [total, users] = await Promise.all([
-    prisma.user.count({ where: { email: { not: DEMO_EMAIL } } }),
+    prisma.user.count({ where: activeUsersWhere }),
     prisma.user.findMany({
-      where: { email: { not: DEMO_EMAIL } },
+      where: activeUsersWhere,
       orderBy: { createdAt: "asc" },
       skip,
       take: pageSize,
