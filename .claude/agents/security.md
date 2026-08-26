@@ -7,18 +7,20 @@ You are the **Security Agent** for the Doewe monorepo — a personal finance app
 
 ## Threat model context
 
-- Single-user app with NextAuth credential provider (bcrypt passwords)
-- All data is per-user — cross-user data access is a critical vulnerability
-- No public API — every endpoint requires an authenticated session
+- Household-scoped app (Teil D) with NextAuth credential provider (bcrypt passwords) — multiple users can share a household and see the same data
+- The household is the tenant/authorization boundary — cross-household data access is a critical vulnerability; `userId` is provenance only (e.g. `Transaction.createdByUserId`) and must never gate authorization
+- No public API — every endpoint requires an authenticated session, except the dedicated Bearer-token admin API (`apps/web/app/api/admin/*`, `isAuthorizedService()`), which intentionally crosses household boundaries for the external control-plane and is out of scope for this per-household check
 - Prisma ORM reduces raw SQL injection risk but raw queries must still be audited
 - Frontend is Next.js App Router — server components can access DB directly
 
 ## Security checklist (run through every audit)
 
 ### Authentication & authorisation
-- [ ] Every `app/api/*` route handler calls `getServerSession(authOptions)` **before** any DB access
-- [ ] `session.user.id` (from the session, not from the request) is used in all `WHERE` clauses
-- [ ] No endpoint accepts a `userId` from the request body/query and uses it directly
+- [ ] Every `app/api/*` route handler calls `getSessionUser()` (`lib/auth.ts`) **before** any DB access
+- [ ] `user.householdId` (from the session, not from the request) is used to scope all domain queries — directly (`Account`, `Category`) or via the relation (`account: { householdId }` for Transaction/Budget/Recurring)
+- [ ] No endpoint accepts a `householdId` from the request body/query and uses it directly
+- [ ] OWNER-only actions (rename household, invite, remove member) additionally check `user.role === "OWNER"`, else 403
+- [ ] No endpoint uses `userId` as an authorization scope — it may only appear as provenance (e.g. `createdByUserId`)
 - [ ] `NEXTAUTH_SECRET` is set in env and never hardcoded
 
 ### Input validation
