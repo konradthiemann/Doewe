@@ -188,6 +188,14 @@ model User {
   // Bumped on every password change/reset. JWTs issued before this instant are
   // treated as stale and rejected, so a reset evicts existing sessions.
   passwordChangedAt DateTime?
+  // Control-plane moderation (Symfony admin dashboard, /api/admin/*). Same JWT
+  // eviction mechanism as passwordChangedAt: any JWT issued before either
+  // instant is rejected on its next validation, so suspension/deletion take
+  // effect immediately without requiring the user to log out.
+  suspendedAt DateTime?
+  // Soft-delete only (Konrad's product decision) — never a hard delete. Set by
+  // POST /api/admin/users/:id/delete. Evicts sessions the same way.
+  deletedAt   DateTime?
 
   // Server-rendered push texts need the language at the user (the UI locale
   // lives only client-side in localStorage). The settings language switch syncs
@@ -356,4 +364,37 @@ model ReminderSetting {
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+// Login tracking for the control-plane admin dashboard (usage/MAU metrics).
+// One row per successful sign-in, written from the `signIn` callback in
+// authOptions.ts. Reines Log, keine User-Relation (gleiche Bauart wie
+// MutationLog/ConflictLog) — householdId ist der Haushalt zum Login-Zeitpunkt,
+// nicht zwingend der heutige (ein Split kann ihn später ändern).
+model LoginEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  householdId String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Audit-Log für Moderationsaktionen des Symfony-Control-Plane-Backends
+// (/api/admin/*: suspend/unsuspend, delete, household split). Bewusst ein
+// eigenes, schlankes Log statt Wiederverwendung von MutationLog (das ist
+// zweckgebunden für Mobile-Sync-Idempotenz, keyed by mutationId+userId).
+model AdminActionLog {
+  id         String   @id @default(cuid())
+  // Identifies the calling service, e.g. "control-plane". Not a userId — the
+  // Bearer-Token-Auth (isAuthorizedService) has no per-caller identity today.
+  actor      String
+  action     String
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }
