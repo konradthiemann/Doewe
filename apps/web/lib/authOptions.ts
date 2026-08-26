@@ -73,29 +73,54 @@ export const authOptions: NextAuthOptions = {
   providers,
   callbacks: {
     async signIn({ user, account, profile }) {
-      // Credentials sign-in already resolved the DB user in `authorize`.
-      if (account?.provider !== "google") return true;
+      let userId: string;
 
-      const email = user.email ?? profile?.email;
-      if (!email) return false;
+      if (account?.provider === "google") {
+        const email = user.email ?? profile?.email;
+        if (!email) return false;
 
-      // Find or provision the local user, then hand the DB id + password stamp
-      // back on the `user` object so the jwt callback below stamps the token.
-      let dbUser = await prisma.user.findUnique({
-        where: { email },
-        select: { id: true, passwordChangedAt: true }
-      });
-      if (!dbUser) {
-        const created = await createUserWithDefaults({
-          email,
-          name: (profile?.name ?? user.name) || null,
-          password: null
+        // Find or provision the local user, then hand the DB id + password stamp
+        // back on the `user` object so the jwt callback below stamps the token.
+        let dbUser = await prisma.user.findUnique({
+          where: { email },
+          select: { id: true, passwordChangedAt: true }
         });
-        dbUser = { id: created.id, passwordChangedAt: created.passwordChangedAt };
+        if (!dbUser) {
+          const created = await createUserWithDefaults({
+            email,
+            name: (profile?.name ?? user.name) || null,
+            password: null
+          });
+          dbUser = { id: created.id, passwordChangedAt: created.passwordChangedAt };
+        }
+
+        user.id = dbUser.id;
+        (user as { passwordChangedAt?: Date | null }).passwordChangedAt = dbUser.passwordChangedAt;
+        userId = dbUser.id;
+      } else {
+        // Credentials sign-in already resolved the DB user in `authorize`.
+        userId = user.id;
       }
 
-      user.id = dbUser.id;
-      (user as { passwordChangedAt?: Date | null }).passwordChangedAt = dbUser.passwordChangedAt;
+      // Login tracking for the control-plane admin dashboard (usage/MAU
+      // metrics): one LoginEvent row per successful sign-in, capturing the
+      // household membership at that moment. Best-effort — a logging failure
+      // must never block a legitimate sign-in.
+      try {
+        const membership = await prisma.householdMember.findUnique({
+          where: { userId },
+          select: { householdId: true }
+        });
+        if (membership) {
+          await prisma.loginEvent.create({
+            data: { userId, householdId: membership.householdId }
+          });
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console -- best-effort telemetry, must not throw
+        console.error("Failed to record LoginEvent", error);
+      }
+
       return true;
     },
     async jwt({ token, user }) {
@@ -108,13 +133,18 @@ export const authOptions: NextAuthOptions = {
       }
 
       // Subsequent requests: reject the token if the password changed after it
-      // was issued (a reset/change evicts previously-issued sessions).
+      // was issued (a reset/change evicts previously-issued sessions), or if
+      // the control-plane admin dashboard has suspended/deleted the account
+      // since the token was issued — same mechanism, no re-login required.
       if (token.userId) {
         const current = await prisma.user.findUnique({
           where: { id: token.userId as string },
-          select: { passwordChangedAt: true }
+          select: { passwordChangedAt: true, suspendedAt: true, deletedAt: true }
         });
         if (!current) return {};
+        if (current.suspendedAt || current.deletedAt) {
+          return {}; // suspended/deleted → no userId → getSessionUser() returns null (401)
+        }
         const dbStamp = current.passwordChangedAt ? current.passwordChangedAt.getTime() : 0;
         if (dbStamp > ((token.pwdStamp as number | undefined) ?? 0)) {
           return {}; // stale token → no userId → getSessionUser() returns null (401)
