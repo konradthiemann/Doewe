@@ -19,9 +19,16 @@
  * - `transactions` — Anzahl an diesem Tag angelegter, nicht soft-gelöschter Transaktionen
  * - `receiptScans` — Anzahl an diesem Tag angelegter Belege (distinct `transactionId`
  *   auf `ReceiptLineItem`, damit eine mehrzeilige Quittung nur einmal zählt)
+ *
+ * Der geteilte öffentliche Demo-Account (`DEMO_ACCOUNT_ID`/`DEMO_EMAIL`, siehe
+ * `lib/demoConstants`) wird aus allen drei Reihen ausgeschlossen — sein
+ * 36-Monats-Beispieldatensatz wird bei jedem Aufruf von `/api/demo/seed`
+ * (Login-Seite) neu geschrieben und würde sonst als riesiger Ein-Tages-Peak
+ * erscheinen, der die echte Nutzung überdeckt.
  */
 import { NextResponse } from "next/server";
 
+import { DEMO_ACCOUNT_ID, DEMO_EMAIL } from "../../../../lib/demoConstants";
 import { prisma } from "../../../../lib/prisma";
 import { isAuthorizedService } from "../../../../lib/serviceAuth";
 
@@ -58,17 +65,25 @@ export async function GET(req: Request) {
     buckets.set(dayKey(d), { logins: 0, transactions: 0, receiptScans: 0 });
   }
 
+  const demoUser = await prisma.user.findUnique({ where: { email: DEMO_EMAIL }, select: { id: true } });
+
   const [logins, transactions, receiptRows] = await Promise.all([
     prisma.loginEvent.findMany({
-      where: { createdAt: { gte: start, lt: endExclusive } },
+      where: {
+        createdAt: { gte: start, lt: endExclusive },
+        ...(demoUser ? { userId: { not: demoUser.id } } : {})
+      },
       select: { createdAt: true }
     }),
     prisma.transaction.findMany({
-      where: { createdAt: { gte: start, lt: endExclusive } },
+      where: { createdAt: { gte: start, lt: endExclusive }, accountId: { not: DEMO_ACCOUNT_ID } },
       select: { createdAt: true }
     }),
     prisma.receiptLineItem.findMany({
-      where: { createdAt: { gte: start, lt: endExclusive } },
+      where: {
+        createdAt: { gte: start, lt: endExclusive },
+        transaction: { accountId: { not: DEMO_ACCOUNT_ID } }
+      },
       select: { createdAt: true, transactionId: true }
     })
   ]);

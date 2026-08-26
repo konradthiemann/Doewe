@@ -16,9 +16,13 @@
  *
  * `lastLoginAt` ist vom jüngsten `LoginEvent` des Nutzers abgeleitet (null,
  * wenn noch nie eingeloggt — es gibt keine Login-Historie vor diesem Feature).
+ *
+ * Der geteilte öffentliche Demo-Account (`DEMO_EMAIL`, siehe `lib/demoConstants`)
+ * wird ausgeschlossen — synthetische Showcase-Daten, kein echter Nutzer.
  */
 import { NextResponse } from "next/server";
 
+import { DEMO_EMAIL } from "../../../../lib/demoConstants";
 import { prisma } from "../../../../lib/prisma";
 import { isAuthorizedService } from "../../../../lib/serviceAuth";
 
@@ -39,9 +43,13 @@ export async function GET(req: Request) {
   const { page, pageSize } = parsed.data;
   const skip = (page - 1) * pageSize;
 
+  // The shared public demo account (see lib/demoConstants) is synthetic
+  // showcase data, not a real registered user — exclude it so the admin CRM
+  // reflects genuine usage.
   const [total, users] = await Promise.all([
-    prisma.user.count(),
+    prisma.user.count({ where: { email: { not: DEMO_EMAIL } } }),
     prisma.user.findMany({
+      where: { email: { not: DEMO_EMAIL } },
       orderBy: { createdAt: "asc" },
       skip,
       take: pageSize,
