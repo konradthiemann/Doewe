@@ -13,9 +13,14 @@
  * {
  *   households: [{ id, name, memberCount, createdAt, accountsCount, transactionsCount, receiptScanCount }]
  * }
+ *
+ * Der Haushalt des geteilten öffentlichen Demo-Accounts (`DEMO_EMAIL`, siehe
+ * `lib/demoConstants`) wird ausgeschlossen — synthetische Showcase-Daten
+ * (36 Monate generierte Transaktionen), kein echter Haushalt.
  */
 import { NextResponse } from "next/server";
 
+import { DEMO_EMAIL } from "../../../../lib/demoConstants";
 import { prisma } from "../../../../lib/prisma";
 import { isAuthorizedService } from "../../../../lib/serviceAuth";
 
@@ -26,7 +31,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const demoUser = await prisma.user.findUnique({
+    where: { email: DEMO_EMAIL },
+    select: { householdMember: { select: { householdId: true } } }
+  });
+  const demoHouseholdId = demoUser?.householdMember?.householdId ?? null;
+
   const households = await prisma.household.findMany({
+    where: demoHouseholdId ? { id: { not: demoHouseholdId } } : undefined,
     select: { id: true, name: true, createdAt: true },
     orderBy: { createdAt: "asc" }
   });
