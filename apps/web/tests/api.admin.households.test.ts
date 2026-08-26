@@ -11,10 +11,13 @@ process.env.DOEWE_SERVICE_TOKEN = SERVICE_TOKEN;
 const OWNER_USER_ID = "test-user-admin-hh-owner";
 const MEMBER_USER_ID = "test-user-admin-hh-member";
 const OUTSIDE_USER_ID = "test-user-admin-hh-outside";
+const DELETE_OWNER_USER_ID = "test-user-admin-hh-del-owner";
+const DELETE_MEMBER_USER_ID = "test-user-admin-hh-del-member";
 
 let prisma: import("@prisma/client").PrismaClient;
 let householdId: string;
 let outsideHouseholdId: string;
+let deleteHouseholdId: string;
 let testAccountId: string;
 let newSplitHouseholdId: string | undefined;
 
@@ -61,6 +64,24 @@ beforeAll(async () => {
   });
   outsideHouseholdId = await ensureTestHousehold(prisma, OUTSIDE_USER_ID, "Admin Households Outside Household");
 
+  const deleteOwner = await prisma.user.upsert({
+    where: { email: "admin-hh-del-owner@example.com" },
+    update: { deletedAt: null },
+    create: { id: DELETE_OWNER_USER_ID, email: "admin-hh-del-owner@example.com", password: "hashed" }
+  });
+  const deleteMember = await prisma.user.upsert({
+    where: { email: "admin-hh-del-member@example.com" },
+    update: { deletedAt: null },
+    create: { id: DELETE_MEMBER_USER_ID, email: "admin-hh-del-member@example.com", password: "hashed" }
+  });
+  deleteHouseholdId = await ensureTestHousehold(prisma, deleteOwner.id, "Admin Households Delete Household");
+  await prisma.householdMember.upsert({
+    where: { userId: deleteMember.id },
+    update: { householdId: deleteHouseholdId, role: "MEMBER" },
+    create: { userId: deleteMember.id, householdId: deleteHouseholdId, role: "MEMBER" }
+  });
+  await prisma.household.update({ where: { id: deleteHouseholdId }, data: { deletedAt: null } });
+
   await prisma.receiptLineItem.deleteMany({ where: { transaction: { account: { householdId } } } });
   await prisma.transaction.deleteMany({ where: { account: { householdId } } });
   await prisma.account.deleteMany({ where: { householdId } });
@@ -103,10 +124,15 @@ afterAll(async () => {
       await prisma.householdMember.deleteMany({ where: { householdId: newSplitHouseholdId } });
       await prisma.household.deleteMany({ where: { id: newSplitHouseholdId } });
     }
+    await prisma.adminActionLog.deleteMany({ where: { targetType: "household", targetId: deleteHouseholdId } });
     await cleanupTestHousehold(prisma, OWNER_USER_ID);
     await cleanupTestHousehold(prisma, MEMBER_USER_ID);
     await cleanupTestHousehold(prisma, OUTSIDE_USER_ID);
-    await prisma.user.deleteMany({ where: { id: { in: [OWNER_USER_ID, MEMBER_USER_ID, OUTSIDE_USER_ID] } } });
+    await prisma.householdMember.deleteMany({ where: { userId: { in: [DELETE_OWNER_USER_ID, DELETE_MEMBER_USER_ID] } } });
+    await prisma.household.deleteMany({ where: { id: deleteHouseholdId } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [OWNER_USER_ID, MEMBER_USER_ID, OUTSIDE_USER_ID, DELETE_OWNER_USER_ID, DELETE_MEMBER_USER_ID] } }
+    });
     await prisma.$disconnect();
   }
 });
@@ -215,5 +241,66 @@ describe("POST /api/admin/households/:id/split-member", () => {
     const logs = await prisma.adminActionLog.findMany({ where: { targetType: "household", targetId: householdId, action: "split" } });
     expect(logs).toHaveLength(1);
     expect(logs[0].metadata).toMatchObject({ userId: MEMBER_USER_ID, newHouseholdId: newSplitHouseholdId });
+  });
+});
+
+describe("POST /api/admin/households/:id/delete", () => {
+  it("rejects requests without a valid service token", async () => {
+    const { POST } = await import("../app/api/admin/households/[id]/delete/route");
+    const res = await POST(new Request(`http://localhost/api/admin/households/${deleteHouseholdId}/delete`, { method: "POST" }), {
+      params: { id: deleteHouseholdId }
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 for an unknown household", async () => {
+    const { POST } = await import("../app/api/admin/households/[id]/delete/route");
+    const res = await POST(authedRequest("http://localhost/api/admin/households/does-not-exist/delete", { method: "POST" }), {
+      params: { id: "does-not-exist" }
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("soft-deletes the household and cascades deletedAt to every current member", async () => {
+    const { POST } = await import("../app/api/admin/households/[id]/delete/route");
+
+    const res = await POST(authedRequest(`http://localhost/api/admin/households/${deleteHouseholdId}/delete`, { method: "POST" }), {
+      params: { id: deleteHouseholdId }
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.memberCount).toBe(2);
+
+    const household = await prisma.household.findUnique({ where: { id: deleteHouseholdId } });
+    expect(household?.deletedAt).not.toBeNull();
+
+    const owner = await prisma.user.findUnique({ where: { id: DELETE_OWNER_USER_ID } });
+    const member = await prisma.user.findUnique({ where: { id: DELETE_MEMBER_USER_ID } });
+    expect(owner?.deletedAt).not.toBeNull();
+    expect(member?.deletedAt).not.toBeNull();
+
+    const logs = await prisma.adminActionLog.findMany({ where: { targetType: "household", targetId: deleteHouseholdId, action: "delete" } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].metadata).toMatchObject({ memberIds: expect.arrayContaining([DELETE_OWNER_USER_ID, DELETE_MEMBER_USER_ID]) });
+  });
+
+  it("is idempotent — a second call does not error or duplicate the log", async () => {
+    const { POST } = await import("../app/api/admin/households/[id]/delete/route");
+
+    const res = await POST(authedRequest(`http://localhost/api/admin/households/${deleteHouseholdId}/delete`, { method: "POST" }), {
+      params: { id: deleteHouseholdId }
+    });
+    expect(res.status).toBe(200);
+
+    const logs = await prisma.adminActionLog.findMany({ where: { targetType: "household", targetId: deleteHouseholdId, action: "delete" } });
+    expect(logs).toHaveLength(1);
+  });
+
+  it("excludes the deleted household from GET /api/admin/households", async () => {
+    const { GET } = await import("../app/api/admin/households/route");
+    const res = await GET(authedRequest("http://localhost/api/admin/households"));
+    const body: { households: Array<{ id: string }> } = await res.json();
+    expect(body.households.find((h) => h.id === deleteHouseholdId)).toBeUndefined();
   });
 });

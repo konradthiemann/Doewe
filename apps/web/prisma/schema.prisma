@@ -219,9 +219,13 @@ model User {
 // financial data (Accounts, Categories and everything hanging off them) is
 // scoped by householdId, so two users sharing a household see the same data.
 model Household {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  // Admin soft-delete (control-plane): set together with deletedAt on every
+  // member's User row, so a deleted household truly locks everyone out
+  // rather than just disappearing from the admin overview.
+  deletedAt DateTime?
 
   members    HouseholdMember[]
   invites    HouseholdInvite[]
