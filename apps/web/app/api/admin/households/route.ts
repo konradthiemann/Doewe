@@ -17,6 +17,9 @@
  * Der Haushalt des geteilten öffentlichen Demo-Accounts (`DEMO_EMAIL`, siehe
  * `lib/demoConstants`) wird ausgeschlossen — synthetische Showcase-Daten
  * (36 Monate generierte Transaktionen), kein echter Haushalt.
+ *
+ * Soft-gelöschte Haushalte (`deletedAt` gesetzt) werden ebenfalls
+ * ausgeblendet — analog zu gelöschten Nutzern in `admin/users`.
  */
 import { NextResponse } from "next/server";
 
@@ -38,7 +41,10 @@ export async function GET(req: Request) {
   const demoHouseholdId = demoUser?.householdMember?.householdId ?? null;
 
   const households = await prisma.household.findMany({
-    where: demoHouseholdId ? { id: { not: demoHouseholdId } } : undefined,
+    where: {
+      deletedAt: null,
+      ...(demoHouseholdId ? { id: { not: demoHouseholdId } } : {})
+    },
     select: { id: true, name: true, createdAt: true },
     orderBy: { createdAt: "asc" }
   });
