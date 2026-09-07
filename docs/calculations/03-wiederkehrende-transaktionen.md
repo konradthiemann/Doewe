@@ -5,14 +5,35 @@
 - `apps/web/app/api/recurring-transactions/[id]/route.ts`
 - `apps/web/app/api/recurring-transactions/skips/route.ts`
 - `apps/web/app/api/analytics/summary/route.ts` (Filterlogik)
+- `apps/web/lib/recurringBooking.ts` (automatisches Buchen)
+- `apps/web/app/api/cron/materialize-recurring/route.ts` (täglicher Cron-Trigger)
 
 ## Was sind Daueraufträge?
 
 Daueraufträge sind **Vorlagen** für regelmäßige Buchungen (z.B. Miete, Gehalt, Abonnements).
 
-**Wichtig:** Sie werden **NICHT automatisch als echte Transaktionen angelegt**. Stattdessen:
-- Im Dashboard werden sie als "geplante" Beträge in Projektionen eingerechnet
-- Die tatsächliche Buchung muss manuell erfolgen
+**Seit dem `materialize-recurring`-Cron (täglich) werden fällige Daueraufträge automatisch als echte `Transaction`-Zeile gebucht**, sobald ihr `dayOfMonth` erreicht ist — vorher galt hier "nie automatisch", das ist überholt. Solange der Cron nicht gelaufen ist (z.B. lokal ohne konfigurierten Trigger), fließt ein fälliger, noch nicht gebuchter Dauerauftrag weiterhin nur als "geplanter" Betrag in die Projektionen ein (siehe unten) — das ist der Übergangszustand, kein Dauerzustand.
+
+## Automatisches Buchen (`materializeDueRecurringTransactions`)
+
+```mermaid
+flowchart TD
+    CRON["POST /api/cron/materialize-recurring\n(täglich, Secret-Header)"] --> ALL["Alle aktiven RecurringTransaction-Zeilen\n(alle Accounts, deletedAt: null)"]
+    ALL --> DUE["dueMonthsBetween(anchor, interval, bis heute)\n→ jeder fällige Monat vom Anker bis jetzt"]
+    DUE --> DAY{"Tag des Monats\nschon erreicht?"}
+    DAY -->|nein| SKIP_FUTURE["Überspringen — noch nicht fällig"]
+    DAY -->|ja| SKIPPED{"RecurringTransactionSkip\nfür diesen Monat?"}
+    SKIPPED -->|ja| SKIP["Überspringen"]
+    SKIPPED -->|nein| BOOKED{"Bereits eine Transaction\nmit recurringTransactionId\nfür diesen Monat?"}
+    BOOKED -->|ja| SKIP2["Überspringen — idempotent"]
+    BOOKED -->|nein| CREATE["Transaction anlegen\n(recurringTransactionId gesetzt)"]
+```
+
+**Wichtig — dieselbe Funktion holt sowohl den Tagesbetrieb als auch die Vergangenheit nach:** `dueMonthsBetween` listet jeden fälligen Monat vom Anker (`nextOccurrence`) bis heute. Ein Dauerauftrag, der seit Monaten nie gebucht wurde, bekommt beim ersten Lauf alle fehlenden Monate auf einmal nachgebucht — mit dem **aktuell hinterlegten Betrag** (kein historischer Betrags-Snapshot). Hat sich ein Betrag zwischenzeitlich geändert (z.B. Nebenkosten-Abschlag), werden vergangene Monate mit dem falschen (aktuellen) Betrag befüllt — in diesem Fall muss die betroffene Transaktion manuell korrigiert werden.
+
+**Idempotenz:** Ein Monat gilt als gebucht, sobald irgendeine `Transaction` mit passendem `recurringTransactionId` in diesem Monat existiert — ein zweiter Cron-Lauf am selben Tag bucht nichts doppelt.
+
+**Doppelzählung vermieden:** Sobald ein Vorkommen gebucht ist, zählt es nicht mehr zusätzlich in `recurringIncomeTotal`/`recurringOutcomeTotal`/`recurringPlannedSavings` (siehe [04-analytics-summary.md](./04-analytics-summary.md)) — sonst stünde derselbe Betrag einmal als echte Buchung und einmal als "geplant" in der Summe.
 
 ## Datenmodell
 
