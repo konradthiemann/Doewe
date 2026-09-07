@@ -1,4 +1,5 @@
 "use client";
+import { computeAvailableBudget } from "@doewe/shared";
 import {
   Chart as ChartJS,
   ArcElement,
@@ -53,8 +54,10 @@ type SummaryData = {
   }>;
   recurringIncomeTotal?: number;
   recurringOutcomeTotal?: number;
+  recurringPlannedSavings?: number;
   projectedIncomeTotal?: number;
   projectedOutcomeTotal?: number;
+  projectedSavingsTotal?: number;
   projectedRemaining?: number;
 };
 
@@ -83,8 +86,10 @@ const EMPTY_SUMMARY: SummaryData = {
   recurringTransactions: [],
   recurringIncomeTotal: 0,
   recurringOutcomeTotal: 0,
+  recurringPlannedSavings: 0,
   projectedIncomeTotal: 0,
   projectedOutcomeTotal: 0,
+  projectedSavingsTotal: 0,
   projectedRemaining: 0
 };
 
@@ -142,29 +147,37 @@ export default function HomePage() {
     [summary.outgoingByCategory]
   );
 
-  // Projected totals for current month (including recurring transactions)
-  const carryover = summary.carryoverFromLastMonth || 0;
-  const projectedIncome = Math.max(0, summary.projectedIncomeTotal ?? (summary.incomeTotal + (summary.recurringIncomeTotal || 0)));
-  const projectedOutcome = Math.max(0, summary.projectedOutcomeTotal ?? (summary.outcomeTotal + (summary.recurringOutcomeTotal || 0)));
-  // Net savings this month: positive = money set aside, negative = withdrawn back to spending.
-  const savingsNet = summary.monthlySavingsActual || 0;
-  const totalSavingsTransfer = Math.max(0, savingsNet); // deposits, shown as "saved"
-  const savingsWithdrawn = Math.max(0, -savingsNet); // withdrawals returning to the budget
-  const projectedSpent = projectedOutcome + totalSavingsTransfer;
-  // Expenses-only and savings-only percentages for the segmented progress bar
-  const projectedExpenses = projectedOutcome;
-  // Available budget = carryover from previous month + income of current month (incl. recurring)
-  // + any savings withdrawn back into everyday spending this month.
-  // Carryover is intentionally NOT floored at 0 so a negative carryover reduces the budget honestly.
-  const availableBudget = carryover + projectedIncome + savingsWithdrawn;
-  const projectedLeft = availableBudget - projectedSpent;
-  const spentPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
-  const expensesPercent = availableBudget > 0 ? Math.min(100, Math.round((projectedExpenses / availableBudget) * 100)) : 0;
-  const savedPercent = availableBudget > 0 ? Math.min(100 - expensesPercent, Math.round((totalSavingsTransfer / availableBudget) * 100)) : 0;
-  const overspent = Math.max(0, projectedSpent - availableBudget);
-  const overspentPercent = availableBudget > 0 ? Math.max(0, Math.round((overspent / availableBudget) * 100)) : 0;
-  const hasIncomeData = projectedIncome > 0 || carryover !== 0;
-  const budgetUnderwater = availableBudget <= 0;
+  // Projected totals for current month (including recurring transactions).
+  // Both the income side and the savings side count booked + recurring
+  // consistently — see computeAvailableBudget in @doewe/shared.
+  const {
+    carryover,
+    projectedIncome,
+    totalSavingsTransfer,
+    savingsWithdrawn,
+    projectedSpent,
+    projectedExpenses,
+    availableBudget,
+    projectedLeft,
+    spentPercent,
+    expensesPercent,
+    savedPercent,
+    overspent,
+    overspentPercent,
+    hasIncomeData,
+    budgetUnderwater
+  } = computeAvailableBudget({
+    carryoverFromLastMonth: summary.carryoverFromLastMonth,
+    incomeTotal: summary.incomeTotal,
+    recurringIncomeTotal: summary.recurringIncomeTotal,
+    projectedIncomeTotal: summary.projectedIncomeTotal,
+    outcomeTotal: summary.outcomeTotal,
+    recurringOutcomeTotal: summary.recurringOutcomeTotal,
+    projectedOutcomeTotal: summary.projectedOutcomeTotal,
+    monthlySavingsActual: summary.monthlySavingsActual,
+    recurringPlannedSavings: summary.recurringPlannedSavings,
+    projectedSavingsTotal: summary.projectedSavingsTotal
+  });
 
   // Core KPIs derived from the summary numbers above.
   // Savings rate: how much of projected income is transferred to savings this month.

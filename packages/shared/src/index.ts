@@ -20,6 +20,9 @@ export { groupTaxTransactionsByCategory } from "./tax";
 export type { FlushOutcome } from "./outbox";
 export { decideFlushStep } from "./outbox";
 
+export type { DashboardBudgetInput, DashboardBudget } from "./dashboardBudget";
+export { computeAvailableBudget } from "./dashboardBudget";
+
 export {
   BUDGET_ALERT_THRESHOLDS,
   budgetPercent,
