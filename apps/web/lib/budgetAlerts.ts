@@ -1,4 +1,4 @@
-import { reachedBudgetThresholds } from "@doewe/shared";
+import { isRecurringDueInMonth, reachedBudgetThresholds } from "@doewe/shared";
 
 import { prisma } from "./prisma";
 import { sendPushToUser } from "./push";
@@ -34,12 +34,13 @@ async function recurringExpenseCents(
 
   const active = recurring.filter((rec) => {
     const nextDate = new Date(rec.nextOccurrence);
-    const nextYear = nextDate.getFullYear();
-    const nextMonth = nextDate.getMonth() + 1;
-    if (nextYear === year && nextMonth === month) return true;
-    const interval = rec.intervalMonths || 1;
-    const monthsSinceNext = (year - nextYear) * 12 + (month - nextMonth);
-    return monthsSinceNext >= 0 && monthsSinceNext % interval === 0;
+    return isRecurringDueInMonth({
+      nextYear: nextDate.getFullYear(),
+      nextMonth: nextDate.getMonth() + 1,
+      intervalMonths: rec.intervalMonths,
+      year,
+      month
+    });
   });
 
   if (active.length === 0) return 0;
@@ -50,8 +51,21 @@ async function recurringExpenseCents(
   });
   const skipped = new Set(skips.map((s) => s.recurringId));
 
+  // Bereits automatisch gebuchte Vorkommen (siehe recurringBooking.ts) stecken
+  // schon in den echten Ausgaben oben — hier nicht nochmal addieren.
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 1);
+  const booked = await prisma.transaction.findMany({
+    where: {
+      recurringTransactionId: { in: active.map((r) => r.id) },
+      occurredAt: { gte: start, lt: end }
+    },
+    select: { recurringTransactionId: true }
+  });
+  const bookedIds = new Set(booked.map((t) => t.recurringTransactionId));
+
   return active
-    .filter((r) => !skipped.has(r.id))
+    .filter((r) => !skipped.has(r.id) && !bookedIds.has(r.id))
     .reduce((sum, r) => (r.amountCents < 0 ? sum + -r.amountCents : sum), 0);
 }
 

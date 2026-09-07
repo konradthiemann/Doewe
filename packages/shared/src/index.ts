@@ -23,6 +23,9 @@ export { decideFlushStep } from "./outbox";
 export type { DashboardBudgetInput, DashboardBudget } from "./dashboardBudget";
 export { computeAvailableBudget } from "./dashboardBudget";
 
+export type { RecurringAnchor, MonthRef } from "./recurringSchedule";
+export { isRecurringDueInMonth, dueMonthsBetween } from "./recurringSchedule";
+
 export {
   BUDGET_ALERT_THRESHOLDS,
   budgetPercent,

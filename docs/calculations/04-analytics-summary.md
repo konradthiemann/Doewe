@@ -22,7 +22,8 @@ flowchart TD
 
     CLASSIFY["Klassifizierung txs[]\nnach Vorzeichen + savingsCatId"] --> CALC
     FILTER_REC["Filter: Fällig diesen Monat?\n→ recurringThisMonth[]"] --> SKIP_CHECK
-    SKIP_CHECK["Filter: Skips entfernen\n→ activeRecurringThisMonth[]"] --> REC_CLASSIFY
+    SKIP_CHECK["Filter: Skips entfernen"] --> BOOKED_CHECK
+    BOOKED_CHECK["Filter: bereits automatisch gebucht?\n(Transaction.recurringTransactionId diesen Monat)\n→ activeRecurringThisMonth[]"] --> REC_CLASSIFY
     REC_CLASSIFY["Klassifizierung Daueraufträge\nnach Vorzeichen"] --> CALC
 
     CALC["Berechnungen\n(alle in Cents)"] --> OUTPUT["JSON Response\n(alle in Euro /100)"]
@@ -55,6 +56,8 @@ flowchart TD
 | `recurringPlannedSavings` | `SUM(-amt) WHERE amt < 0 AND catId == savingsCatId` | Geplante Sparbuchungen aus Daueraufträgen |
 
 Analog zur Trennung bei echten Transaktionen (`monthlySavingsActual` vs. `outcomeTotal`) werden auch Dauerauftrags-Sparbuchungen separat erfasst und nicht in `recurringOutcomeTotal` eingemischt.
+
+**Bereits automatisch gebucht → nicht mehr "geplant":** Ein Dauerauftrag, der vom `materialize-recurring`-Cron (siehe [03-wiederkehrende-transaktionen.md](./03-wiederkehrende-transaktionen.md)) für diesen Monat schon als echte `Transaction` angelegt wurde, wird aus `recurringThisMonth` herausgefiltert — geprüft über `Transaction.recurringTransactionId` in diesem Monat, genau wie Skips herausgefiltert werden. Ohne diesen Filter würde derselbe Betrag doppelt gezählt: einmal in `incomeTotal`/`outcomeTotal` (echte Buchung) und nochmal in `recurringIncomeTotal`/`recurringOutcomeTotal` (als "noch geplant").
 
 ### Projektionen (echte + geplante Transaktionen)
 

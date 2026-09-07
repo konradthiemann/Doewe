@@ -20,7 +20,7 @@ Sie dient sowohl als Referenz für Entwickler als auch als Wissensbasis für Cla
 1. **Alle Beträge intern in Cents (Integer)** — niemals Floating-Point-Arithmetik für Geld.
 2. **Positiv = Einnahme, Negativ = Ausgabe** — gilt für `amountCents` in allen Modellen.
 3. **Spar-Kategorie ist separat** — Buchungen mit der "savings"/"sparen"-Kategorie werden aus Ausgaben herausgerechnet.
-4. **Daueraufträge sind nur Vorlagen** — sie werden nicht automatisch als echte Transaktionen gebucht, sondern als "geplant" in Analytics eingerechnet.
+4. **Daueraufträge werden täglich automatisch gebucht, sobald sie fällig sind** — ein Cron (`materialize-recurring`) legt bei Erreichen des `dayOfMonth` eine echte Transaktion an (verknüpft über `recurringTransactionId`), inklusive Nachbuchen bisher verpasster Monate. Bis dahin (oder ohne konfigurierten Cron) zählt ein fälliger, noch nicht gebuchter Dauerauftrag nur als "geplant" in Analytics-Projektionen — siehe [03-wiederkehrende-transaktionen.md](./03-wiederkehrende-transaktionen.md).
 5. **Nur ein Konto pro Nutzer** — Multi-Account-Aggregation ist noch nicht implementiert.
 
 ## Datenmodell-Übersicht
@@ -37,6 +37,7 @@ erDiagram
     Category ||--o{ Budget : "verknüpft mit"
     Budget ||--o{ Transaction : "savingGoalId"
     RecurringTransaction ||--o{ RecurringTransactionSkip : "kann übersprungen werden"
+    RecurringTransaction ||--o{ Transaction : "recurringTransactionId (auto gebucht)"
 
     Transaction {
         string id
@@ -45,6 +46,7 @@ erDiagram
         DateTime occurredAt
         string categoryId "optional"
         string savingGoalId "optional, verknüpft mit Budget"
+        string recurringTransactionId "optional, gesetzt wenn auto-gebucht"
     }
 
     RecurringTransaction {

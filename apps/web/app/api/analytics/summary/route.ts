@@ -26,6 +26,7 @@
  * Bekannte Einschränkung: Nur das erste Konto des Nutzers wird ausgewertet.
  * Multi-Account-Aggregation ist eine geplante zukünftige Erweiterung.
  */
+import { isRecurringDueInMonth } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic"; // Kein Build-Time-Prerendering — Daten sind nutzer- und zeitabhängig
@@ -159,12 +160,13 @@ export async function GET() {
 
   const recurringThisMonth = recurringTransactions.filter((rec) => {
     const nextDate = new Date(rec.nextOccurrence);
-    const nextYear = nextDate.getFullYear();
-    const nextMonth = nextDate.getMonth() + 1;
-    if (nextYear === year && nextMonth === month) return true;
-    const interval = rec.intervalMonths || 1;
-    const monthsSinceNext = (year - nextYear) * 12 + (month - nextMonth);
-    return monthsSinceNext >= 0 && monthsSinceNext % interval === 0;
+    return isRecurringDueInMonth({
+      nextYear: nextDate.getFullYear(),
+      nextMonth: nextDate.getMonth() + 1,
+      intervalMonths: rec.intervalMonths,
+      year,
+      month
+    });
   });
 
   const skips = await prisma.recurringTransactionSkip.findMany({
@@ -176,7 +178,22 @@ export async function GET() {
     select: { recurringId: true }
   });
   const skippedIds = new Set(skips.map((s) => s.recurringId));
-  const activeRecurringThisMonth = recurringThisMonth.filter((r) => !skippedIds.has(r.id));
+
+  // Bereits automatisch gebuchte Vorkommen (siehe recurringBooking.ts) dürfen
+  // hier nicht nochmal als "geplant" gezählt werden — sie stecken schon in
+  // incomeTotal/outcomeTotal/monthlySavingsActual über die echte Transaction.
+  const alreadyBooked = await prisma.transaction.findMany({
+    where: {
+      recurringTransactionId: { in: recurringThisMonth.map((r) => r.id) },
+      occurredAt: { gte: start, lt: end }
+    },
+    select: { recurringTransactionId: true }
+  });
+  const bookedIds = new Set(alreadyBooked.map((t) => t.recurringTransactionId));
+
+  const activeRecurringThisMonth = recurringThisMonth.filter(
+    (r) => !skippedIds.has(r.id) && !bookedIds.has(r.id)
+  );
 
   // Dauerauftrag-Summen — ebenfalls in Cents
   // Sparbuchungs-Daueraufträge werden analog zu echten Sparbuchungen separat gezählt,

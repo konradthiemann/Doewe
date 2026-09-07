@@ -73,12 +73,20 @@ model Transaction {
   updatedAt     DateTime @default(now()) @updatedAt
   deletedAt     DateTime?
   receiptMerchant  String?
+  // Set when this row was auto-booked from a due RecurringTransaction
+  // (see lib/recurringBooking.ts). Used to detect "already booked this month"
+  // and avoid double-counting it as still-planned in analytics. Kept (SetNull)
+  // if the originating recurring template is later deleted.
+  recurringTransactionId String?
 
   account     Account  @relation(fields: [accountId], references: [id])
   category    Category? @relation(fields: [categoryId], references: [id])
   savingGoal  Budget?   @relation(fields: [savingGoalId], references: [id], onDelete: SetNull)
+  recurringTransaction RecurringTransaction? @relation(fields: [recurringTransactionId], references: [id], onDelete: SetNull)
   attachments Attachment[]
   receiptLineItems ReceiptLineItem[]
+
+  @@index([recurringTransactionId])
 }
 
 // Receipt files (photos/PDFs) attached to a transaction as tax evidence.
@@ -137,6 +145,7 @@ model RecurringTransaction {
   account  Account   @relation(fields: [accountId], references: [id])
   category Category? @relation(fields: [categoryId], references: [id])
   skips    RecurringTransactionSkip[]
+  bookedTransactions Transaction[]
 }
 
 model RecurringTransactionSkip {
