@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
+import { findSavingsCategoryId } from "../../saving-plan/savings";
 
 export async function GET() {
   const user = await getSessionUser();
@@ -27,16 +28,9 @@ export async function GET() {
     months.push({ month: date.getMonth() + 1, year: date.getFullYear() });
   }
 
-  // Spar-Kategorie auflösen — case-insensitive, EN + DE (konsistent mit summary-Route)
-  const SAVINGS_NAMES = ["savings", "sparen"];
-  const savingsCategory = await prisma.category.findFirst({
-    where: {
-      householdId: user.householdId,
-      name: { in: SAVINGS_NAMES, mode: "insensitive" }
-    },
-    select: { id: true }
-  });
-  const savingsCatId = savingsCategory?.id ?? null;
+  // Spar-Kategorie auflösen — geteilte Lookup-Logik (case-insensitive + trim),
+  // konsistent mit /api/analytics/summary und /api/saving-plan.
+  const savingsCatId = await findSavingsCategoryId(user.householdId);
 
   // Monatsgrenzen berechnen
   const starts = months.map(({ month, year }) => new Date(year, month - 1, 1));
