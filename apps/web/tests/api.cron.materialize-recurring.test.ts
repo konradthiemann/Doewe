@@ -21,6 +21,7 @@ let testAccountId: string;
 let recurringIncomeId: string;
 let recurringExpenseId: string;
 let recurringSkippedId: string;
+let recurringAlreadyManuallyBookedId: string;
 
 beforeAll(async () => {
   const { PrismaClient } = await import("@prisma/client");
@@ -91,6 +92,32 @@ beforeAll(async () => {
   await prisma.recurringTransactionSkip.create({
     data: { recurringId: skipped.id, year: now.getFullYear(), month: now.getMonth() + 1 }
   });
+
+  // Documents a known limitation: a transaction booked by hand BEFORE this
+  // feature existed has no recurringTransactionId, so it is invisible to the
+  // "already booked?" check. Rolling this out on real data therefore needs a
+  // dry-run reviewed by a human first — see the dry-run test above.
+  const rentRecurring = await prisma.recurringTransaction.create({
+    data: {
+      accountId: testAccountId,
+      amountCents: -12000, // -120€
+      description: "Rent",
+      frequency: "MONTHLY",
+      intervalMonths: 1,
+      dayOfMonth: 1,
+      nextOccurrence: anchor
+    }
+  });
+  recurringAlreadyManuallyBookedId = rentRecurring.id;
+  await prisma.transaction.create({
+    data: {
+      accountId: testAccountId,
+      amountCents: -12000,
+      description: "Rent (booked by hand)",
+      occurredAt: new Date(now.getFullYear(), now.getMonth(), 1)
+      // no recurringTransactionId — this is the pre-existing-data case
+    }
+  });
 });
 
 afterAll(async () => {
@@ -110,6 +137,49 @@ describe("POST /api/cron/materialize-recurring", () => {
     const routes = await import("../app/api/cron/materialize-recurring/route");
     const res = await routes.POST(new Request("http://localhost/api/cron/materialize-recurring", { method: "POST" }));
     expect(res.status).toBe(401);
+  }, 30000);
+
+  it("dry-run lists what would be booked without creating any transactions", async () => {
+    const routes = await import("../app/api/cron/materialize-recurring/route");
+    const res = await routes.POST(
+      new Request("http://localhost/api/cron/materialize-recurring?dryRun=true", {
+        method: "POST",
+        headers: { authorization: `Bearer ${CRON_SECRET}` }
+      })
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.dryRun).toBe(true);
+    expect(data.occurrences.every((o: { transactionId: string | null }) => o.transactionId === null)).toBe(true);
+
+    // The cron runs globally across all accounts, so filter down to this
+    // test's own recurring IDs — other test files' fixtures share the DB.
+    const ownIds = new Set([recurringIncomeId, recurringExpenseId, recurringSkippedId, recurringAlreadyManuallyBookedId]);
+    const ownOccurrences = data.occurrences.filter((o: { recurringId: string }) => ownIds.has(o.recurringId));
+    // 4 each for income + expense + rent, 3 for the skipped one.
+    expect(ownOccurrences).toHaveLength(15);
+
+    const income = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringIncomeId } });
+    expect(income).toHaveLength(0); // nothing actually written yet
+  }, 30000);
+
+  it("KNOWN LIMITATION: a pre-existing manual booking with no recurringTransactionId link is not recognized as already booked", async () => {
+    // This is exactly why the dry-run above must be reviewed by a human before
+    // the real run on production data: "Rent" was already booked by hand this
+    // month (no recurringTransactionId), yet the recurring "Rent" template
+    // still shows up as due — running for real here would double-book it.
+    const routes = await import("../app/api/cron/materialize-recurring/route");
+    const res = await routes.POST(
+      new Request("http://localhost/api/cron/materialize-recurring?dryRun=true", {
+        method: "POST",
+        headers: { authorization: `Bearer ${CRON_SECRET}` }
+      })
+    );
+    const data = await res.json();
+    const rentOccurrences = data.occurrences.filter(
+      (o: { recurringId: string }) => o.recurringId === recurringAlreadyManuallyBookedId
+    );
+    expect(rentOccurrences).toHaveLength(4); // still lists all 4 — including the already-manually-booked month
   }, 30000);
 
   it("backfills every missed month (anchor to now) as real transactions in one run", async () => {

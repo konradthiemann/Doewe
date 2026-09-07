@@ -14,6 +14,15 @@
  *
  * Idempotent: ein Monat gilt als bereits gebucht, sobald irgendeine
  * Transaction mit `recurringTransactionId` in diesem Monat existiert.
+ *
+ * WICHTIG — bekannte Grenze: Eine VOR dieser Funktion von Hand angelegte
+ * Transaktion hat kein `recurringTransactionId` und wird deshalb vom
+ * "schon gebucht?"-Check nicht erkannt. Beim ersten Rollout auf echten Daten
+ * (Nachbuchen der Vergangenheit) kann das zu Doppelbuchungen führen, wenn
+ * bereits von Hand gebucht wurde, was ein Dauerauftrag jetzt automatisch
+ * bucht. Deshalb: `dryRun: true` zeigt vorher genau, was gebucht würde —
+ * das gehört von Menschen gegen die bestehenden Buchungen gegengeprüft, bevor
+ * der echte (nicht-dryRun) Lauf passiert.
  */
 import { dueMonthsBetween } from "@doewe/shared";
 
@@ -22,14 +31,18 @@ import { prisma } from "./prisma";
 export type BookedOccurrence = {
   recurringId: string;
   accountId: string;
-  transactionId: string;
+  /** null when dryRun — nothing was actually written. */
+  transactionId: string | null;
   year: number;
   month: number;
   amountCents: number;
   description: string;
 };
 
-export async function materializeDueRecurringTransactions(now: Date = new Date()): Promise<BookedOccurrence[]> {
+export async function materializeDueRecurringTransactions(
+  now: Date = new Date(),
+  options: { dryRun?: boolean } = {}
+): Promise<BookedOccurrence[]> {
   const recurringTransactions = await prisma.recurringTransaction.findMany({
     where: { deletedAt: null },
     select: {
@@ -76,6 +89,19 @@ export async function materializeDueRecurringTransactions(now: Date = new Date()
         select: { id: true }
       });
       if (existing) continue;
+
+      if (options.dryRun) {
+        booked.push({
+          recurringId: rec.id,
+          accountId: rec.accountId,
+          transactionId: null,
+          year,
+          month,
+          amountCents: rec.amountCents,
+          description: rec.description
+        });
+        continue;
+      }
 
       const created = await prisma.transaction.create({
         data: {

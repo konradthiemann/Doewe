@@ -7,6 +7,10 @@
  * gebuchten und nicht geskippten Monat als echte Transaction — inklusive
  * bisher verpasster Monate in der Vergangenheit (einmaliges Nachbuchen läuft
  * über denselben Code-Pfad wie der laufende Tagesbetrieb).
+ *
+ * `?dryRun=true` schreibt nichts, sondern listet nur, was gebucht würde —
+ * vor dem ersten Rollout auf echten Daten Pflicht (siehe recurringBooking.ts,
+ * bekannte Grenze bei bereits von Hand gebuchten Monaten).
  */
 import { NextResponse } from "next/server";
 
@@ -20,7 +24,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const booked = await materializeDueRecurringTransactions();
+  const dryRun = new URL(req.url).searchParams.get("dryRun") === "true";
+  const booked = await materializeDueRecurringTransactions(new Date(), { dryRun });
 
-  return NextResponse.json({ ok: true, booked: booked.length, occurrences: booked });
+  return NextResponse.json({ ok: true, dryRun, booked: booked.length, occurrences: booked });
 }
