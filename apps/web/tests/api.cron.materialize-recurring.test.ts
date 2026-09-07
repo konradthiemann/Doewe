@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { DEMO_ACCOUNT_ID } from "../lib/demoConstants";
+
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
 
 const TEST_USER_ID = "test-user-materialize";
@@ -22,6 +24,7 @@ let recurringIncomeId: string;
 let recurringExpenseId: string;
 let recurringSkippedId: string;
 let recurringAlreadyManuallyBookedId: string;
+let recurringDemoId: string;
 
 beforeAll(async () => {
   const { PrismaClient } = await import("@prisma/client");
@@ -118,6 +121,24 @@ beforeAll(async () => {
       // no recurringTransactionId — this is the pre-existing-data case
     }
   });
+
+  // The public demo account (re-seeded by /api/demo/seed) must never get real
+  // bookings from this cron — same exclusion convention as admin/usage/route.ts.
+  await prisma.recurringTransactionSkip.deleteMany({ where: { recurring: { accountId: DEMO_ACCOUNT_ID } } });
+  await prisma.transaction.deleteMany({ where: { accountId: DEMO_ACCOUNT_ID, recurringTransactionId: { not: null } } });
+  await prisma.recurringTransaction.deleteMany({ where: { accountId: DEMO_ACCOUNT_ID, description: "TEST_DEMO_RECURRING" } });
+  const demoRecurring = await prisma.recurringTransaction.create({
+    data: {
+      accountId: DEMO_ACCOUNT_ID,
+      amountCents: -999,
+      description: "TEST_DEMO_RECURRING",
+      frequency: "MONTHLY",
+      intervalMonths: 1,
+      dayOfMonth: 1,
+      nextOccurrence: anchor
+    }
+  });
+  recurringDemoId = demoRecurring.id;
 });
 
 afterAll(async () => {
@@ -125,6 +146,8 @@ afterAll(async () => {
     await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
     await prisma.recurringTransactionSkip.deleteMany({ where: { recurring: { accountId: testAccountId } } });
     await prisma.recurringTransaction.deleteMany({ where: { accountId: testAccountId } });
+    await prisma.transaction.deleteMany({ where: { recurringTransactionId: recurringDemoId } });
+    await prisma.recurringTransaction.deleteMany({ where: { id: recurringDemoId } });
     await prisma.account.deleteMany({ where: { id: testAccountId } });
     await cleanupTestHousehold(prisma, testUserId);
     await prisma.user.deleteMany({ where: { id: testUserId } });
@@ -201,6 +224,13 @@ describe("POST /api/cron/materialize-recurring", () => {
 
     expect(income.every((t) => t.amountCents === 150000)).toBe(true);
     expect(expense.every((t) => t.amountCents === -8000)).toBe(true);
+
+    // The public demo account is reseeded on every /api/demo/seed call and must
+    // never receive real bookings from this cron (same exclusion convention as
+    // admin/usage/route.ts). Scoped to our own fixture recurring — the demo
+    // account legitimately holds ~1400 unrelated seeded transactions already.
+    const demoBooked = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringDemoId } });
+    expect(demoBooked).toHaveLength(0);
   }, 30000);
 
   it("is idempotent — a second run creates no additional transactions", async () => {
