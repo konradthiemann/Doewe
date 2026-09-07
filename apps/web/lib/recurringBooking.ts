@@ -26,6 +26,7 @@
  */
 import { dueMonthsBetween } from "@doewe/shared";
 
+import { DEMO_ACCOUNT_ID } from "./demoConstants";
 import { prisma } from "./prisma";
 
 export type BookedOccurrence = {
@@ -44,7 +45,9 @@ export async function materializeDueRecurringTransactions(
   options: { dryRun?: boolean } = {}
 ): Promise<BookedOccurrence[]> {
   const recurringTransactions = await prisma.recurringTransaction.findMany({
-    where: { deletedAt: null },
+    // The public demo account is reseeded by /api/demo/seed and must never
+    // receive real bookings — same exclusion as admin/usage/route.ts.
+    where: { deletedAt: null, accountId: { not: DEMO_ACCOUNT_ID } },
     select: {
       id: true,
       accountId: true,
