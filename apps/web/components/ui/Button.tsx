@@ -38,9 +38,10 @@ export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   /**
-   * Shows a leading spinner and disables the button while an action is in flight.
-   * Marks the button `aria-busy`; the visible label (children) should switch to a
-   * progress phrasing (e.g. "Saving…") to reinforce the state.
+   * Replaces the visible label with a centred spinner and disables the button while
+   * an action is in flight (no double submits). The label stays in the DOM, visually
+   * hidden, so the button keeps its width and accessible name; it should switch to a
+   * progress phrasing (e.g. "Saving…") for screen readers. Marks the button `aria-busy`.
    */
   loading?: boolean;
 }
@@ -50,13 +51,15 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        className={cn(buttonVariants({ variant, size }), className)}
+        className={cn(buttonVariants({ variant, size }), loading && "relative", className)}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
         {...props}
       >
-        {loading && <Spinner size={size === "sm" ? "sm" : "md"} className="-ml-0.5 mr-2 shrink-0" />}
-        {children}
+        {loading && <Spinner size={size === "sm" ? "sm" : "md"} className="absolute inset-0 m-auto" />}
+        <span className={cn("inline-flex items-center justify-center", loading && "opacity-0")}>
+          {children}
+        </span>
       </button>
     );
   }
