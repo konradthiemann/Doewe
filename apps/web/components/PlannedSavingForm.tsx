@@ -14,6 +14,7 @@ import { useI18n } from "../lib/i18n";
 import { plannedSavingFormSchema, type PlannedSavingFormValues } from "../lib/schemas/forms";
 
 import { Button } from "./ui/Button";
+import { FormActions } from "./ui/FormActions";
 
 type Account = {
   id: string;
@@ -324,7 +325,12 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+      <FormActions>
+        {displayError && (
+          <p id="saving-plan-error" role="alert" className="text-sm text-danger">
+            {displayError}
+          </p>
+        )}
         <Button type="submit" loading={isSubmitting}>
           {submitLabel}
         </Button>
@@ -333,13 +339,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
             {t("savingPlan.form.cancel")}
           </Button>
         )}
-      </div>
-
-      {displayError && (
-        <p id="saving-plan-error" role="alert" className="text-sm text-danger">
-          {displayError}
-        </p>
-      )}
+      </FormActions>
     </form>
   );
 }

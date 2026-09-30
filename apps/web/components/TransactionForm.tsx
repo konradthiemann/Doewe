@@ -20,6 +20,7 @@ import { transactionFormSchema, type TransactionFormValues } from "../lib/schema
 import AttachmentManager, { uploadAttachment } from "./AttachmentManager";
 import SearchableSelect from "./SearchableSelect";
 import { Button } from "./ui/Button";
+import { FormActions } from "./ui/FormActions";
 
 const isReceiptScannerEnabled = process.env.NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED === "1";
 
@@ -913,29 +914,6 @@ export default function TransactionForm({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" loading={isSubmitting} className="flex-1">
-            {submitLabel}
-          </Button>
-          {onClose && (
-            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
-              {t("transactionForm.cancel")}
-            </Button>
-          )}
-        </div>
-
-        {submitError && (
-          <p id="form-error" role="alert" className="text-sm text-danger">
-            {submitError}
-          </p>
-        )}
-
-        {attachmentUploadError && (
-          <p role="alert" className="text-sm text-warning">
-            {attachmentUploadError}
-          </p>
-        )}
-
         {mode === "edit" && (
           <div className="border-t border-line pt-4">
             {!deleteConfirm ? (
@@ -985,6 +963,27 @@ export default function TransactionForm({
             )}
           </div>
         )}
+
+        <FormActions>
+          {submitError && (
+            <p id="form-error" role="alert" className="text-sm text-danger">
+              {submitError}
+            </p>
+          )}
+          {attachmentUploadError && (
+            <p role="alert" className="text-sm text-warning">
+              {attachmentUploadError}
+            </p>
+          )}
+          <Button type="submit" loading={isSubmitting}>
+            {submitLabel}
+          </Button>
+          {onClose && (
+            <Button type="button" variant="secondary" onClick={onClose}>
+              {t("transactionForm.cancel")}
+            </Button>
+          )}
+        </FormActions>
       </form>
     </div>
   );
