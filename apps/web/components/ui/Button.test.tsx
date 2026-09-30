@@ -49,6 +49,35 @@ describe("Button", () => {
     expect(handleClick).toHaveBeenCalledOnce();
   });
 
+  it("replaces the visible label with a spinner while loading", () => {
+    render(<Button loading>Saving…</Button>);
+    const btn = screen.getByRole("button", { name: "Saving…" });
+    const label = screen.getByText("Saving…");
+    // Label stays in the DOM (keeps width + accessible name) but is hidden visually.
+    expect(label.className).toContain("opacity-0");
+    const spinner = btn.querySelector("svg");
+    expect(spinner).not.toBeNull();
+    expect(spinner?.getAttribute("class")).toContain("absolute");
+  });
+
+  it("shows the label without spinner when not loading", () => {
+    render(<Button>Add</Button>);
+    const btn = screen.getByRole("button");
+    expect(btn.querySelector("svg")).toBeNull();
+    expect(screen.getByText("Add").className).not.toContain("opacity-0");
+  });
+
+  it("is disabled and ignores clicks while loading", async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(<Button loading onClick={handleClick}>Add</Button>);
+    const btn = screen.getByRole("button");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("aria-busy", "true");
+    await user.click(btn);
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
   it("does not call onClick when disabled", async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();

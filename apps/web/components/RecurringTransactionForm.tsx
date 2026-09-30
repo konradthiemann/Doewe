@@ -13,6 +13,7 @@ import { useI18n } from "../lib/i18n";
 import { recurringTransactionFormSchema, type RecurringTransactionFormValues } from "../lib/schemas/forms";
 
 import { Button } from "./ui/Button";
+import { FormActions } from "./ui/FormActions";
 
 type RecurringDetails = {
   id: string;
@@ -389,23 +390,6 @@ export default function RecurringTransactionForm({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" loading={isSubmitting} className="flex-1">
-            {submitLabel}
-          </Button>
-          {onClose && (
-            <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
-              {t("recurringForm.cancel")}
-            </Button>
-          )}
-        </div>
-
-        {(submitError ?? loadError) && (
-          <p id="form-error" role="alert" className="text-sm text-danger">
-            {submitError ?? loadError}
-          </p>
-        )}
-
         <div className="border-t border-line pt-3">
           {!deleteConfirm ? (
             <button
@@ -448,6 +432,22 @@ export default function RecurringTransactionForm({
             </div>
           )}
         </div>
+
+        <FormActions>
+          {(submitError ?? loadError) && (
+            <p id="form-error" role="alert" className="text-sm text-danger">
+              {submitError ?? loadError}
+            </p>
+          )}
+          <Button type="submit" loading={isSubmitting}>
+            {submitLabel}
+          </Button>
+          {onClose && (
+            <Button type="button" variant="secondary" onClick={onClose}>
+              {t("recurringForm.cancel")}
+            </Button>
+          )}
+        </FormActions>
       </form>
     </div>
   );
