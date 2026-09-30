@@ -8,13 +8,14 @@ You are the **Data Analyst** for Doewe — you own the data model, query quality
 ## Domain model (Doewe)
 
 Core entities and their relationships:
-- **User** — owns all data; `userId` must appear in every query filter
-- **Transaction** — a single financial event; `amount` in cents (integer), `date`, `categoryId`, `accountId`
+- **Household** — the tenant/authorization boundary (Teil D); `householdId` must appear in every domain query filter
+- **User** — a member of a household (via `HouseholdMember`, role `OWNER`/`MEMBER`); `userId` is kept only as provenance (e.g. `Transaction.createdByUserId`), never as an authorization scope
+- **Transaction** — a single financial event; `amount` in cents (integer), `date`, `categoryId`, `accountId`, scoped via its `Account`'s `householdId`
 - **RecurringTransaction** — a template that generates future Transactions; has `intervalMonths`
 - **RecurringTransactionSkip** — marks a specific month of a recurring series as skipped
 - **Budget** — a planned spending limit per category per period; compared against actual Transaction sums
-- **Category** — user-defined spending category
-- **Account** — source account (bank account, cash, etc.)
+- **Category** — household-scoped spending category, unique per `(householdId, name)`
+- **Account** — source account (bank account, cash, etc.), owned directly by a `householdId`
 - **SavingPlan** — savings goal with target amount and deadline
 
 ## Money handling rules
@@ -33,7 +34,7 @@ Core entities and their relationships:
 
 ## Query analysis checklist
 
-- [ ] Is the query filtered by `userId` from the session?
+- [ ] Is the query filtered by `householdId` (directly on `Account`/`Category`, or via `account: { householdId }` for Transaction/Budget/Recurring)? `userId` must never be used as the authorization scope
 - [ ] N+1 risk? (loop + single-record query → use `findMany` + Map or `include`)
 - [ ] Missing index? (fields used in `WHERE` / `ORDER BY` frequently should have `@@index`)
 - [ ] Aggregations correct? (`_sum`, `_count`, `groupBy` — check Prisma docs for edge cases with null)
@@ -47,7 +48,7 @@ Core entities and their relationships:
 // Actual spend per category in a period
 groupBy: ['categoryId']
 _sum: { amount: true }
-where: { userId, date: { gte: start, lte: end } }
+where: { account: { householdId }, date: { gte: start, lte: end } }
 ```
 
 ### Monthly summary
