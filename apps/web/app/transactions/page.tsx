@@ -77,6 +77,31 @@ function errorStatus(error: unknown): string | number {
 function TransactionsPage() {
   const { locale, t } = useI18n();
   const toast = useToast();
+  const [exportingCsv, setExportingCsv] = useState(false);
+
+  async function handleRecurringCsvExport() {
+    setExportingCsv(true);
+    try {
+      const year = new Date().getFullYear();
+      const res = await fetch(`/api/recurring-transactions/export?year=${year}`);
+      if (!res.ok) {
+        toast.error(t("transactions.recurringExportError", { status: res.status }));
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `wiederkehrend-${year}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error(t("transactions.recurringExportError", { status: 0 }));
+    } finally {
+      setExportingCsv(false);
+    }
+  }
   const queryClient = useQueryClient();
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
   const [editingRecurring, setEditingRecurring] = useState<RecurringTx | null>(null);
@@ -949,6 +974,14 @@ function TransactionsPage() {
             </p>
           )}
           <div className="flex items-center justify-end gap-2 text-sm text-ink">
+            <button
+              type="button"
+              onClick={() => void handleRecurringCsvExport()}
+              disabled={exportingCsv}
+              className="mr-auto inline-flex items-center rounded-full border border-line-strong bg-surface px-3 py-1 text-sm font-medium text-ink shadow-card transition hover:bg-surface-2 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:opacity-50"
+            >
+              {t("transactions.recurringExportCsv")}
+            </button>
             <span>{t("transactions.recurringTotalLabel")}</span>
             <span
               className={`inline-flex items-center rounded-full px-3 py-1 font-semibold ${

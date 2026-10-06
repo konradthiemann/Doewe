@@ -49,3 +49,6 @@ export {
   detectFieldConflicts,
   updateBlockedByDelete
 } from "./sync";
+
+export type { RecurringExportItem } from "./recurringExport";
+export { buildRecurringCsv } from "./recurringExport";
