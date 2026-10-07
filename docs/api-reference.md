@@ -1009,7 +1009,7 @@ There is **no `title` field** in the schema — the DB default `""` is used.
 
 ## Budget Plans
 
-Standing per-category budgets (`MONTHLY` or `YEARLY`); a per-month budget from `/api/budgets` overrides the plan. All endpoints require auth (`401`) and are household-scoped. Calculation: `docs/calculations/06-budgets.md`.
+Standing per-category budgets (`MONTHLY` or `YEARLY`); the plan takes precedence over a per-month budget from `/api/budgets`, which only applies to categories without a plan. All endpoints require auth (`401`) and are household-scoped. Calculation: `docs/calculations/06-budgets.md`.
 
 ### `GET /api/budget-plans?year=YYYY`
 
@@ -1031,7 +1031,7 @@ Standing per-category budgets (`MONTHLY` or `YEARLY`); a per-month budget from `
 }
 ```
 
-`availablePerMonthCents` is the monthly net of the recurring-transaction year matrix. `budgetableCategories` excludes income and savings categories. `monthlyCents` always sums to the yearly amount for `YEARLY` plans.
+`availablePerMonthCents` is the smoothed monthly availability of the recurring-transaction year matrix (yearly income / 12, rounded, plus that month's recurring expenses and savings). `budgetableCategories` excludes income and savings categories. `monthlyCents` always sums to the yearly amount for `YEARLY` plans.
 
 ### `POST /api/budget-plans`
 

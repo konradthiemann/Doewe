@@ -281,7 +281,7 @@ A spending limit set by the user for a specific category in a specific calendar 
 
 ### CategoryBudgetPlan
 
-A standing budget for one category: the same amount every month (`MONTHLY`) or one yearly amount distributed over the months (`YEARLY`). A per-month `Budget` row overrides the plan for that month.
+A standing budget for one category: the same amount every month (`MONTHLY`) or one yearly amount distributed over the months (`YEARLY`). The plan takes precedence; a per-month `Budget` row only serves as a fallback for categories without a plan.
 
 | Field | Type | Description |
 |---|---|---|
@@ -293,7 +293,7 @@ A standing budget for one category: the same amount every month (`MONTHLY`) or o
 | `createdAt` / `updatedAt` | DateTime | Timestamps |
 | `deletedAt` | DateTime? | Soft-delete tombstone; hidden by the Prisma extension on `findMany`/`findFirst`/... (not on `findUnique`). Re-creating a plan for the category revives the row (same `id`) |
 
-**Resolution:** see `docs/calculations/06-budgets.md` (distribution formula, override order). Savings and income categories are not budgetable (API: 400).
+**Resolution:** see `docs/calculations/06-budgets.md` (distribution formula, precedence order). Savings and income categories are not budgetable (API: 400).
 
 ---
 

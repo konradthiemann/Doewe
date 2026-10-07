@@ -38,7 +38,7 @@ Ein **Plan** ist ein dauerhaftes Budget je Kategorie (höchstens einer pro Kateg
 - `MONTHLY` — `amountCents` gilt in jedem Monat.
 - `YEARLY` — `amountCents` ist der Jahresbetrag und wird auf die 12 Monate verteilt.
 
-**Verteilung (YEARLY)**, alles in Integer-Cent, Gewichte `w[i] = max(0, available[i])`, `available` = monatliches Netto der Daueraufträge des Jahres (`net.monthlyTotalsCents` der Jahresmatrix):
+**Verteilung (YEARLY)**, alles in Integer-Cent, Gewichte `w[i] = max(0, available[i])`, `available` = geglättete Verfügbarkeit (`smoothedAvailablePerMonth`): Jahreseinnahmen der Daueraufträge gleichmäßig `round(income.totalCents / 12)` plus die Fixkosten und Sparraten des jeweiligen Monats (`expenses`/`savings.monthlyTotalsCents[m]`):
 
 ```
 W = Σ w[i]                         (W <= 0 → alle Gewichte 1, also gleichmäßig)
@@ -52,11 +52,13 @@ Die Summe der 12 Monatsbeträge ist immer exakt `yearly`; Monate ohne Verfügbar
 **Reihenfolge der effektiven Budgets** (`loadEffectiveCategoryBudgets`, `resolveEffectiveBudgets`):
 
 1. Plan der Kategorie (MONTHLY: Betrag, YEARLY: Anteil des Monats)
-2. Ein Monats-`Budget` (Konto, Kategorie, Monat, Jahr) **überschreibt** den Plan
-3. Ein Monats-`Budget` ohne Plan wird unverändert übernommen
+2. Ein Monats-`Budget` (Konto, Kategorie, Monat, Jahr) überschreibt den Plan **nicht**: der Plan hat Vorrang
+3. Ein Monats-`Budget` gilt nur als Fallback für Kategorien **ohne** Plan und wird dann unverändert übernommen
 4. Kategorien ohne Plan und ohne Monats-Budget haben kein Budget
 
 Pläne von soft-gelöschten Kategorien und soft-gelöschte Pläne werden ignoriert. Die Jahresmatrix wird nur geladen, wenn ein YEARLY-Plan existiert.
+
+**Kategorie zusammenführen/löschen:** Beim Merge (`PATCH /api/categories/:id` mit `mergeIntoCategoryId`) und beim Löschen mit Fallback (`DELETE`, `fallbackCategoryId`/`fallbackName`) folgt der Plan der Quellkategorie in derselben Transaktion: Hat die Zielkategorie keinen aktiven Plan, wird der Quellplan (gleiche `id`) auf das Ziel umgehängt (eine soft-gelöschte Plan-Zeile des Ziels wird vorher hart gelöscht, da `categoryId` unique ist). Hat das Ziel einen aktiven Plan, bleibt dieser unverändert und der Quellplan wird hart gelöscht.
 
 **Rückwirkend:** Pläne gelten ohne Gültigkeitsbeginn für alle Monate und Jahre, auch für abgeschlossene (Monatsrückblick). Ändert man einen Plan, ändern sich damit auch die Budgets vergangener Monate.
 
@@ -69,7 +71,7 @@ Pläne von soft-gelöschten Kategorien und soft-gelöschte Pläne werden ignorie
 Im Summary-Endpoint wird pro Kategorie-Budget berechnet:
 
 ```typescript
-// categoryBudgetsRaw: Record<categoryId, effektives Budget in Cent> (Plan, überschrieben durch Monats-Budget)
+// categoryBudgetsRaw: Record<categoryId, effektives Budget in Cent> (Plan hat Vorrang, Monats-Budget nur Fallback ohne Plan)
 const categoryBudgets = Object.entries(categoryBudgetsRaw).map(([categoryId, budgetCents]) => {
   const spentCents = byCategoryCents[categoryId] ?? 0;
   return {
