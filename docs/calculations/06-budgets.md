@@ -3,6 +3,8 @@
 **Quellen:**
 - `apps/web/app/api/budgets/route.ts`
 - `apps/web/app/api/analytics/summary/route.ts` (Budget-Auswertung)
+- `apps/web/app/api/budget-plans/` (Budget-Pläne), `apps/web/lib/categoryBudgets.ts`
+- `packages/shared/src/budgetDistribution.ts` (Verteilung, Auflösung)
 
 ## Was ist ein Budget?
 
@@ -29,17 +31,50 @@ flowchart LR
     CAT -->|"null"| SAVBUDGET["Spar-Budget (plannedSavings)\n→ Monats-Sparziel\nz.B. 'Sparen: 500€ diesen Monat'"]
 ```
 
+## Budget-Pläne (CategoryBudgetPlan)
+
+Ein **Plan** ist ein dauerhaftes Budget je Kategorie (höchstens einer pro Kategorie, nicht für Spar- und Einnahmenkategorien):
+
+- `MONTHLY` — `amountCents` gilt in jedem Monat.
+- `YEARLY` — `amountCents` ist der Jahresbetrag und wird auf die 12 Monate verteilt.
+
+**Verteilung (YEARLY)**, alles in Integer-Cent, Gewichte `w[i] = max(0, available[i])`, `available` = monatliches Netto der Daueraufträge des Jahres (`net.monthlyTotalsCents` der Jahresmatrix):
+
+```
+W = Σ w[i]                         (W <= 0 → alle Gewichte 1, also gleichmäßig)
+share[i] = floor(yearly * w[i] / W)
+Rest r = yearly - Σ share[i]       (0..11 Cent)
+→ der komplette Rest geht auf den Monat mit dem größten Gewicht (Gleichstand: kleinster Index)
+```
+
+Die Summe der 12 Monatsbeträge ist immer exakt `yearly`; Monate ohne Verfügbarkeit erhalten 0 (außer im Gleichgewichts-Fallback).
+
+**Reihenfolge der effektiven Budgets** (`loadEffectiveCategoryBudgets`, `resolveEffectiveBudgets`):
+
+1. Plan der Kategorie (MONTHLY: Betrag, YEARLY: Anteil des Monats)
+2. Ein Monats-`Budget` (Konto, Kategorie, Monat, Jahr) **überschreibt** den Plan
+3. Ein Monats-`Budget` ohne Plan wird unverändert übernommen
+4. Kategorien ohne Plan und ohne Monats-Budget haben kein Budget
+
+Pläne von soft-gelöschten Kategorien und soft-gelöschte Pläne werden ignoriert. Die Jahresmatrix wird nur geladen, wenn ein YEARLY-Plan existiert.
+
+**Rückwirkend:** Pläne gelten ohne Gültigkeitsbeginn für alle Monate und Jahre, auch für abgeschlossene (Monatsrückblick). Ändert man einen Plan, ändern sich damit auch die Budgets vergangener Monate.
+
+**Angebunden:** `GET /api/analytics/summary` (`categoryBudgets`, auch bei `spent = 0`) und `GET /api/analytics/monthly-review` (`budgetCents`; Kategorien nur mit Budget erscheinen mit `transactions: []`).
+
+**Noch nicht angebunden:** Die Budgetwarnungen (`lib/budgetAlerts.ts`) arbeiten weiterhin auf dem alten Monats-`Budget`-Modell und kennen Pläne nicht.
+
 ## Budget-Auswertung im Dashboard
 
 Im Summary-Endpoint wird pro Kategorie-Budget berechnet:
 
 ```typescript
-const categoryBudgets = categoryBudgetsRaw.map(b => {
-  const spentCents = byCategoryCents[b.categoryId] ?? 0;
-  const budgetCents = b.amountCents;
+// categoryBudgetsRaw: Record<categoryId, effektives Budget in Cent> (Plan, überschrieben durch Monats-Budget)
+const categoryBudgets = Object.entries(categoryBudgetsRaw).map(([categoryId, budgetCents]) => {
+  const spentCents = byCategoryCents[categoryId] ?? 0;
   return {
-    categoryId: b.categoryId,
-    name: updatedNameMap[b.categoryId] ?? b.categoryId,
+    categoryId,
+    name: updatedNameMap[categoryId] ?? categoryId,
     budget: budgetCents / 100,
     spent: spentCents / 100,
     diff: (spentCents - budgetCents) / 100

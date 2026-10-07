@@ -279,6 +279,24 @@ A spending limit set by the user for a specific category in a specific calendar 
 
 ---
 
+### CategoryBudgetPlan
+
+A standing budget for one category: the same amount every month (`MONTHLY`) or one yearly amount distributed over the months (`YEARLY`). A per-month `Budget` row overrides the plan for that month.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | String (CUID) | Primary key |
+| `householdId` | String | FK → Household.id (tenant scope); `onDelete: Cascade` |
+| `categoryId` | String | FK → Category.id, **unique** — at most one plan per category; `onDelete: Cascade` |
+| `period` | String | `MONTHLY` or `YEARLY` (validated in the API, not by a DB enum) |
+| `amountCents` | Int | Per-month amount (`MONTHLY`) or yearly total (`YEARLY`), integer cents, 1..1_000_000_000 |
+| `createdAt` / `updatedAt` | DateTime | Timestamps |
+| `deletedAt` | DateTime? | Soft-delete tombstone; hidden by the Prisma extension on `findMany`/`findFirst`/... (not on `findUnique`). Re-creating a plan for the category revives the row (same `id`) |
+
+**Resolution:** see `docs/calculations/06-budgets.md` (distribution formula, override order). Savings and income categories are not budgetable (API: 400).
+
+---
+
 ### Saving goals (no separate model)
 
 There is no standalone `SavingGoal` model. A saving goal is a `Budget` record with `categoryId = null`:

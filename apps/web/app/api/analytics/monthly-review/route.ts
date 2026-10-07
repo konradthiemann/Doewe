@@ -15,7 +15,9 @@
  *                                amountCents, occurredAt ISO, accountId, categoryId (null bei
  *                                unkategorisiert), taxRelevant) der Monatsausgaben, betrag
  *                                absteigend, bei Gleichstand Datum aufsteigend; ohne
- *                                Spar-Kategorie und Einnahmen; Budget-only: []
+ *                                Spar-Kategorie und Einnahmen; Budget-only: []. `budgetCents` =
+ *                                effektives Budget (Budget-Plan, überschrieben durch ein
+ *                                Monats-Budget des Monats)
  * - `incomeCategories`         — Einnahmen je Quelle/Kategorie (größte zuerst)
  * - `topExpenses`              — Die 5 größten Einzelausgaben des Monats
  * - `completedGoals`           — In diesem Monat als erledigt markierte Sparziele
@@ -34,6 +36,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 
 type ReviewTx = {
@@ -193,15 +196,13 @@ export async function GET(request: Request) {
   const balanceAtStartCents = balanceAtStartAgg._sum.amountCents ?? 0;
   const balanceAtEndCents = balanceAtStartCents + incomeCents - outcomeCents - savingsCents;
 
-  // Budgets for selected month
-  const budgets = await prisma.budget.findMany({
-    where: { accountId, categoryId: { not: null }, month, year },
-    select: { categoryId: true, amountCents: true }
+  // Effective budgets for selected month (plan, overridden by a per-month Budget)
+  const budgetMap = await loadEffectiveCategoryBudgets({
+    householdId: user.householdId,
+    accountId,
+    year,
+    month
   });
-  const budgetMap: Record<string, number> = {};
-  for (const b of budgets) {
-    if (b.categoryId) budgetMap[b.categoryId] = b.amountCents ?? 0;
-  }
 
   // Resolve category names for all relevant IDs
   const catIds = Array.from(

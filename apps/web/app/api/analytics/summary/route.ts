@@ -15,7 +15,8 @@
  * - `projectedOutcomeTotal` — Hochrechnung Ausgaben inkl. Daueraufträge
  * - `projectedRemaining`    — Voraussichtlich verbleibendes Geld
  * - `outgoingByCategory`    — Ausgaben aufgeteilt nach Kategorien (inkl. Daueraufträge)
- * - `categoryBudgets`       — Budget vs. Ist pro Kategorie
+ * - `categoryBudgets`       — Budget vs. Ist pro Kategorie; effektives Budget = Budget-Plan
+ *                             (MONTHLY/YEARLY), überschrieben durch ein Monats-Budget; auch bei spent 0
  * - `recurringTransactions` — Aktive Daueraufträge für diesen Monat (nicht geskippt)
  * - `daily`                 — Tagesweise kumulierte Linien für das Chart (income, outcome, savings)
  *
@@ -32,6 +33,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic"; // Kein Build-Time-Prerendering — Daten sind nutzer- und zeitabhängig
 
 import { getSessionUser } from "../../../../lib/auth";
+import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 
 /** Gibt Monat (1-12) und Jahr des übergebenen Datums zurück. Standard: heute. */
@@ -139,9 +141,11 @@ export async function GET() {
   const completedGoalsSpent = completedGoalsRaw.reduce((sum, g) => sum + (g.spentCents ?? 0), 0) / 100;
 
   // Kategoriebudgets für den aktuellen Monat
-  const categoryBudgetsRaw = await prisma.budget.findMany({
-    where: { accountId, categoryId: { not: null }, month, year },
-    select: { categoryId: true, amountCents: true }
+  const categoryBudgetsRaw = await loadEffectiveCategoryBudgets({
+    householdId: user.householdId,
+    accountId,
+    year,
+    month
   });
 
   // Daueraufträge für den aktuellen Monat
@@ -299,7 +303,7 @@ export async function GET() {
   // Kategorienamen auflösen für alle Kategorien mit Ausgaben oder Budget
   const updatedCatIds = Array.from(new Set([
     ...Object.keys(byCategoryCents).filter((id) => id !== "uncategorized"),
-    ...categoryBudgetsRaw.map((b) => b.categoryId).filter((id): id is string => id !== null)
+    ...Object.keys(categoryBudgetsRaw)
   ]));
   const updatedCategories = await prisma.category.findMany({
     where: { id: { in: updatedCatIds }, householdId: user.householdId },
@@ -315,19 +319,16 @@ export async function GET() {
     amount: amountCents / 100
   }));
 
-  const categoryBudgets = categoryBudgetsRaw
-    .filter((b): b is { categoryId: string; amountCents: number } => b.categoryId !== null)
-    .map((b) => {
-      const spentCents = byCategoryCents[b.categoryId] ?? 0;
-      const budgetCents = b.amountCents;
-      return {
-        categoryId: b.categoryId,
-        name: updatedNameMap[b.categoryId] ?? b.categoryId,
-        budget: budgetCents / 100,
-        spent: spentCents / 100,
-        diff: (spentCents - budgetCents) / 100
-      };
-    });
+  const categoryBudgets = Object.entries(categoryBudgetsRaw).map(([categoryId, budgetCents]) => {
+    const spentCents = byCategoryCents[categoryId] ?? 0;
+    return {
+      categoryId,
+      name: updatedNameMap[categoryId] ?? categoryId,
+      budget: budgetCents / 100,
+      spent: spentCents / 100,
+      diff: (spentCents - budgetCents) / 100
+    };
+  });
 
   return NextResponse.json({
     totalBalance,

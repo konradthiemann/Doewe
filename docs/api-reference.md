@@ -1007,6 +1007,53 @@ There is **no `title` field** in the schema — the DB default `""` is used.
 
 ---
 
+## Budget Plans
+
+Standing per-category budgets (`MONTHLY` or `YEARLY`); a per-month budget from `/api/budgets` overrides the plan. All endpoints require auth (`401`) and are household-scoped. Calculation: `docs/calculations/06-budgets.md`.
+
+### `GET /api/budget-plans?year=YYYY`
+
+`year` is optional (default: current year, 2000–2100, else `400 {"error":"Invalid query"}`).
+
+**Success response — `200 OK`:**
+```json
+{
+  "year": 2026,
+  "availablePerMonthCents": [0, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000],
+  "plans": [
+    {
+      "id": "plan_01", "categoryId": "cat_02", "period": "YEARLY", "amountCents": 1200000,
+      "createdAt": "2026-04-01T00:00:00.000Z", "updatedAt": "2026-04-01T00:00:00.000Z",
+      "categoryName": "Hobby", "monthlyCents": [0, 109100, 109090, 109090, 109090, 109090, 109090, 109090, 109090, 109090, 109090, 109090]
+    }
+  ],
+  "budgetableCategories": [{ "id": "cat_02", "name": "Hobby", "planId": "plan_01" }, { "id": "cat_03", "name": "Food", "planId": null }]
+}
+```
+
+`availablePerMonthCents` is the monthly net of the recurring-transaction year matrix. `budgetableCategories` excludes income and savings categories. `monthlyCents` always sums to the yearly amount for `YEARLY` plans.
+
+### `POST /api/budget-plans`
+
+Body: `{ "categoryId": string, "period": "MONTHLY" | "YEARLY", "amountCents": integer 1..1000000000 }`
+
+| Status | Reason |
+|---|---|
+| `201` | Plan DTO `{ id, categoryId, period, amountCents, createdAt, updatedAt }`; a soft-deleted plan of the category is revived (same `id`) |
+| `400` | Validation failed, or `{"error":"Category not budgetable"}` (savings/income category) |
+| `404` | `{"error":"Category not found"}` (unknown, foreign or soft-deleted category) |
+| `409` | `{"error":"Budget plan already exists for category"}` |
+
+### `PATCH /api/budget-plans/[id]`
+
+Body: `{ "period"?: ..., "amountCents"?: ... }` (at least one field). `200` Plan DTO; `400` validation / empty body; `404` unknown, foreign or deleted plan.
+
+### `DELETE /api/budget-plans/[id]`
+
+Soft-delete. `204` no body; `404` unknown, foreign or already deleted plan.
+
+---
+
 ## Saving Plan
 
 ### `GET /api/saving-plan`
