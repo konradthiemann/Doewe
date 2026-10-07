@@ -1,6 +1,7 @@
 export type { Cents } from "./money";
 export {
   parseCents,
+  parseMoneyInput,
   fromCents,
   add as addCents,
   sub as subCents,
