@@ -1310,7 +1310,8 @@ Deep review of a **completed** past month: KPIs, carryover, expense breakdown by
   "balanceAtEndCents": 295860,
   "savingsRatePct": 16,
   "categories": [
-    { "id": "cat_02", "name": "Lebensmittel", "spentCents": 6340, "budgetCents": 20000, "transactionCount": 3 }
+    { "id": "cat_02", "name": "Lebensmittel", "spentCents": 6340, "budgetCents": 20000, "transactionCount": 3,
+      "transactions": [ { "id": "tx_11", "description": "Wocheneinkauf", "amountCents": 4200, "occurredAt": "2026-06-14T10:00:00.000Z" } ] }
   ],
   "incomeCategories": [
     { "id": "cat_01", "name": "Gehalt", "amountCents": 320000, "transactionCount": 1 }
@@ -1331,7 +1332,7 @@ Notable semantics:
 
 - All monetary values are **integer cents**.
 - Income/expense classification is by **amount sign** (`amountCents >= 0` = income), not by `Category.isIncome` — except the savings category, which is classified first.
-- `categories` (expenses) is sorted over-budget first, then by spend descending; an `"uncategorized"` entry is appended when uncategorized spend exists. `incomeCategories` is sorted by amount descending.
+- `categories` (expenses) is sorted over-budget first, then by spend descending; an `"uncategorized"` entry is appended when uncategorized spend exists. Each entry carries `transactions` (the month's individual expenses: `id`, `description`, positive `amountCents`, ISO `occurredAt`), sorted by amount descending, ties by date ascending; savings and income are excluded, budget-only categories return `[]`. `incomeCategories` is sorted by amount descending.
 - `topExpenses` are the 5 largest single non-savings expenses (amounts reported positive).
 - `availableMonths` lists every month from the earliest transaction up to (excluding) the current month, most recent first.
 - `prevMonth` is `null` when the preceding month has no data.
