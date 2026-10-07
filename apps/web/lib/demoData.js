@@ -215,6 +215,9 @@ async function clearAccountData(prisma, accountId) {
   // Transaktionen zuerst (referenzieren Budgets via savingGoalId / Kategorien).
   await prisma.transaction.deleteMany({ where: { accountId } });
   await prisma.budget.deleteMany({ where: { accountId } });
+  // Budget-Pläne hängen am Haushalt, nicht am Konto (Demo-Haushalt = Demo-Konto).
+  const account = await prisma.account.findUnique({ where: { id: accountId }, select: { householdId: true } });
+  if (account) await prisma.categoryBudgetPlan.deleteMany({ where: { householdId: account.householdId } });
   // Recurring-Skips hängen per onDelete: Cascade an RecurringTransaction.
   await prisma.recurringTransaction.deleteMany({ where: { accountId } });
 }

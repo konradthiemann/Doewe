@@ -13,6 +13,7 @@
     "test:components": "vitest run --config vitest.config.ts",
     "db:push": "prisma generate && prisma db push",
     "db:seed": "prisma db seed",
+    "db:seed:sample": "node prisma/seed-sample-year.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy"
   },

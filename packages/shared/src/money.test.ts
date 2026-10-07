@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { add, formatEuro, fromCents, multiply, parseCents, sub, toDecimalString } from "./money";
+import { add, formatEuro, fromCents, multiply, parseCents, parseMoneyInput, sub, toDecimalString } from "./money";
 
 describe("money", () => {
   it("parses valid strings to cents", () => {
@@ -64,5 +64,40 @@ describe("money", () => {
     expect(() => parseCents("12.34.56")).toThrow(); // multiple separators
     expect(() => parseCents("1.234,56")).toThrow(); // mixed separators (thousand + decimal)
     expect(() => parseCents("12a34")).toThrow(); // letters in number
+  });
+});
+
+describe("parseMoneyInput", () => {
+  it.each([
+    ["1.234,56", 123456],
+    ["50", 5000],
+    ["12,5", 1250],
+    ["12.5", 1250],
+    ["1.234", 123400],
+    ["1.234.567", 123456700],
+    ["1.234.567,8", 123456780],
+    ["12.50", 1250],
+    ["0,5", 50],
+    ["0.5", 50],
+    ["0,00", 0],
+    ["  7,05  ", 705],
+    ["1234,56", 123456],
+    ["12,", 1200],
+    [",5", 50]
+  ])("parses %j to %i cents", (input, cents) => {
+    expect(parseMoneyInput(input)).toBe(cents);
+  });
+
+  it.each(["", "   ", "abc", "-5", "1,234,5", "1,234", "12,345", "1.2345", "1.23.4", "1..2", "12 €", ".", ",", "1,2.3"])(
+    "returns null for %j",
+    (input) => {
+      expect(parseMoneyInput(input)).toBeNull();
+    }
+  );
+
+  it("is exact for values that break float arithmetic", () => {
+    expect(parseMoneyInput("0,29")).toBe(29);
+    expect(parseMoneyInput("1.005,07")).toBe(100507);
+    expect(parseMoneyInput("19,99")).toBe(1999);
   });
 });

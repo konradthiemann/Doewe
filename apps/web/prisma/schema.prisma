@@ -45,12 +45,34 @@ model Category {
   transactions Transaction[]
   recurring    RecurringTransaction[]
   budgets      Budget[]
+  budgetPlan   CategoryBudgetPlan?
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@unique([householdId, name])
   @@index([userId])
+  @@index([householdId])
+}
+
+// Standing budget per category: MONTHLY (same amount each month) or YEARLY
+// (distributed over the months by net availability, see budgetDistribution.ts).
+// A legacy per-month Budget row overrides the plan. period is validated in the
+// API (MONTHLY | YEARLY). Soft-delete via deletedAt; a re-created plan revives
+// the tombstone (categoryId is unique).
+model CategoryBudgetPlan {
+  id          String    @id @default(cuid())
+  householdId String
+  categoryId  String    @unique
+  period      String
+  amountCents Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  deletedAt   DateTime?
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
   @@index([householdId])
 }
 
@@ -240,6 +262,7 @@ model Household {
   invites    HouseholdInvite[]
   accounts   Account[]
   categories Category[]
+  categoryBudgetPlans CategoryBudgetPlan[]
 }
 
 // v1: one household per user (`userId @unique`) → the session carries a single
