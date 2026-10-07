@@ -74,3 +74,13 @@ export {
   planMonthlyCents,
   resolveEffectiveBudgets
 } from "./budgetDistribution";
+
+export type {
+  CategoryYearKind,
+  CategoryYearCategory,
+  CategoryYearTx,
+  CategoryYearRow,
+  CategoryYearGroup,
+  CategoryYearMatrix
+} from "./categoryYear";
+export { buildCategoryYearMatrix } from "./categoryYear";

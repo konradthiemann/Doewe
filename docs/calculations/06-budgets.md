@@ -134,6 +134,19 @@ Die Seite `/budgets` (Navigation: „Budgets") verwaltet die Budget-Pläne je Ka
 
 Die Seite `/budgets` (Navigation: „Budgets") verwaltet die Budget-Pläne je Kategorie. Pro budgetierbarer Kategorie wählt man „Monatlich" oder „Jährlich" und gibt einen Betrag ein (Eingabe deutsch oder englisch, z. B. `1.234,56` oder `12.5`, geparst mit `parseMoneyInput` aus `@doewe/shared`). Bei „Jährlich" zeigt eine Vorschau die 12 Monatswerte; das Jahr (`?year=`) bestimmt die Verteilung, da sie vom monatlich verfügbaren Geld der Daueraufträge dieses Jahres abhängt. Speichern/Entfernen laufen über `/api/budget-plans`; danach werden Dashboard und Rückblick neu geladen.
 
+## Jahresblick: Budget-Status je Kategorie und Monat
+
+Die Seite `/yearly` zeigt die tatsächlichen Ausgaben je Kategorie und Monat (`GET /api/analytics/category-year`) gegen das effektive Monatsbudget (`loadEffectiveCategoryBudgetsForYear`: Plan vor altem Monats-`Budget`; ein altes Budget gilt nur in den Monaten, für die eine Zeile existiert, sonst gibt es dort kein Budget). Status je Monats- und Summenzelle (`data-budget-status`):
+
+| Status | Bedingung |
+|---|---|
+| `over` | Ausgabe **strikt größer** als ein Budget > 0 (genau auf Budget ist nicht „über") |
+| `warn` | nicht über, aber Ausgabe >= **85 %** des Budgets (`ausgabe * 100 >= budget * 85`, ganzzahlig) |
+| `ok` | unter 85 % des Budgets |
+| `none` | kein Budget (oder Budget 0) in dem Monat bzw. für die Kategorie |
+
+Die Summenzelle vergleicht nur die Monate mit Budget gegen deren Budgetsumme (`overYear`); Ausgaben in Monaten ohne Budget zählen nicht. Farbe ist nie alleiniger Bedeutungsträger: `over`/`warn` tragen zusätzlich unsichtbaren Text für Screenreader, eine Legende erklärt die Farben.
+
 ## Hinweis: Budget-Modell wird auch für Sparpläne verwendet
 
 Das `Budget`-Modell wird **doppelt genutzt**:
