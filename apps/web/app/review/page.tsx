@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo } from "react";
 
 import PageContainer from "../../components/PageContainer";
+import { CategoryBreakdown, type ReviewCategory } from "../../components/review/CategoryBreakdown";
 import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
@@ -17,13 +18,7 @@ type ReviewData = {
   balanceAtStartCents: number;
   balanceAtEndCents: number;
   savingsRatePct: number;
-  categories: Array<{
-    id: string;
-    name: string;
-    spentCents: number;
-    budgetCents: number | null;
-    transactionCount: number;
-  }>;
+  categories: ReviewCategory[];
   incomeCategories: Array<{
     id: string;
     name: string;
@@ -405,78 +400,6 @@ function ReviewPage() {
                 </ul>
               )}
           </CollapsibleSection>
-
-          {/* Category breakdown */}
-          <section aria-labelledby="review-categories">
-            <div className="rounded-card border border-line bg-surface p-5">
-              <h2 id="review-categories" className="text-lg font-medium mb-4">
-                {t("review.categoriesTitle")}
-              </h2>
-              {data.categories.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  {t("review.categoriesEmpty")}
-                </p>
-              ) : (
-                <ul className="space-y-3">
-                  {data.categories.map((cat) => {
-                    const budget = cat.budgetCents;
-                    const spent = cat.spentCents;
-                    const maxBar = budget !== null ? Math.max(budget, spent) : spent;
-                    const spentPct = maxBar > 0 ? Math.min(100, Math.round((spent / maxBar) * 100)) : 0;
-                    const budgetPct = budget !== null && maxBar > 0 ? Math.min(100, Math.round((budget / maxBar) * 100)) : 0;
-                    const over = budget !== null && spent > budget;
-
-                    return (
-                      <li
-                        key={cat.id}
-                        className="rounded-field border border-line bg-surface-2 p-3"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-ink">
-                            {cat.name}
-                          </span>
-                          <div className="flex items-center gap-2 text-xs tabular-nums">
-                            <span
-                              className={`font-semibold ${over ? "text-danger" : "text-ink"}`}
-                            >
-                              {formatCurrency(spent)}
-                            </span>
-                            {budget !== null && (
-                              <span className="text-ink-faint">
-                                / {formatCurrency(budget)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Horizontal bar */}
-                        <div className="relative h-2 w-full rounded bg-surface-2 overflow-hidden" aria-hidden="true">
-                          {budget !== null && (
-                            <div
-                              className="absolute inset-y-0 left-0 rounded bg-line-strong"
-                              style={{ width: `${budgetPct}%` }}
-                            />
-                          )}
-                          <div
-                            className={`absolute inset-y-0 left-0 rounded transition-all ${over ? "bg-danger" : "bg-success"}`}
-                            style={{ width: `${spentPct}%` }}
-                          />
-                        </div>
-
-                        <p className={`mt-1 text-[11px] ${over ? "text-danger" : budget !== null ? "text-ink-muted" : "text-ink-faint"}`}>
-                          {budget === null
-                            ? t("review.noBudget")
-                            : over
-                              ? t("review.overBudget", { amount: formatCurrency(spent - budget) })
-                              : t("review.underBudget", { amount: formatCurrency(budget - spent) })}
-                        </p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </section>
           </div>
           <div className="min-w-0 space-y-6">
 
@@ -642,6 +565,27 @@ function ReviewPage() {
             )}
           </div>
           </div>
+
+          {/* Category breakdown — full width below the two columns */}
+          <section aria-labelledby="review-categories">
+            <div className="rounded-card border border-line bg-surface p-5">
+              <h2 id="review-categories" className="text-lg font-medium mb-4">
+                {t("review.categoriesTitle")}
+              </h2>
+              {data.categories.length === 0 ? (
+                <p className="text-sm text-ink-muted">
+                  {t("review.categoriesEmpty")}
+                </p>
+              ) : (
+                <CategoryBreakdown
+                  categories={data.categories}
+                  outcomeCents={data.outcomeCents}
+                  formatCurrency={formatCurrency}
+                  dateLocale={dateLocale}
+                />
+              )}
+            </div>
+          </section>
         </>
       )}
       </PageContainer>
