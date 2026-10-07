@@ -737,5 +737,21 @@ export const en: Record<string, string> = {
   "receiptScanner.booking": "Booking\u2026",
   "receiptScanner.booked": "Transactions booked successfully.",
   "receiptScanner.attachmentFailed": "Booked, but the receipt could not be attached.",
-  "receiptScanner.lineItems": "Receipt items"
+  "receiptScanner.lineItems": "Receipt items",
+  "nav.yearly": "Yearly overview",
+  "yearly.title": "Yearly overview",
+  "yearly.subtitle": "Your recurring income, expenses and savings, month by month.",
+  "yearly.empty": "No recurring transactions yet.",
+  "yearly.emptyAction": "Create a recurring transaction",
+  "yearly.income": "Income",
+  "yearly.expenses": "Expenses",
+  "yearly.savings": "Savings",
+  "yearly.net": "Net",
+  "yearly.average": "Ø month",
+  "yearly.total": "Total",
+  "yearly.prevYear": "Previous year",
+  "yearly.nextYear": "Next year",
+  "yearly.tableCaption": "Recurring transactions per month over the year",
+  "yearly.loading": "Loading yearly overview…",
+  "yearly.error": "The yearly overview could not be loaded."
 };

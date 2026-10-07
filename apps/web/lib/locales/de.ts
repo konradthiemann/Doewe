@@ -737,5 +737,21 @@ export const de: Record<string, string> = {
   "receiptScanner.booking": "Wird gebucht\u2026",
   "receiptScanner.booked": "Transaktionen erfolgreich gebucht.",
   "receiptScanner.attachmentFailed": "Gebucht, aber der Beleg konnte nicht angehängt werden.",
-  "receiptScanner.lineItems": "Belegpositionen"
+  "receiptScanner.lineItems": "Belegpositionen",
+  "nav.yearly": "Jahresübersicht",
+  "yearly.title": "Jahresübersicht",
+  "yearly.subtitle": "Deine Einnahmen, Ausgaben und Sparraten aus Daueraufträgen, Monat für Monat.",
+  "yearly.empty": "Noch keine Daueraufträge angelegt.",
+  "yearly.emptyAction": "Dauerauftrag anlegen",
+  "yearly.income": "Einnahmen",
+  "yearly.expenses": "Ausgaben",
+  "yearly.savings": "Sparen",
+  "yearly.net": "Saldo",
+  "yearly.average": "Ø Monat",
+  "yearly.total": "Summe",
+  "yearly.prevYear": "Vorheriges Jahr",
+  "yearly.nextYear": "Nächstes Jahr",
+  "yearly.tableCaption": "Wiederkehrende Buchungen pro Monat im Jahresverlauf",
+  "yearly.loading": "Jahresübersicht wird geladen…",
+  "yearly.error": "Die Jahresübersicht konnte nicht geladen werden."
 };

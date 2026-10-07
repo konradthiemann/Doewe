@@ -139,6 +139,32 @@ export default function AppChrome() {
               </Link>
 
               <Link
+                href="/yearly"
+                className={`flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                  pathname === "/yearly"
+                    ? "bg-brand-soft text-brand"
+                    : "text-ink-muted hover:bg-surface-2 hover:text-ink"
+                }`}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+                  <path d="M4 10h16" />
+                  <path d="M8 3v4" />
+                  <path d="M16 3v4" />
+                </svg>
+                {t("nav.yearly")}
+              </Link>
+
+              <Link
                 href="/categories"
                 className={`flex items-center gap-3 rounded-field px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                   pathname === "/categories"

@@ -796,6 +796,49 @@ Delete a recurring transaction template and all its skip records (cascading dele
 
 ---
 
+### `GET /api/recurring-transactions/yearly?year=YYYY`
+
+Year matrix of the household's recurring transactions: per item the signed amount (integer cents) due in each month of the year, grouped into income, expenses and savings. An item appears in a month only if it is due there (anchor `nextOccurrence` + `intervalMonths`, same logic as `isRecurringDueInMonth`); months skipped via `RecurringTransactionSkip` of that year count as `0`. Soft-deleted items are excluded. Items whose anchor lies after the year stay as rows of zeros. Savings = category named `savings`/`sparen` (case-insensitive); otherwise the sign decides (`>= 0` income, `< 0` expense).
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Param | Type | Description |
+|---|---|---|
+| `year` | integer 2000-2100 | Optional; defaults to the current year |
+
+**Success response — `200 OK`:** `RecurringYearMatrix` (`@doewe/shared`)
+
+```json
+{
+  "year": 2026,
+  "income": {
+    "rows": [
+      { "id": "rec_01", "description": "Gehalt", "categoryId": "cat_01", "categoryName": "Gehalt", "kind": "income",
+        "amountCents": 300000, "intervalMonths": 1, "monthlyCents": [300000, 300000, "… 12 entries"], "totalCents": 3600000 }
+    ],
+    "monthlyTotalsCents": [300000, "… 12 entries"],
+    "totalCents": 3600000,
+    "monthlyAverageCents": 300000
+  },
+  "expenses": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0, "monthlyAverageCents": 0 },
+  "savings": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0, "monthlyAverageCents": 0 },
+  "net": { "monthlyTotalsCents": [300000, "… 12 entries"], "totalCents": 3600000, "monthlyAverageCents": 300000 }
+}
+```
+
+`net` is the signed sum of all three groups; `monthlyAverageCents` is `round(totalCents / 12)`. Rows are ordered by description.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | `{ "error": "Invalid query" }` — `year` not an integer in 2000-2100 |
+| `401` | Not authenticated |
+
+---
+
 ## Recurring Transaction Skips
 
 ### `GET /api/recurring-transactions/skips?year=…&month=…`

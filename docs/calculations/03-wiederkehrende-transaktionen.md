@@ -145,6 +145,14 @@ const activeRecurringThisMonth = recurringThisMonth.filter(r => !skippedIds.has(
 
 Geskippte Daueraufträge werden aus den Projektionen **vollständig entfernt**.
 
+## Jahresmatrix (`/yearly`)
+
+`buildRecurringYearMatrix(items, year)` (`@doewe/shared`, `recurringYear.ts`) erzeugt pro Dauerauftrag 12 Monatswerte in Cent (mit Vorzeichen wie gespeichert): Betrag in den Monaten, in denen `isRecurringDueInMonth` (Anker `nextOccurrence` + `intervalMonths`) zutrifft, sonst 0; übersprungene Monate (Skips des Jahres) sind 0. Daueraufträge mit Anker nach dem Jahr bleiben als Nullzeile erhalten.
+
+- **Gruppen:** `classifyRecurringKind` — Spar-Kategorie (`savings`/`sparen`) → `savings`, sonst Betrag `>= 0` → `income`, `< 0` → `expense`.
+- **Summen:** je Gruppe Monatssummen, Jahressumme und `monthlyAverageCents = round(Jahressumme / 12)`; `net` = vorzeichenbehaftete Summe aller Gruppen.
+- **Quelle:** `GET /api/recurring-transactions/yearly?year=YYYY`, Darstellung auf der Seite `/yearly`.
+
 ## API-Endpunkte
 
 | Methode | Endpoint | Beschreibung |
@@ -157,3 +165,4 @@ Geskippte Daueraufträge werden aus den Projektionen **vollständig entfernt**.
 | GET | `/api/recurring-transactions/skips?year=&month=` | Skips für einen Monat |
 | POST | `/api/recurring-transactions/skips` | Skip hinzufügen (upsert) |
 | DELETE | `/api/recurring-transactions/skips` | Skip entfernen |
+| GET | `/api/recurring-transactions/yearly?year=` | Jahresmatrix (Monatsbeträge, Gruppen, Saldo) |
