@@ -52,3 +52,6 @@ export {
 
 export type { RecurringExportItem } from "./recurringExport";
 export { buildRecurringCsv } from "./recurringExport";
+
+export type { CategoryBarInput, CategoryBar } from "./categoryBar";
+export { computeCategoryBar } from "./categoryBar";
