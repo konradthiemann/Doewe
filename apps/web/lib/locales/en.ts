@@ -83,6 +83,8 @@ export const en: Record<string, string> = {
   "transactions.tabsLabel": "Transaction views",
   "transactions.tabTransactions": "Transactions",
   "transactions.tabRecurring": "Recurring",
+  "transactions.recurringExportCsv": "Export CSV",
+  "transactions.recurringExportError": "CSV export failed (status {status}). Please try again later.",
   "transactions.listHeading": "Transactions list",
   "transactions.recurringSummaryTitle": "Recurring transactions (this month)",
   "transactions.recurringSummarySubtitle": "Includes monthly recurring items",
