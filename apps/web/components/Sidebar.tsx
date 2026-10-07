@@ -79,6 +79,16 @@ export default function Sidebar() {
       )
     },
     {
+      href: "/budgets",
+      label: t("nav.budgets"),
+      icon: (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClass} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 3v9h9" />
+        </svg>
+      )
+    },
+    {
       href: "/yearly",
       label: t("nav.yearly"),
       icon: (
