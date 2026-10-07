@@ -1,12 +1,13 @@
 /**
  * Effective category budgets of one month (integer cents, keyed by categoryId).
  *
- * Plans (CategoryBudgetPlan) are the default; a legacy per-month Budget row of
- * the same account/month/year overrides it. YEARLY plans are distributed by the
- * recurring net availability of the year, which is only loaded when a YEARLY
+ * Plans (CategoryBudgetPlan) take precedence; a legacy per-month Budget row of
+ * the same account/month/year is only a fallback for categories without a plan.
+ * YEARLY plans are distributed by the smoothed availability of the year
+ * (income spread evenly, recurring expenses/savings per month), which is only loaded when a YEARLY
  * plan exists. Plans of soft-deleted categories are ignored.
  */
-import { BUDGET_PERIODS, resolveEffectiveBudgets, type BudgetPeriod } from "@doewe/shared";
+import { BUDGET_PERIODS, resolveEffectiveBudgets, smoothedAvailablePerMonth, type BudgetPeriod } from "@doewe/shared";
 
 import { prisma } from "./prisma";
 import { loadRecurringYearMatrix } from "./recurringYear";
@@ -49,7 +50,7 @@ export async function loadEffectiveCategoryBudgets(input: {
 
   const needsAvailability = plans.some((p) => p.period === "YEARLY");
   const availablePerMonth = needsAvailability
-    ? (await loadRecurringYearMatrix(householdId, year)).net.monthlyTotalsCents
+    ? smoothedAvailablePerMonth(await loadRecurringYearMatrix(householdId, year))
     : Array.from({ length: 12 }, () => 0);
 
   return resolveEffectiveBudgets({ plans, overrides, month, availablePerMonth });

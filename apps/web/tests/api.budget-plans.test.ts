@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
 
@@ -117,7 +117,8 @@ beforeAll(async () => {
   ).id;
 
   // Recurring fixtures in 2037: salary +3000, rent -1000 monthly, insurance
-  // -2000 once a year in January => net available: Jan 0, Feb-Dec 2000 EUR.
+  // -2000 once a year in January => smoothed available (income 36000 / 12 = 3000
+  // per month, only fixed costs vary): Jan 0, Feb-Dec 2000 EUR.
   await prisma.recurringTransactionSkip.deleteMany({ where: { recurring: { accountId: ACCOUNT_ID } } });
   await prisma.recurringTransaction.deleteMany({ where: { accountId: ACCOUNT_ID } });
   const anchor = new Date(Date.UTC(YEAR, 0, 1, 12));
@@ -299,7 +300,7 @@ describe("DELETE /api/budget-plans/[id]", () => {
 });
 
 describe("GET /api/budget-plans", () => {
-  it("returns availability from the recurring year matrix and the plan lists", async () => {
+  it("returns the smoothed availability of the recurring year matrix and the plan lists", async () => {
     const monthly = (await (await post({ categoryId: foodId, period: "MONTHLY", amountCents: 25000 })).json()) as PlanDto;
     const res = await list();
     expect(res.status).toBe(200);
@@ -363,6 +364,63 @@ describe("GET /api/budget-plans", () => {
     expect((await del("x")).status).toBe(401);
     process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
     vi.resetModules();
+  });
+});
+
+describe("GET /api/budget-plans - smoothed availability", () => {
+  const anchorOf = (month: number) => new Date(Date.UTC(YEAR, month - 1, 1, 12));
+  const baseRecurring = () => [
+    { amountCents: 300000, description: "BP Gehalt", intervalMonths: 1, month: 1, categoryId: salaryId },
+    { amountCents: -100000, description: "BP Miete", intervalMonths: 1, month: 1, categoryId: foodId },
+    { amountCents: -200000, description: "BP Versicherung", intervalMonths: 12, month: 1, categoryId: hobbyId }
+  ];
+  async function replaceRecurring(
+    items: Array<{ amountCents: number; description: string; intervalMonths: number; month: number; categoryId: string }>
+  ) {
+    await prisma.recurringTransactionSkip.deleteMany({ where: { recurring: { accountId: ACCOUNT_ID } } });
+    await prisma.recurringTransaction.deleteMany({ where: { accountId: ACCOUNT_ID } });
+    await prisma.recurringTransaction.createMany({
+      data: items.map((i) => ({
+        accountId: ACCOUNT_ID,
+        categoryId: i.categoryId,
+        amountCents: i.amountCents,
+        description: i.description,
+        frequency: "MONTHLY",
+        intervalMonths: i.intervalMonths,
+        dayOfMonth: 1,
+        nextOccurrence: anchorOf(i.month)
+      }))
+    });
+  }
+  afterEach(async () => {
+    await replaceRecurring(baseRecurring());
+  });
+
+  it("spreads a yearly-only salary evenly: availablePerMonthCents and YEARLY monthlyCents", async () => {
+    // Old (signed net): only June positive. New: 1_200_000 / 12 = 100000, minus rent 100000 = 0 everywhere.
+    await replaceRecurring([
+      { amountCents: 1200000, description: "BP Jahresgehalt", intervalMonths: 12, month: 6, categoryId: salaryId },
+      { amountCents: -100000, description: "BP Miete", intervalMonths: 1, month: 1, categoryId: foodId }
+    ]);
+    await post({ categoryId: hobbyId, period: "YEARLY", amountCents: 1200000 });
+    const body = (await (await list()).json()) as ListResponse;
+
+    expect(body.availablePerMonthCents).toEqual(Array.from({ length: 12 }, () => 0));
+    const plan = body.plans.find((p) => p.categoryId === hobbyId)!;
+    expect(plan.monthlyCents).toEqual(Array.from({ length: 12 }, () => 100000));
+  });
+
+  it("lets only the month of a yearly expense dip (income smoothed)", async () => {
+    await replaceRecurring([
+      { amountCents: 2400000, description: "BP Jahresgehalt", intervalMonths: 12, month: 6, categoryId: salaryId },
+      { amountCents: -100000, description: "BP Miete", intervalMonths: 1, month: 1, categoryId: foodId },
+      { amountCents: -600000, description: "BP Jahresausgabe", intervalMonths: 12, month: 3, categoryId: hobbyId }
+    ]);
+    const body = (await (await list()).json()) as ListResponse;
+    const expected = Array.from({ length: 12 }, () => 100000);
+    // March: income 2_400_000 / 12 = 200000, rent -100000, yearly expense -600000 -> -500000.
+    expected[2] = -500000;
+    expect(body.availablePerMonthCents).toEqual(expected);
   });
 });
 

@@ -105,17 +105,27 @@ describe("resolveEffectiveBudgets", () => {
     expect(resolveEffectiveBudgets({ plans, overrides: {}, month: 12, availablePerMonth: available })).toEqual({ c1: 0 });
   });
 
-  it("lets an override beat the plan", () => {
+  it("lets a plan beat an override of the same category (plan > override)", () => {
     const result = resolveEffectiveBudgets({
       plans: [{ categoryId: "c1", period: "MONTHLY", amountCents: 500 }],
       overrides: { c1: 900 },
       month: 3,
       availablePerMonth: available
     });
-    expect(result).toEqual({ c1: 900 });
+    expect(result).toEqual({ c1: 500 });
   });
 
-  it("adds an override for a category without a plan", () => {
+  it("lets a YEARLY plan beat an override of the same category", () => {
+    const result = resolveEffectiveBudgets({
+      plans: [{ categoryId: "c1", period: "YEARLY", amountCents: 100 }],
+      overrides: { c1: 900 },
+      month: 2,
+      availablePerMonth: available
+    });
+    expect(result).toEqual({ c1: 67 });
+  });
+
+  it("uses an override as fallback for a category without a plan", () => {
     const result = resolveEffectiveBudgets({
       plans: [{ categoryId: "c1", period: "MONTHLY", amountCents: 500 }],
       overrides: { c2: 300 },

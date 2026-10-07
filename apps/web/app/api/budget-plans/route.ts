@@ -3,9 +3,10 @@
  * POST /api/budget-plans           — Plan für eine Kategorie anlegen
  *
  * Ein Plan ist ein dauerhaftes Budget je Kategorie: MONTHLY (jeden Monat derselbe
- * Betrag) oder YEARLY (Jahresbetrag, gewichtet nach dem monatlich verfügbaren
- * Netto der Daueraufträge auf 12 Monate verteilt). Ein Monats-Budget (/api/budgets)
- * überschreibt den Plan für diesen Monat.
+ * Betrag) oder YEARLY (Jahresbetrag, gewichtet nach der geglätteten
+ * Monats-Verfügbarkeit auf 12 Monate verteilt: Einnahmen gleichmäßig, Fixkosten und
+ * Sparen je Monat). Der Plan hat Vorrang; ein Monats-Budget (/api/budgets) gilt nur
+ * als Fallback für Kategorien ohne Plan.
  *
  * Authentifizierung: Pflicht (401). Haushaltsbezogen. Soft-Deletes werden ausgeblendet.
  *
@@ -17,7 +18,7 @@
  *   | 409 "Budget plan already exists for category". Ein soft-gelöschter Plan derselben
  *   Kategorie wird wiederbelebt (gleiche id).
  */
-import { planMonthlyCents, type BudgetPeriod } from "@doewe/shared";
+import { planMonthlyCents, smoothedAvailablePerMonth, type BudgetPeriod } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../lib/auth";
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
       orderBy: { name: "asc" }
     })
   ]);
-  const availablePerMonthCents = matrix.net.monthlyTotalsCents;
+  const availablePerMonthCents = smoothedAvailablePerMonth(matrix);
 
   const plans = planRows.map((row) => ({
     ...toPlanDto(row),

@@ -16,7 +16,7 @@
  * - `projectedRemaining`    — Voraussichtlich verbleibendes Geld
  * - `outgoingByCategory`    — Ausgaben aufgeteilt nach Kategorien (inkl. Daueraufträge)
  * - `categoryBudgets`       — Budget vs. Ist pro Kategorie; effektives Budget = Budget-Plan
- *                             (MONTHLY/YEARLY), überschrieben durch ein Monats-Budget; auch bei spent 0
+ *                             (MONTHLY/YEARLY), Vorrang vor einem Monats-Budget; auch bei spent 0
  * - `recurringTransactions` — Aktive Daueraufträge für diesen Monat (nicht geskippt)
  * - `daily`                 — Tagesweise kumulierte Linien für das Chart (income, outcome, savings)
  *

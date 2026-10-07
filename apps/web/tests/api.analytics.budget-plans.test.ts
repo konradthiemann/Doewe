@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
 
 // Analytics endpoints must resolve category budgets through the budget plans
-// (MONTHLY plan as default, legacy per-month Budget row as override).
+// (a plan always wins; a legacy per-month Budget row only applies to categories without a plan).
 const TEST_USER_ID = "test-user-analytics-budget-plans";
 const ACCOUNT_ID = "acc_analytics_budget_plans";
 process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
@@ -112,13 +112,23 @@ describe("GET /api/analytics/summary - categoryBudgets from plans", () => {
     expect(budgets.find((b) => b.categoryId === foodId)).toMatchObject({ budget: 300, spent: 120, diff: -180 });
   });
 
-  it("lets a legacy Budget of the current month override the plan", async () => {
+  it("lets the plan win over a legacy Budget of the current month for the same category", async () => {
     await prisma.categoryBudgetPlan.create({ data: { householdId, categoryId: foodId, period: "MONTHLY", amountCents: 30000 } });
     await prisma.budget.create({
       data: { accountId: ACCOUNT_ID, categoryId: foodId, month: CURRENT_MONTH, year: CURRENT_YEAR, amountCents: 5000 }
     });
     const budgets = await fetchSummaryBudgets();
     const entries = budgets.filter((b) => b.categoryId === foodId);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.budget).toBe(300);
+  });
+
+  it("uses a legacy Budget of the current month only for a category without a plan", async () => {
+    await prisma.budget.create({
+      data: { accountId: ACCOUNT_ID, categoryId: quietId, month: CURRENT_MONTH, year: CURRENT_YEAR, amountCents: 5000 }
+    });
+    const budgets = await fetchSummaryBudgets();
+    const entries = budgets.filter((b) => b.categoryId === quietId);
     expect(entries).toHaveLength(1);
     expect(entries[0]!.budget).toBe(50);
   });
@@ -153,12 +163,19 @@ describe("GET /api/analytics/monthly-review - budgetCents from plans", () => {
     expect(quiet).toMatchObject({ name: "ABP Quiet", spentCents: 0, budgetCents: 8000, transactions: [] });
   });
 
-  it("lets a legacy Budget of the reviewed month override the plan", async () => {
+  it("lets the plan win over a legacy Budget of the reviewed month for the same category", async () => {
     await prisma.categoryBudgetPlan.create({ data: { householdId, categoryId: foodId, period: "MONTHLY", amountCents: 30000 } });
     await prisma.budget.create({ data: { accountId: ACCOUNT_ID, categoryId: foodId, month: 3, year: 2025, amountCents: 4200 } });
 
     const categories = await fetchReview();
-    expect(categories.find((c) => c.id === foodId)?.budgetCents).toBe(4200);
+    expect(categories.find((c) => c.id === foodId)?.budgetCents).toBe(30000);
+  });
+
+  it("uses a legacy Budget of the reviewed month only for a category without a plan", async () => {
+    await prisma.budget.create({ data: { accountId: ACCOUNT_ID, categoryId: quietId, month: 3, year: 2025, amountCents: 4200 } });
+
+    const categories = await fetchReview();
+    expect(categories.find((c) => c.id === quietId)?.budgetCents).toBe(4200);
   });
 
   it("does not apply a Budget of a different month as override", async () => {

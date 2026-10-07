@@ -1,7 +1,7 @@
 /**
  * Loads the recurring-transaction year matrix of a household (shared by
- * GET /api/recurring-transactions/yearly and the budget-plan code, which uses
- * `net.monthlyTotalsCents` as monthly availability).
+ * GET /api/recurring-transactions/yearly and the budget-plan code, which derives
+ * the monthly availability via `smoothedAvailablePerMonth`).
  *
  * Household-scoped; soft-deleted rows are hidden by the extension in prisma.ts.
  */

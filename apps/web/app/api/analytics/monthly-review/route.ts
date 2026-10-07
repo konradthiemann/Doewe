@@ -16,7 +16,7 @@
  *                                unkategorisiert), taxRelevant) der Monatsausgaben, betrag
  *                                absteigend, bei Gleichstand Datum aufsteigend; ohne
  *                                Spar-Kategorie und Einnahmen; Budget-only: []. `budgetCents` =
- *                                effektives Budget (Budget-Plan, überschrieben durch ein
+ *                                effektives Budget (Budget-Plan, Vorrang vor einem
  *                                Monats-Budget des Monats)
  * - `incomeCategories`         — Einnahmen je Quelle/Kategorie (größte zuerst)
  * - `topExpenses`              — Die 5 größten Einzelausgaben des Monats

@@ -2,8 +2,9 @@
  * Category budget plans (integer cents, no float math).
  *
  * A plan is either MONTHLY (same amount every month) or YEARLY (one yearly
- * amount, distributed over the 12 months weighted by the net amount available
- * per month). A per-month legacy `Budget` row (override) beats the plan.
+ * amount, distributed over the 12 months weighted by the available amount per
+ * month). A plan beats a per-month legacy `Budget` row (override); the override
+ * only applies to categories without a plan.
  */
 
 export const BUDGET_PERIODS = ["MONTHLY", "YEARLY"] as const;
@@ -56,9 +57,10 @@ export function planMonthlyCents(plan: BudgetPlanLike, availablePerMonth: readon
 }
 
 /**
- * Effective budget per category for one month: plan amount, replaced by an
- * override (legacy per-month `Budget`) where present; overrides without a plan
- * are added. `month` is 1-12. Categories with neither are omitted.
+ * Effective budget per category for one month: the plan amount if the category
+ * has a plan, otherwise the override (legacy per-month `Budget`) as fallback.
+ * An override never replaces a plan. `month` is 1-12. Categories with neither
+ * are omitted.
  */
 export function resolveEffectiveBudgets(input: {
   plans: ReadonlyArray<BudgetPlanLike & { categoryId: string }>;
@@ -71,7 +73,7 @@ export function resolveEffectiveBudgets(input: {
     result[plan.categoryId] = planMonthlyCents(plan, input.availablePerMonth)[input.month - 1]!;
   }
   for (const [categoryId, cents] of Object.entries(input.overrides)) {
-    result[categoryId] = cents;
+    if (!(categoryId in result)) result[categoryId] = cents;
   }
   return result;
 }

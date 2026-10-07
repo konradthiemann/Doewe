@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildRecurringYearMatrix,
   classifyRecurringKind,
+  smoothedAvailablePerMonth,
   type RecurringYearItem
 } from "./recurringYear";
 
@@ -187,5 +188,71 @@ describe("buildRecurringYearMatrix", () => {
     expect(m.net.monthlyTotalsCents).toEqual(Array.from({ length: 12 }, () => 200000));
     expect(m.net.totalCents).toBe(2400000);
     expect(m.net.monthlyAverageCents).toBe(200000);
+  });
+});
+
+describe("smoothedAvailablePerMonth", () => {
+  const flat = (value: number) => Array.from({ length: 12 }, () => value);
+
+  it("returns 12 zeros without recurring items", () => {
+    expect(smoothedAvailablePerMonth(buildRecurringYearMatrix([], 2026))).toEqual(ZEROS);
+  });
+
+  it("spreads irregular income evenly over the year", () => {
+    // Salary only in Jan and Jul (600000 each) -> 1_200_000 / 12 = 100000 per month
+    const m = buildRecurringYearMatrix(
+      [item({ id: "salary", kind: "income", amountCents: 600000, intervalMonths: 6, nextYear: 2026, nextMonth: 1 })],
+      2026
+    );
+    expect(smoothedAvailablePerMonth(m)).toEqual(flat(100000));
+  });
+
+  it("lets only expenses vary per month", () => {
+    const m = buildRecurringYearMatrix(
+      [
+        item({ id: "salary", kind: "income", amountCents: 10000, nextYear: 2026, nextMonth: 1 }),
+        item({ id: "insurance", kind: "expense", amountCents: -60000, intervalMonths: 12, nextYear: 2026, nextMonth: 3 })
+      ],
+      2026
+    );
+    const expected = flat(10000);
+    expected[2] = 10000 - 60000;
+    expect(smoothedAvailablePerMonth(m)).toEqual(expected);
+  });
+
+  it("counts the savings group like expenses", () => {
+    const m = buildRecurringYearMatrix(
+      [
+        item({ id: "salary", kind: "income", amountCents: 100000, nextYear: 2026, nextMonth: 1 }),
+        item({ id: "etf", kind: "savings", amountCents: -20000, nextYear: 2026, nextMonth: 1 })
+      ],
+      2026
+    );
+    expect(smoothedAvailablePerMonth(m)).toEqual(flat(80000));
+  });
+
+  it("equals the (non-positive) expenses when there is no income", () => {
+    const m = buildRecurringYearMatrix(
+      [item({ id: "rent", kind: "expense", amountCents: -50000, intervalMonths: 3, nextYear: 2026, nextMonth: 2 })],
+      2026
+    );
+    const result = smoothedAvailablePerMonth(m);
+    expect(result).toEqual(m.expenses.monthlyTotalsCents);
+    expect(result.every((v) => v <= 0)).toBe(true);
+    expect(result[1]).toBe(-50000);
+    expect(result[0]).toBe(0);
+  });
+
+  it("rounds the monthly income share to whole cents", () => {
+    // 1000 / 12 = 83.33 -> 83
+    const m = buildRecurringYearMatrix(
+      [item({ id: "bonus", kind: "income", amountCents: 1000, intervalMonths: 12, nextYear: 2026, nextMonth: 5 })],
+      2026
+    );
+    expect(smoothedAvailablePerMonth(m)).toEqual(flat(83));
+  });
+
+  it("returns exactly 12 entries", () => {
+    expect(smoothedAvailablePerMonth(buildRecurringYearMatrix([], 2026))).toHaveLength(12);
   });
 });

@@ -113,3 +113,16 @@ export function buildRecurringYearMatrix(items: RecurringYearItem[], year: numbe
   );
   return { year, income, expenses, savings, net };
 }
+
+/**
+ * Monthly availability used to distribute yearly budgets: income is spread
+ * evenly over the year (rounded yearly total / 12), only the recurring
+ * expenses and savings vary per month. Index 0 = January.
+ */
+export function smoothedAvailablePerMonth(matrix: RecurringYearMatrix): number[] {
+  const incomePerMonth = Math.round(matrix.income.totalCents / MONTHS);
+  return Array.from(
+    { length: MONTHS },
+    (_, i) => incomePerMonth + matrix.expenses.monthlyTotalsCents[i]! + matrix.savings.monthlyTotalsCents[i]!
+  );
+}
