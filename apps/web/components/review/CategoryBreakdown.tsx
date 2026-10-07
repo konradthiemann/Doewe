@@ -209,21 +209,27 @@ function CategoryRow({
           <path d="M6 9l6 6 6-6" />
         </svg>
       )}
-      <span className="col-span-3 lg:col-span-1 lg:col-start-2 lg:row-start-1">
-        <ProgressBar value={bar.fillRatio} tone={tone} label={name} />
+      <span className="relative col-span-3 flex items-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
+        {/* Sichtbare Schiene (Track) + Endmarke bei 100 % des Budgets, damit man das Ziel sieht. */}
+        <ProgressBar
+          value={bar.fillRatio}
+          tone={tone}
+          label={name}
+          className="h-5 bg-line ring-1 ring-inset ring-line-strong"
+        />
+        <span
+          className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-surface px-1.5 text-[10px] font-semibold leading-4 tabular-nums ${bar.over ? "text-danger" : "text-ink"}`}
+        >
+          {percent} %
+        </span>
       </span>
       <span className="col-span-3 flex flex-wrap items-center justify-between gap-x-2 text-[11px] tabular-nums lg:col-span-1 lg:col-start-5 lg:row-start-1 lg:justify-end lg:text-right lg:text-xs">
-        {bar.mode === "share" ? (
-          <span className="text-ink-muted">{t("review.shareOfExpenses", { percent })}</span>
-        ) : (
-          <>
-            <span className="text-ink-muted lg:hidden">{t("review.budgetUsage", { percent })}</span>
-            <span className={bar.over ? "text-danger" : "text-ink-muted"}>
-              {bar.over
-                ? t("review.overBudget", { amount: formatCurrency(bar.overByCents) })
-                : t("review.underBudget", { amount: formatCurrency(bar.remainingCents) })}
-            </span>
-          </>
+        {bar.mode === "budget" && (
+          <span className={bar.over ? "text-danger" : "text-ink-muted"}>
+            {bar.over
+              ? t("review.overBudget", { amount: formatCurrency(bar.overByCents) })
+              : t("review.underBudget", { amount: formatCurrency(bar.remainingCents) })}
+          </span>
         )}
       </span>
     </>
