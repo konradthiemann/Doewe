@@ -259,25 +259,23 @@ function ReviewPage() {
 
       {!loading && data && (
         <>
-          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-          <div className="min-w-0 space-y-6">
           {/* Verdict + KPI card */}
           <section aria-labelledby="review-verdict">
             <div
               className={`rounded-card border-2 bg-surface p-5 ${verdictConfig?.borderClass ?? ""}`}
             >
-              <div className="flex items-start gap-3 mb-4">
+              <div className="mb-4 flex items-start gap-3">
                 <span
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg font-bold ${verdictConfig?.badgeClass ?? ""}`}
                   aria-hidden="true"
                 >
                   {verdictConfig?.icon}
                 </span>
-                <div>
-                  <h2 id="review-verdict" className="text-lg font-semibold text-ink">
+                <div className="min-w-0">
+                  <h2 id="review-verdict" className="text-base font-semibold text-ink">
                     {verdict ? t(verdictConfig!.titleKey) : ""}
                   </h2>
-                  <p className="text-sm text-ink-muted mt-0.5">
+                  <p className="mt-0.5 text-sm text-ink-muted">
                     {verdict
                       ? t(verdictConfig!.subtitleKey, { rate: String(data.savingsRatePct) })
                       : ""}
@@ -285,38 +283,38 @@ function ReviewPage() {
                 </div>
               </div>
 
-              {/* KPI grid */}
+              {/* KPI grid: 2x2 below sm, 4 equal tiles from sm; values never wrap */}
               <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-field border border-line bg-surface-2 p-3">
-                  <dt className="text-xs font-medium text-ink-muted uppercase tracking-wide">
+                <div className="min-w-0 rounded-field border border-line bg-surface-2 p-3">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                     {t("review.income")}
                   </dt>
-                  <dd className="mt-1 text-xl font-semibold text-income tabular-nums">
+                  <dd className="mt-1 whitespace-nowrap text-base font-semibold tabular-nums text-income sm:text-lg">
                     {formatCurrency(data.incomeCents)}
                   </dd>
                 </div>
-                <div className="rounded-field border border-line bg-surface-2 p-3">
-                  <dt className="text-xs font-medium text-ink-muted uppercase tracking-wide">
+                <div className="min-w-0 rounded-field border border-line bg-surface-2 p-3">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                     {t("review.expenses")}
                   </dt>
-                  <dd className="mt-1 text-xl font-semibold text-expense tabular-nums">
+                  <dd className="mt-1 whitespace-nowrap text-base font-semibold tabular-nums text-expense sm:text-lg">
                     {formatCurrency(data.outcomeCents)}
                   </dd>
                 </div>
-                <div className="rounded-field border border-line bg-surface-2 p-3">
-                  <dt className="text-xs font-medium text-ink-muted uppercase tracking-wide">
+                <div className="min-w-0 rounded-field border border-line bg-surface-2 p-3">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                     {t("review.savings")}
                   </dt>
-                  <dd className="mt-1 text-xl font-semibold text-savings tabular-nums">
+                  <dd className="mt-1 whitespace-nowrap text-base font-semibold tabular-nums text-savings sm:text-lg">
                     {formatCurrency(data.savingsCents)}
                   </dd>
                 </div>
-                <div className="rounded-field border border-line bg-surface-2 p-3">
-                  <dt className="text-xs font-medium text-ink-muted uppercase tracking-wide">
+                <div className="min-w-0 rounded-field border border-line bg-surface-2 p-3">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                     {t("review.savingsRate")}
                   </dt>
                   <dd
-                    className={`mt-1 text-xl font-semibold tabular-nums ${
+                    className={`mt-1 whitespace-nowrap text-base font-semibold tabular-nums sm:text-lg ${
                       data.savingsRatePct >= 15
                         ? "text-success"
                         : data.savingsRatePct >= 5
@@ -329,18 +327,18 @@ function ReviewPage() {
                 </div>
               </dl>
 
-              {/* Balance change — wraps on narrow screens to avoid horizontal overflow */}
-              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">
-                <span>
+              {/* Balance change footer */}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line pt-3 text-sm text-ink-muted">
+                <span className="whitespace-nowrap">
                   {t("review.balanceAtStart")}:{" "}
                   <span className="font-medium tabular-nums text-ink">
                     {formatCurrency(data.balanceAtStartCents)}
                   </span>
                 </span>
-                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
-                <span>
+                <span className="whitespace-nowrap">
                   {t("review.balanceAtEnd")}:{" "}
                   <span
                     className={`font-medium tabular-nums ${
@@ -356,66 +354,115 @@ function ReviewPage() {
             </div>
           </section>
 
-          {/* Income breakdown by source */}
+          {/* Category breakdown — the main part, full width */}
+          <section aria-labelledby="review-categories">
+            <div className="rounded-card border border-line bg-surface p-5">
+              <h2 id="review-categories" className="mb-4 text-lg font-medium">
+                {t("review.categoriesTitle")}
+              </h2>
+              {data.categories.length === 0 ? (
+                <p className="text-sm text-ink-muted">
+                  {t("review.categoriesEmpty")}
+                </p>
+              ) : (
+                <CategoryBreakdown
+                  categories={data.categories}
+                  outcomeCents={data.outcomeCents}
+                  formatCurrency={formatCurrency}
+                  dateLocale={dateLocale}
+                />
+              )}
+            </div>
+          </section>
+
+          {/* Income breakdown by source (collapsed) */}
           <CollapsibleSection
             id="review-income-categories"
             title={t("review.incomeCategoriesTitle")}
           >
-              {data.incomeCategories.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  {t("review.incomeCategoriesEmpty")}
-                </p>
-              ) : (
-                <ul className="space-y-3">
-                  {data.incomeCategories.map((cat) => {
-                    const sharePct =
-                      data.incomeCents > 0
-                        ? Math.round((cat.amountCents / data.incomeCents) * 100)
-                        : 0;
-                    return (
-                      <li
-                        key={cat.id}
-                        className="rounded-field border border-line bg-surface-2 p-3"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-ink">
-                            {cat.name}
-                          </span>
-                          <div className="flex items-center gap-2 text-xs tabular-nums">
-                            <span className="font-semibold text-income">
-                              {formatCurrency(cat.amountCents)}
-                            </span>
-                            <span className="text-ink-faint">{sharePct}%</span>
-                          </div>
-                        </div>
-                        <div className="relative h-2 w-full rounded bg-surface-2 overflow-hidden" aria-hidden="true">
-                          <div
-                            className="absolute inset-y-0 left-0 rounded bg-income transition-all"
-                            style={{ width: `${sharePct}%` }}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+            {data.incomeCategories.length === 0 ? (
+              <p className="text-sm text-ink-muted">
+                {t("review.incomeCategoriesEmpty")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {data.incomeCategories.map((cat) => {
+                  const sharePct =
+                    data.incomeCents > 0
+                      ? Math.round((cat.amountCents / data.incomeCents) * 100)
+                      : 0;
+                  return (
+                    <li
+                      key={cat.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto_3rem] items-center gap-x-3 py-2.5 text-sm"
+                    >
+                      <span className="truncate font-medium text-ink">{cat.name}</span>
+                      <span className="whitespace-nowrap text-right font-semibold tabular-nums text-income">
+                        {formatCurrency(cat.amountCents)}
+                      </span>
+                      <span className="text-right text-xs tabular-nums text-ink-muted">
+                        {sharePct}%
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </CollapsibleSection>
-          </div>
-          <div className="min-w-0 space-y-6">
 
-          {/* MoM comparison */}
-          {momDeltas ? (
-            <section aria-labelledby="review-mom">
-              <div className="rounded-card border border-line bg-surface p-5">
-                <h2 id="review-mom" className="text-lg font-medium mb-1">
-                  {t("review.momTitle")}
-                </h2>
-                <p className="text-xs text-ink-muted mb-4">
+          {/* Top expenses (collapsed) */}
+          <CollapsibleSection
+            id="review-top-expenses"
+            title={t("review.topExpensesTitle")}
+          >
+            {data.topExpenses.length === 0 ? (
+              <p className="text-sm text-ink-muted">
+                {t("review.topExpensesEmpty")}
+              </p>
+            ) : (
+              <ol className="divide-y divide-line">
+                {data.topExpenses.map((exp, idx) => (
+                  <li
+                    key={idx}
+                    className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-x-3 py-2.5"
+                  >
+                    <span
+                      className="text-xs font-bold tabular-nums text-ink-muted"
+                      aria-hidden="true"
+                    >
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-ink">
+                        {exp.description}
+                      </p>
+                      <p className="truncate text-xs text-ink-muted">
+                        {exp.categoryName ?? "—"}
+                        {" · "}
+                        {new Date(exp.occurredAt).toLocaleDateString(dateLocale, {
+                          day: "numeric",
+                          month: "short"
+                        })}
+                      </p>
+                    </div>
+                    <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-expense">
+                      {formatCurrency(exp.amountCents)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CollapsibleSection>
+
+          {/* MoM comparison (collapsed; little signal in a review) */}
+          <CollapsibleSection id="review-mom" title={t("review.momTitle")}>
+            {momDeltas ? (
+              <>
+                <p className="mb-3 text-xs text-ink-muted">
                   {data.prevMonth
                     ? formatMonthLabel(data.prevMonth.month, data.prevMonth.year)
                     : ""}
                 </p>
-
                 <div className="grid gap-3 sm:grid-cols-3">
                   {(
                     [
@@ -438,17 +485,17 @@ function ReviewPage() {
                     return (
                       <div
                         key={labelKey}
-                        className="rounded-field border border-line bg-surface-2 px-3 py-3"
+                        className="min-w-0 rounded-field border border-line bg-surface-2 px-3 py-3"
                       >
-                        <p className="text-xs text-ink-muted mb-1">
+                        <p className="mb-1 text-xs text-ink-muted">
                           {t(labelKey)}
                         </p>
-                        <p className={`text-base font-semibold tabular-nums ${colorClass}`}>
+                        <p className={`whitespace-nowrap text-base font-semibold tabular-nums ${colorClass}`}>
                           {/* formatCurrency handles negative sign; we only prepend "+" for positive deltas */}
                           {sign}{formatCurrency(d.absDiff * 100)}
                         </p>
                         {d.pct !== null && (
-                          <p className={`text-xs ${colorClass}`}>
+                          <p className={`text-xs tabular-nums ${colorClass}`}>
                             {sign}{d.pct}%
                           </p>
                         )}
@@ -456,78 +503,27 @@ function ReviewPage() {
                     );
                   })}
                 </div>
-              </div>
-            </section>
-          ) : (
-            <section>
-              <div className="rounded-card border border-line bg-surface p-5">
-                <h2 className="text-lg font-medium mb-2">{t("review.momTitle")}</h2>
-                <p className="text-sm text-ink-muted">{t("review.momNoPrev")}</p>
-              </div>
-            </section>
-          )}
-
-          {/* Top expenses */}
-          <CollapsibleSection
-            id="review-top-expenses"
-            title={t("review.topExpensesTitle")}
-          >
-              {data.topExpenses.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  {t("review.topExpensesEmpty")}
-                </p>
-              ) : (
-                <ol className="space-y-2">
-                  {data.topExpenses.map((exp, idx) => (
-                    <li
-                      key={idx}
-                      className="flex items-center justify-between gap-3 rounded-field border border-line bg-surface-2 px-3 py-2.5"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span
-                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-2 text-[11px] font-bold text-ink-muted"
-                          aria-hidden="true"
-                        >
-                          {idx + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-ink truncate">
-                            {exp.description}
-                          </p>
-                          <p className="text-xs text-ink-muted">
-                            {exp.categoryName ?? "—"}
-                            {" · "}
-                            {new Date(exp.occurredAt).toLocaleDateString(dateLocale, {
-                              day: "numeric",
-                              month: "short"
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="shrink-0 text-sm font-semibold text-expense tabular-nums">
-                        {formatCurrency(exp.amountCents)}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              </>
+            ) : (
+              <p className="text-sm text-ink-muted">{t("review.momNoPrev")}</p>
+            )}
           </CollapsibleSection>
 
           {/* Completed saving goals */}
           {data.completedGoals.length > 0 && (
             <section aria-labelledby="review-completed-goals">
               <div className="rounded-card border border-line bg-surface p-5">
-                <h2 id="review-completed-goals" className="text-lg font-medium mb-4">
+                <h2 id="review-completed-goals" className="mb-4 text-lg font-medium">
                   {t("review.completedGoalsTitle")}
                 </h2>
-                <ul className="space-y-2">
+                <ul className="divide-y divide-line">
                   {data.completedGoals.map((goal, idx) => (
                     <li
                       key={idx}
-                      className="flex items-center justify-between gap-3 rounded-field border border-line bg-surface-2 px-3 py-2.5"
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-2.5"
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-ink truncate">
+                        <p className="truncate text-sm font-medium text-ink">
                           {goal.title}
                         </p>
                         {goal.spentCents !== goal.amountCents && (
@@ -536,7 +532,7 @@ function ReviewPage() {
                           </p>
                         )}
                       </div>
-                      <span className="shrink-0 text-sm font-semibold text-savings tabular-nums">
+                      <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-savings">
                         {formatCurrency(goal.spentCents)}
                       </span>
                     </li>
@@ -556,36 +552,13 @@ function ReviewPage() {
             data.outcomeCents === 0 &&
             data.savingsCents === 0 && (
               <section>
-                <div className="rounded-md border border-dashed border-line-strong p-8 text-center">
+                <div className="rounded-card border border-dashed border-line-strong p-8 text-center">
                   <p className="text-sm text-ink-muted">
                     {t("review.noData")}
                   </p>
                 </div>
               </section>
             )}
-          </div>
-          </div>
-
-          {/* Category breakdown — full width below the two columns */}
-          <section aria-labelledby="review-categories">
-            <div className="rounded-card border border-line bg-surface p-5">
-              <h2 id="review-categories" className="text-lg font-medium mb-4">
-                {t("review.categoriesTitle")}
-              </h2>
-              {data.categories.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  {t("review.categoriesEmpty")}
-                </p>
-              ) : (
-                <CategoryBreakdown
-                  categories={data.categories}
-                  outcomeCents={data.outcomeCents}
-                  formatCurrency={formatCurrency}
-                  dateLocale={dateLocale}
-                />
-              )}
-            </div>
-          </section>
         </>
       )}
       </PageContainer>
