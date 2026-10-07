@@ -484,6 +484,34 @@ Delete a transaction by ID.
 
 Receipt files (photos/PDFs) attached to transactions as evidence for the German tax return (Belegvorhaltepflicht — receipts are archived, not submitted). Files are stored as bytes in PostgreSQL. Limits: allowed types `image/jpeg`, `image/png`, `image/webp`, `application/pdf`; max. **5 MB** per file; max. **5 attachments** per transaction. List/metadata responses never contain the file bytes.
 
+### `POST /api/transactions/[id]/make-recurring`
+
+Turns an existing booking into a recurring transaction (`MONTHLY`). Creates a `RecurringTransaction` with the booking's account, category, amount (sign as stored) and description, and links the booking to it (`recurringTransactionId`).
+
+**Auth required:** Yes (booking must belong to the user's household)
+
+**Request body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `intervalMonths` | integer | Required. 1–24 |
+| `dayOfMonth` | integer | Optional. 1–31; defaults to the booking's calendar day (Europe/Berlin) |
+
+`nextOccurrence` = booking day + `intervalMonths` (day = `dayOfMonth`, clamped to the target month's length, e.g. 31 Jan + 1 month → 28/29 Feb), at local midnight. The origin month is therefore not booked again by the auto-booking run. Create and link happen in one database transaction.
+
+**Success response — `201 Created`:** the new recurring transaction object.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Validation failed |
+| `401` | Not authenticated |
+| `404` | `{ "error": "Transaction not found" }` — unknown, soft-deleted or foreign booking |
+| `409` | `{ "error": "Transaction is already linked to a recurring transaction" }` (also on a concurrent double submit) |
+
+---
+
 ### `GET /api/transactions/[id]/attachments`
 
 List attachment metadata for one transaction, ordered by `createdAt` ascending.
@@ -1311,7 +1339,7 @@ Deep review of a **completed** past month: KPIs, carryover, expense breakdown by
   "savingsRatePct": 16,
   "categories": [
     { "id": "cat_02", "name": "Lebensmittel", "spentCents": 6340, "budgetCents": 20000, "transactionCount": 3,
-      "transactions": [ { "id": "tx_11", "description": "Wocheneinkauf", "amountCents": 4200, "occurredAt": "2026-06-14T10:00:00.000Z", "accountId": "acc_01", "categoryId": "cat_02", "taxRelevant": false } ] }
+      "transactions": [ { "id": "tx_11", "description": "Wocheneinkauf", "amountCents": 4200, "occurredAt": "2026-06-14T10:00:00.000Z", "accountId": "acc_01", "categoryId": "cat_02", "taxRelevant": false, "recurringTransactionId": null } ] }
   ],
   "incomeCategories": [
     { "id": "cat_01", "name": "Gehalt", "amountCents": 320000, "transactionCount": 1 }
@@ -1333,6 +1361,7 @@ Notable semantics:
 - All monetary values are **integer cents**.
 - Income/expense classification is by **amount sign** (`amountCents >= 0` = income), not by `Category.isIncome` — except the savings category, which is classified first.
 - `categories` (expenses) is sorted over-budget first, then by spend descending; an `"uncategorized"` entry is appended when uncategorized spend exists. Each entry carries `transactions` (the month's individual expenses: `id`, `description`, positive `amountCents`, ISO `occurredAt`), sorted by amount descending, ties by date ascending; savings and income are excluded, budget-only categories return `[]`. `incomeCategories` is sorted by amount descending.
+- Each `transactions[]` entry additionally carries `accountId`, `categoryId` (`null` when uncategorized), `taxRelevant` and `recurringTransactionId` (`null` unless the booking belongs to a recurring transaction) so the review page can open its edit dialog without a second request.
 - `topExpenses` are the 5 largest single non-savings expenses (amounts reported positive).
 - `availableMonths` lists every month from the earliest transaction up to (excluding) the current month, most recent first.
 - `prevMonth` is `null` when the preceding month has no data.

@@ -40,6 +40,7 @@ type Tx = {
   occurredAt: string;
   categoryId?: string | null;
   taxRelevant?: boolean;
+  recurringTransactionId?: string | null;
 };
 
 type RecurringTx = {
@@ -276,6 +277,13 @@ function TransactionsPage() {
     invalidateTransactionData();
     closeEditDialog();
     showFeedback(message ?? t("transactionForm.updated"));
+  };
+
+  const handleMadeRecurring = (message: string) => {
+    invalidateTransactionData();
+    invalidateRecurringData();
+    closeEditDialog();
+    showFeedback(message);
   };
 
   const handleDeleteSuccess = (message?: string) => {
@@ -1085,6 +1093,7 @@ function TransactionsPage() {
             headingId={dialogTitleId}
             onSuccess={handleEditSuccess}
             onDelete={handleDeleteSuccess}
+            onMadeRecurring={handleMadeRecurring}
             onClose={closeEditDialog}
           />
         )}

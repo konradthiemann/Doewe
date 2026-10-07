@@ -18,6 +18,7 @@ import { queueOfflineTransaction, type OfflineTransactionPayload } from "../lib/
 import { transactionFormSchema, type TransactionFormValues } from "../lib/schemas/forms";
 
 import AttachmentManager, { uploadAttachment } from "./AttachmentManager";
+import { MakeRecurringSection } from "./MakeRecurringSection";
 import SearchableSelect from "./SearchableSelect";
 import { Button } from "./ui/Button";
 import { FormActions } from "./ui/FormActions";
@@ -32,6 +33,7 @@ type TransactionDetails = {
   occurredAt: string;
   categoryId?: string | null;
   taxRelevant?: boolean;
+  recurringTransactionId?: string | null;
 };
 
 type CategoryOption = {
@@ -49,6 +51,7 @@ type Props = {
   onSuccess?: (message?: string, options?: { keepOpen?: boolean }) => void;
   onClose?: () => void;
   onDelete?: (message?: string) => void;
+  onMadeRecurring?: (message: string) => void;
 };
 
 export default function TransactionForm({
@@ -58,6 +61,7 @@ export default function TransactionForm({
   onSuccess,
   onClose,
   onDelete,
+  onMadeRecurring,
 }: Props) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -912,6 +916,16 @@ export default function TransactionForm({
               </div>
             )}
           </div>
+        )}
+
+        {mode === "edit" && transaction && (
+          <MakeRecurringSection
+            transactionId={transaction.id}
+            // Same local calendar day the date field above shows.
+            bookingDay={new Date(transaction.occurredAt).getDate()}
+            recurringTransactionId={transaction.recurringTransactionId}
+            onMade={(message) => onMadeRecurring?.(message)}
+          />
         )}
 
         {mode === "edit" && (

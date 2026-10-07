@@ -139,6 +139,13 @@ function ReviewPage() {
     toast.success(message ?? t("transactionForm.updated"));
   };
 
+  const handleMadeRecurring = (message: string) => {
+    invalidateTransactionData();
+    void queryClient.invalidateQueries({ queryKey: ["recurring"] });
+    closeEditDialog();
+    toast.success(message);
+  };
+
   const handleDeleteSuccess = (message?: string) => {
     invalidateTransactionData();
     closeEditDialog();
@@ -618,11 +625,13 @@ function ReviewPage() {
               description: editingTx.description,
               occurredAt: editingTx.occurredAt,
               categoryId: editingTx.categoryId,
-              taxRelevant: editingTx.taxRelevant
+              taxRelevant: editingTx.taxRelevant,
+              recurringTransactionId: editingTx.recurringTransactionId
             }}
             headingId={`edit-transaction-${editingTx.id}`}
             onSuccess={handleEditSuccess}
             onDelete={handleDeleteSuccess}
+            onMadeRecurring={handleMadeRecurring}
             onClose={closeEditDialog}
           />
         )}

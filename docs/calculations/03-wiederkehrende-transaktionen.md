@@ -4,6 +4,8 @@
 - `apps/web/app/api/recurring-transactions/route.ts`
 - `apps/web/app/api/recurring-transactions/[id]/route.ts`
 - `apps/web/app/api/recurring-transactions/skips/route.ts`
+- `apps/web/app/api/transactions/[id]/make-recurring/route.ts` (Buchung → Dauerauftrag)
+- `packages/shared/src/recurringSchedule.ts` (`addMonthsClamped`)
 - `apps/web/app/api/analytics/summary/route.ts` (Filterlogik)
 - `apps/web/lib/recurringBooking.ts` (automatisches Buchen)
 - `apps/web/app/api/cron/materialize-recurring/route.ts` (täglicher Cron-Trigger)
@@ -77,6 +79,10 @@ flowchart TD
 | 10 | 2026-07-10 (heute = vergangen, daher nächsten Monat) |
 | 31 | 2026-06-30 (clamp: Juni hat 30 Tage) |
 
+### Aus einer bestehenden Buchung (`make-recurring`)
+
+`POST /api/transactions/[id]/make-recurring` erzeugt aus einer Buchung einen Dauerauftrag und verknüpft sie (`recurringTransactionId`), beides in einer DB-Transaktion. Der Anker wird **nicht** auf den Ursprungsmonat gesetzt, sondern per `addMonthsClamped(Buchungstag, intervalMonths, dayOfMonth?)` berechnet (Buchungstag = Kalendertag in Europe/Berlin; Tag wird auf die Monatslänge geklammert, z.B. 31. Jan + 1 Monat → 28./29. Feb). So bucht `materializeDueRecurringTransactions` den Ursprungsmonat nicht doppelt, sondern erst ab dem Anker. Bereits verknüpfte Buchungen → `409`.
+
 ## Fälligkeits-Filter im Analytics-Dashboard
 
 Im Summary-Endpoint wird entschieden, welche Daueraufträge im **aktuellen Monat fällig** sind:
@@ -145,6 +151,7 @@ Geskippte Daueraufträge werden aus den Projektionen **vollständig entfernt**.
 |---|---|---|
 | GET | `/api/recurring-transactions` | Alle Daueraufträge des Nutzers |
 | POST | `/api/recurring-transactions` | Neuen Dauerauftrag anlegen |
+| POST | `/api/transactions/[id]/make-recurring` | Dauerauftrag aus bestehender Buchung anlegen + verknüpfen |
 | PATCH | `/api/recurring-transactions/[id]` | Dauerauftrag bearbeiten |
 | DELETE | `/api/recurring-transactions/[id]` | Dauerauftrag löschen |
 | GET | `/api/recurring-transactions/skips?year=&month=` | Skips für einen Monat |

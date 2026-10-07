@@ -23,6 +23,8 @@ export type ReviewCategoryTransaction = {
   /** null for uncategorized bookings. */
   categoryId: string | null;
   taxRelevant: boolean;
+  /** Set when the booking belongs to a recurring transaction. */
+  recurringTransactionId?: string | null;
 };
 
 export type ReviewCategory = {

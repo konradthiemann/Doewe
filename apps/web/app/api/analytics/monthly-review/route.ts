@@ -44,6 +44,7 @@ type ReviewTx = {
   accountId: string;
   categoryId: string | null;
   taxRelevant: boolean;
+  recurringTransactionId: string | null;
 };
 
 /** Largest amount first; ties by date ascending. */
@@ -118,7 +119,8 @@ export async function GET(request: Request) {
       occurredAt: true,
       description: true,
       accountId: true,
-      taxRelevant: true
+      taxRelevant: true,
+      recurringTransactionId: true
     },
     orderBy: { amountCents: "asc" } // most negative first — enables O(1) top-expenses extraction
   });
@@ -168,7 +170,8 @@ export async function GET(request: Request) {
           occurredAt: tx.occurredAt.toISOString(),
           accountId: tx.accountId,
           categoryId: tx.categoryId,
-          taxRelevant: tx.taxRelevant
+          taxRelevant: tx.taxRelevant,
+          recurringTransactionId: tx.recurringTransactionId
         });
       }
     } else if (isPrev) {
