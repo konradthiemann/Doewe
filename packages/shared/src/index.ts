@@ -23,8 +23,8 @@ export { decideFlushStep } from "./outbox";
 export type { DashboardBudgetInput, DashboardBudget } from "./dashboardBudget";
 export { computeAvailableBudget } from "./dashboardBudget";
 
-export type { RecurringAnchor, MonthRef } from "./recurringSchedule";
-export { isRecurringDueInMonth, dueMonthsBetween } from "./recurringSchedule";
+export type { RecurringAnchor, MonthRef, CalendarDate } from "./recurringSchedule";
+export { isRecurringDueInMonth, dueMonthsBetween, addMonthsClamped } from "./recurringSchedule";
 
 export {
   BUDGET_ALERT_THRESHOLDS,
