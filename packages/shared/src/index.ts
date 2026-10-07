@@ -55,3 +55,13 @@ export { buildRecurringCsv } from "./recurringExport";
 
 export type { CategoryBarInput, CategoryBar } from "./categoryBar";
 export { computeCategoryBar } from "./categoryBar";
+
+export type {
+  RecurringKind,
+  RecurringYearItem,
+  RecurringYearRow,
+  RecurringYearTotals,
+  RecurringYearGroup,
+  RecurringYearMatrix
+} from "./recurringYear";
+export { classifyRecurringKind, buildRecurringYearMatrix } from "./recurringYear";
