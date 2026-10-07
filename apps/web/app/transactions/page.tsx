@@ -889,20 +889,20 @@ function TransactionsPage() {
             </div>
           )}
 
-          <ul className="grid gap-2 xl:grid-cols-2">
+          <ul className="grid gap-2">
             {sortedItems.map((tx) => (
               <li
                 key={tx.id}
                 className="rounded-card border border-line bg-surface p-3 text-sm shadow-card transition hover:border-brand/40 focus-within:border-brand"
               >
-                <div className="flex items-stretch justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-semibold text-ink">
+                <div className="flex items-stretch justify-between gap-3 lg:items-center">
+                  <div className="min-w-0 flex-1 lg:flex lg:items-center lg:gap-3">
+                    <div className="flex items-start justify-between gap-3 lg:min-w-0 lg:flex-1">
+                      <p className="text-sm font-semibold text-ink lg:truncate" title={tx.description}>
                         {tx.description}
                       </p>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:mt-0 lg:shrink-0 lg:flex-nowrap">
                       <time dateTime={tx.occurredAt}>
                         {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
                       </time>
@@ -918,7 +918,7 @@ function TransactionsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch">
+                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:w-auto lg:shrink-0 lg:flex-row lg:items-center lg:gap-3 lg:self-auto">
                     <span
                       className={`text-sm font-semibold text-right ${
                         tx.amountCents < 0 ? "text-expense" : "text-income"
@@ -991,15 +991,15 @@ function TransactionsPage() {
               {toDecimalString(fromCents(recurringTotalCents))} €
             </span>
           </div>
-          <ul className="grid gap-2 xl:grid-cols-2">
+          <ul className="grid gap-2">
             {filteredRecurringItems.map((rec) => (
               <li key={rec.id} className="rounded-card border border-line bg-surface p-3 text-sm shadow-card">
-                <div className="flex items-stretch justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-sm font-semibold text-ink">{rec.description}</p>
+                <div className="flex items-stretch justify-between gap-3 lg:items-center">
+                  <div className="min-w-0 flex-1 lg:flex lg:items-center lg:gap-3">
+                    <div className="flex items-start justify-between gap-3 lg:min-w-0 lg:flex-1">
+                      <p className="text-sm font-semibold text-ink lg:truncate" title={rec.description}>{rec.description}</p>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:mt-0 lg:shrink-0 lg:flex-nowrap">
                       <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
                       <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted">
                         {t("transactions.nextLabel", { date: format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }) })}
@@ -1011,7 +1011,7 @@ function TransactionsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch">
+                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:w-auto lg:shrink-0 lg:flex-row lg:items-center lg:gap-3 lg:self-auto">
                     <span className={`text-sm font-semibold text-right ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
                       {toDecimalString(fromCents(rec.amountCents))} €
                     </span>

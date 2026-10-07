@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo } from "react";
 
 import PageContainer from "../../components/PageContainer";
+import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
 
@@ -361,11 +362,10 @@ function ReviewPage() {
           </section>
 
           {/* Income breakdown by source */}
-          <section aria-labelledby="review-income-categories">
-            <div className="rounded-card border border-line bg-surface p-5">
-              <h2 id="review-income-categories" className="text-lg font-medium mb-4">
-                {t("review.incomeCategoriesTitle")}
-              </h2>
+          <CollapsibleSection
+            id="review-income-categories"
+            title={t("review.incomeCategoriesTitle")}
+          >
               {data.incomeCategories.length === 0 ? (
                 <p className="text-sm text-ink-muted">
                   {t("review.incomeCategoriesEmpty")}
@@ -404,8 +404,7 @@ function ReviewPage() {
                   })}
                 </ul>
               )}
-            </div>
-          </section>
+          </CollapsibleSection>
 
           {/* Category breakdown */}
           <section aria-labelledby="review-categories">
@@ -546,11 +545,10 @@ function ReviewPage() {
           )}
 
           {/* Top expenses */}
-          <section aria-labelledby="review-top-expenses">
-            <div className="rounded-card border border-line bg-surface p-5">
-              <h2 id="review-top-expenses" className="text-lg font-medium mb-4">
-                {t("review.topExpensesTitle")}
-              </h2>
+          <CollapsibleSection
+            id="review-top-expenses"
+            title={t("review.topExpensesTitle")}
+          >
               {data.topExpenses.length === 0 ? (
                 <p className="text-sm text-ink-muted">
                   {t("review.topExpensesEmpty")}
@@ -590,8 +588,7 @@ function ReviewPage() {
                   ))}
                 </ol>
               )}
-            </div>
-          </section>
+          </CollapsibleSection>
 
           {/* Completed saving goals */}
           {data.completedGoals.length > 0 && (
