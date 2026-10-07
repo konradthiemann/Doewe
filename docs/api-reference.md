@@ -1403,6 +1403,50 @@ All values are **integer cents**. `balanceCents` is cumulative across the window
 
 ---
 
+### `GET /api/analytics/category-year?year=YYYY`
+
+Actual bookings of a year per category and month (integer cents), grouped into expenses, income and savings, with group sums and balance (`income - expenses - savings`). Month = local month of `occurredAt`; soft-deleted bookings and other years are excluded. Group per category: name `savings`/`sparen` (case-insensitive, trimmed) is savings, `isIncome` is income, otherwise expense. Expense and savings rows are positive magnitudes (a refund/withdrawal reduces them). Bookings without a category appear as row `id: "uncategorized"` (expense for negative, income for positive amounts). Uses the household's first account (like `monthly-review`); household-scoped, no demo-account exclusion (nothing is aggregated across households).
+
+Each expense row carries the effective monthly budget (`budgetMonthlyCents`, 12 entries, `null` = no budget in that month; plan beats legacy `Budget`; YEARLY plans distributed like on `/budgets`), `budgetTotalCents`, `overMonths` (months 1-12 strictly above a positive budget) and `overYear` (spend of the budgeted months above their budget sum). Categories with a budget but no bookings appear as zero rows.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Param | Type | Description |
+|---|---|---|
+| `year` | integer 2000-2100 | Optional; defaults to the current year. Non-integers (e.g. `2036.5`) are rejected |
+
+**Success response — `200 OK`:** `CategoryYearMatrix` (`@doewe/shared`)
+
+```json
+{
+  "year": 2026,
+  "expenses": {
+    "rows": [
+      { "id": "cat_01", "name": "Lebensmittel", "kind": "expense", "monthlyCents": [45000, "… 12 entries"], "totalCents": 540000,
+        "budgetMonthlyCents": [50000, "… 12 entries"], "budgetTotalCents": 600000, "overMonths": [3], "overYear": false }
+    ],
+    "monthlyTotalsCents": [45000, "… 12 entries"],
+    "totalCents": 540000
+  },
+  "income": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0 },
+  "savings": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0 },
+  "balanceMonthlyCents": [-45000, "… 12 entries"],
+  "balanceTotalCents": -540000
+}
+```
+
+**Error responses:**
+
+| Status | Meaning |
+|---|---|
+| `400` | `{ "error": "Invalid query" }` — `year` invalid |
+| `401` | Not authenticated |
+| `404` | No account found for user |
+
+---
+
 ### `GET /api/analytics/monthly-review?month=…&year=…`
 
 Deep review of a **completed** past month: KPIs, carryover, expense breakdown by category, income by source, top expenses, and completed saving goals. Uses the user's first account.

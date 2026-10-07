@@ -5,11 +5,13 @@ import { parseAsInteger, useQueryState } from "nuqs";
 import { Suspense, useCallback, useMemo } from "react";
 
 import PageContainer from "../../components/PageContainer";
+import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
+import { CategoryYearTable } from "../../components/yearly/CategoryYearTable";
 import { RecurringYearTable } from "../../components/yearly/RecurringYearTable";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
 
-import type { RecurringYearMatrix } from "@doewe/shared";
+import type { CategoryYearMatrix, RecurringYearMatrix } from "@doewe/shared";
 
 const MIN_YEAR = 2000;
 const MAX_YEAR = 2100;
@@ -26,6 +28,12 @@ function YearlyPage() {
     `/api/recurring-transactions/yearly?year=${year}`
   );
   const matrix = query.data ?? null;
+
+  const categoryQuery = useApiQuery<CategoryYearMatrix>(
+    ["analytics", "category-year", year],
+    `/api/analytics/category-year?year=${year}`
+  );
+  const categoryMatrix = categoryQuery.data ?? null;
 
   const formatCurrency = useCallback(
     (cents: number) =>
@@ -44,9 +52,14 @@ function YearlyPage() {
     [dateLocale]
   );
 
-  const isEmpty =
+  const isRecurringEmpty =
     matrix !== null &&
     matrix.income.rows.length + matrix.expenses.rows.length + matrix.savings.rows.length === 0;
+  const isCategoryEmpty =
+    categoryMatrix !== null &&
+    categoryMatrix.income.rows.length + categoryMatrix.expenses.rows.length + categoryMatrix.savings.rows.length === 0;
+  // The empty hint only shows when there is nothing at all to display.
+  const isEmpty = isRecurringEmpty && isCategoryEmpty;
 
   const navButton =
     "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-ink-muted transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand";
@@ -88,8 +101,21 @@ function YearlyPage() {
           </div>
         </div>
 
-        {query.isPending && <p className="text-sm text-ink-muted">{t("yearly.loading")}</p>}
-        {query.isError && !matrix && <p className="text-sm text-danger">{t("yearly.error")}</p>}
+        <section aria-labelledby="category-year-heading" className="space-y-3">
+          <h2 id="category-year-heading" className="text-lg font-medium text-ink">
+            {t("yearly.categoriesTitle")}
+          </h2>
+          {categoryQuery.isPending && <p className="text-sm text-ink-muted">{t("yearly.loading")}</p>}
+          {categoryQuery.isError && !categoryMatrix && <p className="text-sm text-danger">{t("yearly.error")}</p>}
+          {categoryMatrix && !isCategoryEmpty && (
+            <CategoryYearTable
+              matrix={categoryMatrix}
+              formatCurrency={formatCurrency}
+              monthLabels={monthLabels}
+              uncategorizedLabel={t("review.uncategorized")}
+            />
+          )}
+        </section>
 
         {isEmpty && (
           <div className="rounded-card border border-line bg-surface p-6 text-center">
@@ -103,9 +129,15 @@ function YearlyPage() {
           </div>
         )}
 
-        {matrix && !isEmpty && (
-          <RecurringYearTable matrix={matrix} formatCurrency={formatCurrency} monthLabels={monthLabels} />
-        )}
+        <CollapsibleSection id="recurring-year" title={t("yearly.recurringTitle")}>
+          <p className="mb-3 text-sm text-ink-muted">{t("yearly.recurringSubtitle")}</p>
+          {query.isPending && <p className="text-sm text-ink-muted">{t("yearly.loading")}</p>}
+          {query.isError && !matrix && <p className="text-sm text-danger">{t("yearly.error")}</p>}
+          {matrix && !isRecurringEmpty && (
+            <RecurringYearTable matrix={matrix} formatCurrency={formatCurrency} monthLabels={monthLabels} />
+          )}
+          {isRecurringEmpty && <p className="text-sm text-ink-muted">{t("yearly.empty")}</p>}
+        </CollapsibleSection>
       </PageContainer>
     </main>
   );
