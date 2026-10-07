@@ -31,8 +31,8 @@ const food = cat({
   spentCents: 6000,
   transactionCount: 2,
   transactions: [
-    { id: "t1", description: "Supermarket", amountCents: 4000, occurredAt: "2025-03-10T12:00:00.000Z" },
-    { id: "t2", description: "Bakery", amountCents: 2000, occurredAt: "2025-03-05T12:00:00.000Z" }
+    { id: "t1", description: "Supermarket", amountCents: 4000, occurredAt: "2025-03-10T12:00:00.000Z", accountId: "acc-1", categoryId: "c-food", taxRelevant: false },
+    { id: "t2", description: "Bakery", amountCents: 2000, occurredAt: "2025-03-05T12:00:00.000Z", accountId: "acc-1", categoryId: "c-food", taxRelevant: false }
   ]
 });
 const fun = cat({ id: "c-fun", name: "Fun", spentCents: 4000, transactionCount: 0 });

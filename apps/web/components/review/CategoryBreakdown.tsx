@@ -1,10 +1,17 @@
 "use client";
 
 import { computeCategoryBar } from "@doewe/shared";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
 import { budgetTone, ProgressBar } from "../ui/ProgressBar";
+
+import {
+  DEFAULT_SORT_DIRECTION,
+  sortCategories,
+  type CategorySortKey,
+  type SortDirection
+} from "./sortCategories";
 
 export type ReviewCategoryTransaction = {
   id: string;
@@ -12,6 +19,10 @@ export type ReviewCategoryTransaction = {
   /** Positive expense amount in cents. */
   amountCents: number;
   occurredAt: string;
+  accountId: string;
+  /** null for uncategorized bookings. */
+  categoryId: string | null;
+  taxRelevant: boolean;
 };
 
 export type ReviewCategory = {
@@ -31,32 +42,103 @@ export interface CategoryBreakdownProps {
   outcomeCents: number;
   formatCurrency: (cents: number) => string;
   dateLocale: string;
+  /** When set, every booking in an opened category becomes a button that calls this. */
+  onEditTransaction?: (tx: ReviewCategoryTransaction) => void;
+}
+
+type SortState = { key: CategorySortKey; direction: SortDirection } | null;
+
+const HEADER_COLUMNS: Array<{ key: CategorySortKey; labelKey: string; align: string }> = [
+  { key: "name", labelKey: "review.colCategory", align: "justify-start" },
+  { key: "distribution", labelKey: "review.colBar", align: "justify-start" },
+  { key: "spent", labelKey: "review.colSpent", align: "justify-end" },
+  { key: "budget", labelKey: "review.colBudget", align: "justify-end" },
+  { key: "status", labelKey: "review.colStatus", align: "justify-end" }
+];
+
+function SortIndicator({ direction }: { direction: SortDirection | null }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`h-3 w-3 shrink-0 ${direction ? "text-ink" : "text-ink-faint opacity-50"}`}
+      fill="currentColor"
+    >
+      {direction === "asc" ? (
+        <path d="M12 6l7 10H5z" />
+      ) : direction === "desc" ? (
+        <path d="M12 18L5 8h14z" />
+      ) : (
+        <path d="M12 4l5 6H7zM12 20l-5-6h10z" />
+      )}
+    </svg>
+  );
 }
 
 /** Expense categories with a bar each; tapping a row reveals its individual bookings. */
-export function CategoryBreakdown({ categories, outcomeCents, formatCurrency, dateLocale }: CategoryBreakdownProps) {
-  const { t } = useI18n();
+export function CategoryBreakdown({
+  categories,
+  outcomeCents,
+  formatCurrency,
+  dateLocale,
+  onEditTransaction
+}: CategoryBreakdownProps) {
+  const { t, locale } = useI18n();
+  const [sort, setSort] = useState<SortState>(null);
+
+  const rows = useMemo(
+    () => (sort ? sortCategories(categories, sort.key, sort.direction, locale) : categories),
+    [categories, sort, locale]
+  );
+
+  const toggleSort = (key: CategorySortKey) =>
+    setSort((prev) =>
+      prev?.key === key
+        ? { key, direction: prev.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: DEFAULT_SORT_DIRECTION[key] }
+    );
+
   return (
     <div>
-      <div
-        aria-hidden="true"
-        className={`mb-2 hidden gap-x-3 px-[calc(0.75rem+1px)] text-xs font-medium text-ink-muted lg:grid ${COLS}`}
-      >
-        <span>{t("review.colCategory")}</span>
-        <span>{t("review.colBar")}</span>
-        <span className="text-right">{t("review.colSpent")}</span>
-        <span className="text-right">{t("review.colBudget")}</span>
-        <span className="text-right">{t("review.colStatus")}</span>
-        <span />
+      <div role="table" aria-label={t("review.categoriesTitle")} className="hidden lg:block">
+        <div role="rowgroup">
+          <div
+            role="row"
+            className={`mb-2 grid gap-x-3 px-[calc(0.75rem+1px)] text-xs font-medium text-ink-muted ${COLS}`}
+          >
+            {HEADER_COLUMNS.map(({ key, labelKey, align }) => {
+              const direction = sort?.key === key ? sort.direction : null;
+              return (
+                <div
+                  key={key}
+                  role="columnheader"
+                  aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}
+                  className={`flex ${align}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(key)}
+                    className="inline-flex items-center gap-1 rounded-field py-1 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  >
+                    {t(labelKey)}
+                    <SortIndicator direction={direction} />
+                  </button>
+                </div>
+              );
+            })}
+            <div role="columnheader" aria-hidden="true" />
+          </div>
+        </div>
       </div>
       <ul className="space-y-2">
-        {categories.map((cat) => (
+        {rows.map((cat) => (
           <CategoryRow
             key={cat.id}
             category={cat}
             outcomeCents={outcomeCents}
             formatCurrency={formatCurrency}
             dateLocale={dateLocale}
+            onEditTransaction={onEditTransaction}
           />
         ))}
       </ul>
@@ -68,7 +150,8 @@ function CategoryRow({
   category,
   outcomeCents,
   formatCurrency,
-  dateLocale
+  dateLocale,
+  onEditTransaction
 }: { category: ReviewCategory } & Omit<CategoryBreakdownProps, "categories">) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -154,20 +237,35 @@ function CategoryRow({
             </p>
           ) : (
             <ul className="divide-y divide-line">
-              {category.transactions.map((tx) => (
-                <li
-                  key={tx.id}
-                  className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3 py-2"
-                >
-                  <span className="text-xs text-ink-muted tabular-nums">
-                    {new Date(tx.occurredAt).toLocaleDateString(dateLocale, { day: "numeric", month: "short" })}
-                  </span>
-                  <p className="truncate text-sm text-ink">{tx.description}</p>
-                  <span className="whitespace-nowrap text-right text-sm font-semibold text-expense tabular-nums">
-                    {formatCurrency(tx.amountCents)}
-                  </span>
-                </li>
-              ))}
+              {category.transactions.map((tx) => {
+                const cells = (
+                  <>
+                    <span className="text-xs text-ink-muted tabular-nums">
+                      {new Date(tx.occurredAt).toLocaleDateString(dateLocale, { day: "numeric", month: "short" })}
+                    </span>
+                    <span className="truncate text-sm text-ink">{tx.description}</span>
+                    <span className="whitespace-nowrap text-right text-sm font-semibold text-expense tabular-nums">
+                      {formatCurrency(tx.amountCents)}
+                    </span>
+                  </>
+                );
+                const rowGrid = "grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-3";
+                return (
+                  <li key={tx.id}>
+                    {onEditTransaction ? (
+                      <button
+                        type="button"
+                        onClick={() => onEditTransaction(tx)}
+                        className={`${rowGrid} min-h-[44px] w-full rounded-field px-1 py-2 text-left hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+                      >
+                        {cells}
+                      </button>
+                    ) : (
+                      <div className={`${rowGrid} py-2`}>{cells}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

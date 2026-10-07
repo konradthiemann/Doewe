@@ -1311,7 +1311,7 @@ Deep review of a **completed** past month: KPIs, carryover, expense breakdown by
   "savingsRatePct": 16,
   "categories": [
     { "id": "cat_02", "name": "Lebensmittel", "spentCents": 6340, "budgetCents": 20000, "transactionCount": 3,
-      "transactions": [ { "id": "tx_11", "description": "Wocheneinkauf", "amountCents": 4200, "occurredAt": "2026-06-14T10:00:00.000Z" } ] }
+      "transactions": [ { "id": "tx_11", "description": "Wocheneinkauf", "amountCents": 4200, "occurredAt": "2026-06-14T10:00:00.000Z", "accountId": "acc_01", "categoryId": "cat_02", "taxRelevant": false } ] }
   ],
   "incomeCategories": [
     { "id": "cat_01", "name": "Gehalt", "amountCents": 320000, "transactionCount": 1 }

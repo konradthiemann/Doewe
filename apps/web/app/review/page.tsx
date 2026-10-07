@@ -1,11 +1,15 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo } from "react";
+import { Suspense, useCallback, useMemo, useRef, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
-import { CategoryBreakdown, type ReviewCategory } from "../../components/review/CategoryBreakdown";
+import { CategoryBreakdown, type ReviewCategory, type ReviewCategoryTransaction } from "../../components/review/CategoryBreakdown";
+import TransactionForm from "../../components/TransactionForm";
 import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
+import { Dialog } from "../../components/ui/Dialog";
+import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { useI18n } from "../../lib/i18n";
 
@@ -106,6 +110,40 @@ function ReviewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [editingTx, setEditingTx] = useState<ReviewCategoryTransaction | null>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
+
+  const openEditDialog = useCallback((tx: ReviewCategoryTransaction) => {
+    lastFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setEditingTx(tx);
+  }, []);
+
+  const closeEditDialog = useCallback(() => {
+    setEditingTx(null);
+    window.setTimeout(() => lastFocusedRef.current?.focus(), 0);
+  }, []);
+
+  // Same invalidation as the transactions page; react-query refetches active views.
+  const invalidateTransactionData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    void queryClient.invalidateQueries({ queryKey: ["saving-plan"] });
+    void queryClient.invalidateQueries({ queryKey: ["tax"] });
+  }, [queryClient]);
+
+  const handleEditSuccess = (message?: string) => {
+    invalidateTransactionData();
+    closeEditDialog();
+    toast.success(message ?? t("transactionForm.updated"));
+  };
+
+  const handleDeleteSuccess = (message?: string) => {
+    invalidateTransactionData();
+    closeEditDialog();
+    toast.success(message ?? t("transactionForm.deleted"));
+  };
 
   const paramMonth = searchParams.get("month");
   const paramYear = searchParams.get("year");
@@ -335,9 +373,6 @@ function ReviewPage() {
                     {formatCurrency(data.balanceAtStartCents)}
                   </span>
                 </span>
-                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
                 <span className="whitespace-nowrap">
                   {t("review.balanceAtEnd")}:{" "}
                   <span
@@ -370,6 +405,7 @@ function ReviewPage() {
                   outcomeCents={data.outcomeCents}
                   formatCurrency={formatCurrency}
                   dateLocale={dateLocale}
+                  onEditTransaction={openEditDialog}
                 />
               )}
             </div>
@@ -562,6 +598,35 @@ function ReviewPage() {
         </>
       )}
       </PageContainer>
+
+      {/* Edit booking dialog (the review list only contains expenses) */}
+      <Dialog
+        open={!!editingTx}
+        onOpenChange={(open) => {
+          if (!open) closeEditDialog();
+        }}
+        title={t("transactionForm.editTitle")}
+      >
+        {editingTx && (
+          <TransactionForm
+            mode="edit"
+            transaction={{
+              id: editingTx.id,
+              accountId: editingTx.accountId,
+              // Review amounts are positive expense values; the form expects the signed DB amount.
+              amountCents: -editingTx.amountCents,
+              description: editingTx.description,
+              occurredAt: editingTx.occurredAt,
+              categoryId: editingTx.categoryId,
+              taxRelevant: editingTx.taxRelevant
+            }}
+            headingId={`edit-transaction-${editingTx.id}`}
+            onSuccess={handleEditSuccess}
+            onDelete={handleDeleteSuccess}
+            onClose={closeEditDialog}
+          />
+        )}
+      </Dialog>
     </main>
   );
 }

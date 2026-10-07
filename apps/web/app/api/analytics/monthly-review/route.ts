@@ -12,7 +12,8 @@
  * - `savingsRatePct`           — Sparquote in % (savingsCents / incomeCents)
  * - `categories`               — Ausgaben je Kategorie inkl. Budget-Vergleich;
  *                                je Eintrag `transactions` (id, description, positiver
- *                                amountCents, occurredAt ISO) der Monatsausgaben, betrag
+ *                                amountCents, occurredAt ISO, accountId, categoryId (null bei
+ *                                unkategorisiert), taxRelevant) der Monatsausgaben, betrag
  *                                absteigend, bei Gleichstand Datum aufsteigend; ohne
  *                                Spar-Kategorie und Einnahmen; Budget-only: []
  * - `incomeCategories`         — Einnahmen je Quelle/Kategorie (größte zuerst)
@@ -35,7 +36,15 @@ export const dynamic = "force-dynamic";
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
 
-type ReviewTx = { id: string; description: string; amountCents: number; occurredAt: string };
+type ReviewTx = {
+  id: string;
+  description: string;
+  amountCents: number;
+  occurredAt: string;
+  accountId: string;
+  categoryId: string | null;
+  taxRelevant: boolean;
+};
 
 /** Largest amount first; ties by date ascending. */
 function byAmountDescThenDateAsc(a: ReviewTx, b: ReviewTx): number {
@@ -107,7 +116,9 @@ export async function GET(request: Request) {
       amountCents: true,
       categoryId: true,
       occurredAt: true,
-      description: true
+      description: true,
+      accountId: true,
+      taxRelevant: true
     },
     orderBy: { amountCents: "asc" } // most negative first — enables O(1) top-expenses extraction
   });
@@ -154,7 +165,10 @@ export async function GET(request: Request) {
           id: tx.id,
           description: tx.description,
           amountCents: -amt,
-          occurredAt: tx.occurredAt.toISOString()
+          occurredAt: tx.occurredAt.toISOString(),
+          accountId: tx.accountId,
+          categoryId: tx.categoryId,
+          taxRelevant: tx.taxRelevant
         });
       }
     } else if (isPrev) {
