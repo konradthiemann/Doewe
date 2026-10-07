@@ -71,6 +71,22 @@ sind):
 - **E-Mail:** `demo@doewe.test`
 - **Passwort:** `demo1234`
 
+### Beispieldaten für lokale Entwicklung
+
+Für Rückblick, Jahresübersicht (`/yearly`), Budgets und Dashboard gibt es ein
+eigenes Seed-Skript mit einem Beispiel-Haushalt für das gesamte Vorjahr und das
+laufende Jahr (inkl. Daueraufträge mit verschiedenen Intervallen, Budget-Plänen
+und Ersparnissen):
+
+```bash
+npm --workspace @doewe/web run db:seed:sample
+```
+
+- **E-Mail:** `sample@doewe.test` (Passwort: siehe Header von `apps/web/prisma/seed-sample-year.js`)
+- Idempotent (baut nur diesen Haushalt neu auf), deterministisch, fasst den
+  Demo-Account nicht an. Bricht ab bei `NODE_ENV=production` oder wenn
+  `DATABASE_URL` nicht auf `localhost`/`127.0.0.1` zeigt.
+
 ## Qualitäts-Checks
 
 ```bash

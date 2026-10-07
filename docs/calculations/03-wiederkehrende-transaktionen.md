@@ -4,6 +4,8 @@
 - `apps/web/app/api/recurring-transactions/route.ts`
 - `apps/web/app/api/recurring-transactions/[id]/route.ts`
 - `apps/web/app/api/recurring-transactions/skips/route.ts`
+- `apps/web/app/api/transactions/[id]/make-recurring/route.ts` (Buchung → Dauerauftrag)
+- `packages/shared/src/recurringSchedule.ts` (`addMonthsClamped`)
 - `apps/web/app/api/analytics/summary/route.ts` (Filterlogik)
 - `apps/web/lib/recurringBooking.ts` (automatisches Buchen)
 - `apps/web/app/api/cron/materialize-recurring/route.ts` (täglicher Cron-Trigger)
@@ -77,6 +79,10 @@ flowchart TD
 | 10 | 2026-07-10 (heute = vergangen, daher nächsten Monat) |
 | 31 | 2026-06-30 (clamp: Juni hat 30 Tage) |
 
+### Aus einer bestehenden Buchung (`make-recurring`)
+
+`POST /api/transactions/[id]/make-recurring` erzeugt aus einer Buchung einen Dauerauftrag und verknüpft sie (`recurringTransactionId`), beides in einer DB-Transaktion. Der Anker wird **nicht** auf den Ursprungsmonat gesetzt, sondern per `addMonthsClamped(Buchungstag, intervalMonths, dayOfMonth?)` berechnet (Buchungstag = Kalendertag in Europe/Berlin; Tag wird auf die Monatslänge geklammert, z.B. 31. Jan + 1 Monat → 28./29. Feb). So bucht `materializeDueRecurringTransactions` den Ursprungsmonat nicht doppelt, sondern erst ab dem Anker. Bereits verknüpfte Buchungen → `409`.
+
 ## Fälligkeits-Filter im Analytics-Dashboard
 
 Im Summary-Endpoint wird entschieden, welche Daueraufträge im **aktuellen Monat fällig** sind:
@@ -139,14 +145,24 @@ const activeRecurringThisMonth = recurringThisMonth.filter(r => !skippedIds.has(
 
 Geskippte Daueraufträge werden aus den Projektionen **vollständig entfernt**.
 
+## Jahresmatrix (`/yearly`)
+
+`buildRecurringYearMatrix(items, year)` (`@doewe/shared`, `recurringYear.ts`) erzeugt pro Dauerauftrag 12 Monatswerte in Cent (mit Vorzeichen wie gespeichert): Betrag in den Monaten, in denen `isRecurringDueInMonth` (Anker `nextOccurrence` + `intervalMonths`) zutrifft, sonst 0; übersprungene Monate (Skips des Jahres) sind 0. Daueraufträge mit Anker nach dem Jahr bleiben als Nullzeile erhalten.
+
+- **Gruppen:** `classifyRecurringKind` — Spar-Kategorie (`savings`/`sparen`) → `savings`, sonst Betrag `>= 0` → `income`, `< 0` → `expense`.
+- **Summen:** je Gruppe Monatssummen, Jahressumme und `monthlyAverageCents = round(Jahressumme / 12)`; `net` = vorzeichenbehaftete Summe aller Gruppen.
+- **Quelle:** `GET /api/recurring-transactions/yearly?year=YYYY`, Darstellung auf der Seite `/yearly`.
+
 ## API-Endpunkte
 
 | Methode | Endpoint | Beschreibung |
 |---|---|---|
 | GET | `/api/recurring-transactions` | Alle Daueraufträge des Nutzers |
 | POST | `/api/recurring-transactions` | Neuen Dauerauftrag anlegen |
+| POST | `/api/transactions/[id]/make-recurring` | Dauerauftrag aus bestehender Buchung anlegen + verknüpfen |
 | PATCH | `/api/recurring-transactions/[id]` | Dauerauftrag bearbeiten |
 | DELETE | `/api/recurring-transactions/[id]` | Dauerauftrag löschen |
 | GET | `/api/recurring-transactions/skips?year=&month=` | Skips für einen Monat |
 | POST | `/api/recurring-transactions/skips` | Skip hinzufügen (upsert) |
 | DELETE | `/api/recurring-transactions/skips` | Skip entfernen |
+| GET | `/api/recurring-transactions/yearly?year=` | Jahresmatrix (Monatsbeträge, Gruppen, Saldo) |

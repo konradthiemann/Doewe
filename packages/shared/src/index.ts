@@ -1,6 +1,7 @@
 export type { Cents } from "./money";
 export {
   parseCents,
+  parseMoneyInput,
   fromCents,
   add as addCents,
   sub as subCents,
@@ -23,8 +24,8 @@ export { decideFlushStep } from "./outbox";
 export type { DashboardBudgetInput, DashboardBudget } from "./dashboardBudget";
 export { computeAvailableBudget } from "./dashboardBudget";
 
-export type { RecurringAnchor, MonthRef } from "./recurringSchedule";
-export { isRecurringDueInMonth, dueMonthsBetween } from "./recurringSchedule";
+export type { RecurringAnchor, MonthRef, CalendarDate } from "./recurringSchedule";
+export { isRecurringDueInMonth, dueMonthsBetween, addMonthsClamped } from "./recurringSchedule";
 
 export {
   BUDGET_ALERT_THRESHOLDS,
@@ -52,3 +53,34 @@ export {
 
 export type { RecurringExportItem } from "./recurringExport";
 export { buildRecurringCsv } from "./recurringExport";
+
+export type { CategoryBarInput, CategoryBar } from "./categoryBar";
+export { computeCategoryBar } from "./categoryBar";
+
+export type {
+  RecurringKind,
+  RecurringYearItem,
+  RecurringYearRow,
+  RecurringYearTotals,
+  RecurringYearGroup,
+  RecurringYearMatrix
+} from "./recurringYear";
+export { classifyRecurringKind, buildRecurringYearMatrix, smoothedAvailablePerMonth } from "./recurringYear";
+
+export type { BudgetPeriod, BudgetPlanLike } from "./budgetDistribution";
+export {
+  BUDGET_PERIODS,
+  distributeYearlyBudget,
+  planMonthlyCents,
+  resolveEffectiveBudgets
+} from "./budgetDistribution";
+
+export type {
+  CategoryYearKind,
+  CategoryYearCategory,
+  CategoryYearTx,
+  CategoryYearRow,
+  CategoryYearGroup,
+  CategoryYearMatrix
+} from "./categoryYear";
+export { buildCategoryYearMatrix } from "./categoryYear";

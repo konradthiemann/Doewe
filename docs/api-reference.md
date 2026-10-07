@@ -484,6 +484,34 @@ Delete a transaction by ID.
 
 Receipt files (photos/PDFs) attached to transactions as evidence for the German tax return (Belegvorhaltepflicht — receipts are archived, not submitted). Files are stored as bytes in PostgreSQL. Limits: allowed types `image/jpeg`, `image/png`, `image/webp`, `application/pdf`; max. **5 MB** per file; max. **5 attachments** per transaction. List/metadata responses never contain the file bytes.
 
+### `POST /api/transactions/[id]/make-recurring`
+
+Turns an existing booking into a recurring transaction (`MONTHLY`). Creates a `RecurringTransaction` with the booking's account, category, amount (sign as stored) and description, and links the booking to it (`recurringTransactionId`).
+
+**Auth required:** Yes (booking must belong to the user's household)
+
+**Request body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `intervalMonths` | integer | Required. 1–24 |
+| `dayOfMonth` | integer | Optional. 1–31; defaults to the booking's calendar day (Europe/Berlin) |
+
+`nextOccurrence` = booking day + `intervalMonths` (day = `dayOfMonth`, clamped to the target month's length, e.g. 31 Jan + 1 month → 28/29 Feb), at local midnight. The origin month is therefore not booked again by the auto-booking run. Create and link happen in one database transaction.
+
+**Success response — `201 Created`:** the new recurring transaction object.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Validation failed |
+| `401` | Not authenticated |
+| `404` | `{ "error": "Transaction not found" }` — unknown, soft-deleted or foreign booking |
+| `409` | `{ "error": "Transaction is already linked to a recurring transaction" }` (also on a concurrent double submit) |
+
+---
+
 ### `GET /api/transactions/[id]/attachments`
 
 List attachment metadata for one transaction, ordered by `createdAt` ascending.
@@ -768,6 +796,49 @@ Delete a recurring transaction template and all its skip records (cascading dele
 
 ---
 
+### `GET /api/recurring-transactions/yearly?year=YYYY`
+
+Year matrix of the household's recurring transactions: per item the signed amount (integer cents) due in each month of the year, grouped into income, expenses and savings. An item appears in a month only if it is due there (anchor `nextOccurrence` + `intervalMonths`, same logic as `isRecurringDueInMonth`); months skipped via `RecurringTransactionSkip` of that year count as `0`. Soft-deleted items are excluded. Items whose anchor lies after the year stay as rows of zeros. Savings = category named `savings`/`sparen` (case-insensitive); otherwise the sign decides (`>= 0` income, `< 0` expense).
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Param | Type | Description |
+|---|---|---|
+| `year` | integer 2000-2100 | Optional; defaults to the current year |
+
+**Success response — `200 OK`:** `RecurringYearMatrix` (`@doewe/shared`)
+
+```json
+{
+  "year": 2026,
+  "income": {
+    "rows": [
+      { "id": "rec_01", "description": "Gehalt", "categoryId": "cat_01", "categoryName": "Gehalt", "kind": "income",
+        "amountCents": 300000, "intervalMonths": 1, "monthlyCents": [300000, 300000, "… 12 entries"], "totalCents": 3600000 }
+    ],
+    "monthlyTotalsCents": [300000, "… 12 entries"],
+    "totalCents": 3600000,
+    "monthlyAverageCents": 300000
+  },
+  "expenses": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0, "monthlyAverageCents": 0 },
+  "savings": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0, "monthlyAverageCents": 0 },
+  "net": { "monthlyTotalsCents": [300000, "… 12 entries"], "totalCents": 3600000, "monthlyAverageCents": 300000 }
+}
+```
+
+`net` is the signed sum of all three groups; `monthlyAverageCents` is `round(totalCents / 12)`. Rows are ordered by description.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | `{ "error": "Invalid query" }` — `year` not an integer in 2000-2100 |
+| `401` | Not authenticated |
+
+---
+
 ## Recurring Transaction Skips
 
 ### `GET /api/recurring-transactions/skips?year=…&month=…`
@@ -933,6 +1004,53 @@ There is **no `title` field** in the schema — the DB default `""` is used.
 | `401` | Not authenticated |
 | `404` | Account or category not found / not owned by user |
 | `500` | Duplicate (account, category, month, year) — the unique-constraint violation is not caught explicitly |
+
+---
+
+## Budget Plans
+
+Standing per-category budgets (`MONTHLY` or `YEARLY`); the plan takes precedence over a per-month budget from `/api/budgets`, which only applies to categories without a plan. All endpoints require auth (`401`) and are household-scoped. Calculation: `docs/calculations/06-budgets.md`.
+
+### `GET /api/budget-plans?year=YYYY`
+
+`year` is optional (default: current year, 2000–2100, else `400 {"error":"Invalid query"}`).
+
+**Success response — `200 OK`:**
+```json
+{
+  "year": 2026,
+  "availablePerMonthCents": [0, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000],
+  "plans": [
+    {
+      "id": "plan_01", "categoryId": "cat_02", "period": "YEARLY", "amountCents": 1200000,
+      "createdAt": "2026-04-01T00:00:00.000Z", "updatedAt": "2026-04-01T00:00:00.000Z",
+      "categoryName": "Hobby", "monthlyCents": [0, 109100, 109090, 109090, 109090, 109090, 109090, 109090, 109090, 109090, 109090, 109090]
+    }
+  ],
+  "budgetableCategories": [{ "id": "cat_02", "name": "Hobby", "planId": "plan_01" }, { "id": "cat_03", "name": "Food", "planId": null }]
+}
+```
+
+`availablePerMonthCents` is the smoothed monthly availability of the recurring-transaction year matrix (yearly income / 12, rounded, plus that month's recurring expenses and savings). `budgetableCategories` excludes income and savings categories. `monthlyCents` always sums to the yearly amount for `YEARLY` plans.
+
+### `POST /api/budget-plans`
+
+Body: `{ "categoryId": string, "period": "MONTHLY" | "YEARLY", "amountCents": integer 1..1000000000 }`
+
+| Status | Reason |
+|---|---|
+| `201` | Plan DTO `{ id, categoryId, period, amountCents, createdAt, updatedAt }`; a soft-deleted plan of the category is revived (same `id`) |
+| `400` | Validation failed, or `{"error":"Category not budgetable"}` (savings/income category) |
+| `404` | `{"error":"Category not found"}` (unknown, foreign or soft-deleted category) |
+| `409` | `{"error":"Budget plan already exists for category"}` |
+
+### `PATCH /api/budget-plans/[id]`
+
+Body: `{ "period"?: ..., "amountCents"?: ... }` (at least one field). `200` Plan DTO; `400` validation / empty body; `404` unknown, foreign or deleted plan.
+
+### `DELETE /api/budget-plans/[id]`
+
+Soft-delete. `204` no body; `404` unknown, foreign or already deleted plan.
 
 ---
 
@@ -1285,6 +1403,50 @@ All values are **integer cents**. `balanceCents` is cumulative across the window
 
 ---
 
+### `GET /api/analytics/category-year?year=YYYY`
+
+Actual bookings of a year per category and month (integer cents), grouped into expenses, income and savings, with group sums and balance (`income - expenses - savings`). Month = local month of `occurredAt`; soft-deleted bookings and other years are excluded. Group per category: name `savings`/`sparen` (case-insensitive, trimmed) is savings, `isIncome` is income, otherwise expense. Expense and savings rows are positive magnitudes (a refund/withdrawal reduces them). Bookings without a category appear as row `id: "uncategorized"` (expense for negative, income for positive amounts). Uses the household's first account (like `monthly-review`); household-scoped, no demo-account exclusion (nothing is aggregated across households).
+
+Each expense row carries the effective monthly budget (`budgetMonthlyCents`, 12 entries, `null` = no budget in that month; plan beats legacy `Budget`; YEARLY plans distributed like on `/budgets`), `budgetTotalCents`, `overMonths` (months 1-12 strictly above a positive budget) and `overYear` (spend of the budgeted months above their budget sum). Categories with a budget but no bookings appear as zero rows.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Param | Type | Description |
+|---|---|---|
+| `year` | integer 2000-2100 | Optional; defaults to the current year. Non-integers (e.g. `2036.5`) are rejected |
+
+**Success response — `200 OK`:** `CategoryYearMatrix` (`@doewe/shared`)
+
+```json
+{
+  "year": 2026,
+  "expenses": {
+    "rows": [
+      { "id": "cat_01", "name": "Lebensmittel", "kind": "expense", "monthlyCents": [45000, "… 12 entries"], "totalCents": 540000,
+        "budgetMonthlyCents": [50000, "… 12 entries"], "budgetTotalCents": 600000, "overMonths": [3], "overYear": false }
+    ],
+    "monthlyTotalsCents": [45000, "… 12 entries"],
+    "totalCents": 540000
+  },
+  "income": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0 },
+  "savings": { "rows": [], "monthlyTotalsCents": [], "totalCents": 0 },
+  "balanceMonthlyCents": [-45000, "… 12 entries"],
+  "balanceTotalCents": -540000
+}
+```
+
+**Error responses:**
+
+| Status | Meaning |
+|---|---|
+| `400` | `{ "error": "Invalid query" }` — `year` invalid |
+| `401` | Not authenticated |
+| `404` | No account found for user |
+
+---
+
 ### `GET /api/analytics/monthly-review?month=…&year=…`
 
 Deep review of a **completed** past month: KPIs, carryover, expense breakdown by category, income by source, top expenses, and completed saving goals. Uses the user's first account.
@@ -1310,7 +1472,8 @@ Deep review of a **completed** past month: KPIs, carryover, expense breakdown by
   "balanceAtEndCents": 295860,
   "savingsRatePct": 16,
   "categories": [
-    { "id": "cat_02", "name": "Lebensmittel", "spentCents": 6340, "budgetCents": 20000, "transactionCount": 3 }
+    { "id": "cat_02", "name": "Lebensmittel", "spentCents": 6340, "budgetCents": 20000, "transactionCount": 3,
+      "transactions": [ { "id": "tx_11", "description": "Wocheneinkauf", "amountCents": 4200, "occurredAt": "2026-06-14T10:00:00.000Z", "accountId": "acc_01", "categoryId": "cat_02", "taxRelevant": false, "recurringTransactionId": null } ] }
   ],
   "incomeCategories": [
     { "id": "cat_01", "name": "Gehalt", "amountCents": 320000, "transactionCount": 1 }
@@ -1331,7 +1494,8 @@ Notable semantics:
 
 - All monetary values are **integer cents**.
 - Income/expense classification is by **amount sign** (`amountCents >= 0` = income), not by `Category.isIncome` — except the savings category, which is classified first.
-- `categories` (expenses) is sorted over-budget first, then by spend descending; an `"uncategorized"` entry is appended when uncategorized spend exists. `incomeCategories` is sorted by amount descending.
+- `categories` (expenses) is sorted over-budget first, then by spend descending; an `"uncategorized"` entry is appended when uncategorized spend exists. Each entry carries `transactions` (the month's individual expenses: `id`, `description`, positive `amountCents`, ISO `occurredAt`), sorted by amount descending, ties by date ascending; savings and income are excluded, budget-only categories return `[]`. `incomeCategories` is sorted by amount descending.
+- Each `transactions[]` entry additionally carries `accountId`, `categoryId` (`null` when uncategorized), `taxRelevant` and `recurringTransactionId` (`null` unless the booking belongs to a recurring transaction) so the review page can open its edit dialog without a second request.
 - `topExpenses` are the 5 largest single non-savings expenses (amounts reported positive).
 - `availableMonths` lists every month from the earliest transaction up to (excluding) the current month, most recent first.
 - `prevMonth` is `null` when the preceding month has no data.

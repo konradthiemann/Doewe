@@ -46,6 +46,67 @@ export function parseCents(input: string): Cents {
   return brand(signed);
 }
 
+const GROUPED_INT = /^[1-9]\d{0,2}(\.\d{3})+$/;
+
+/**
+ * Parst eine Benutzereingabe (deutsch ODER englisch getippt) in Integer-Cent.
+ * Gibt `null` zurück statt zu werfen — gedacht für Formularfelder.
+ *
+ * Regeln (die Eingabe wird zuerst getrimmt):
+ * - Enthält sie ein Komma: Komma = Dezimaltrenner, Punkte davor = Tausendertrenner
+ *   ("1.234,56" → 123456). Höchstens ein Komma, 1–2 Nachkommastellen.
+ * - Nur Punkte, kein Komma:
+ *   - mehrere Punkte → Tausendertrenner, müssen sauber gruppiert sein ("1.234.567");
+ *   - genau ein Punkt mit 1–2 Ziffern danach → Dezimalpunkt ("12.5" → 1250);
+ *   - genau ein Punkt mit genau 3 Ziffern danach → Tausendertrenner ("1.234" → 123400),
+ *     weil mehr als 2 Nachkommastellen ohnehin ungültig wären. Eine führende Gruppe
+ *     "0" ("0.500") ist ungültig (null), nicht 500 €.
+ * - Alles andere (leer, Buchstaben, Währungssymbole, Vorzeichen/negativ, >2 Nachkommastellen,
+ *   mehrere Kommas) → `null`.
+ * - "0,00" ergibt 0; ob 0 erlaubt ist, entscheidet der Aufrufer.
+ *
+ * Exakt ohne Float-Fehler: reine String-Arithmetik, kein `parseFloat`.
+ *
+ * @example
+ * parseMoneyInput("1.234,56") // → 123456
+ * parseMoneyInput("12.5")     // → 1250
+ * parseMoneyInput("abc")      // → null
+ */
+export function parseMoneyInput(input: string): number | null {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return null;
+
+  let intPart: string;
+  let frac = "";
+  if (trimmed.includes(",")) {
+    const parts = trimmed.split(",");
+    if (parts.length !== 2) return null;
+    const [rawInt = "", rawFrac = ""] = parts;
+    if (!/^\d{0,2}$/.test(rawFrac)) return null;
+    if (rawInt !== "" && !/^\d+$/.test(rawInt) && !GROUPED_INT.test(rawInt)) return null;
+    if (rawInt === "" && rawFrac === "") return null;
+    intPart = rawInt.replace(/\./g, "");
+    frac = rawFrac;
+  } else if (trimmed.includes(".")) {
+    const dots = trimmed.split(".").length - 1;
+    const [rawInt = "", rawFrac = ""] = trimmed.split(".");
+    if (dots === 1 && /^\d+$/.test(rawInt) && /^\d{1,2}$/.test(rawFrac)) {
+      intPart = rawInt;
+      frac = rawFrac;
+    } else if (GROUPED_INT.test(trimmed)) {
+      intPart = trimmed.replace(/\./g, "");
+    } else {
+      return null;
+    }
+  } else {
+    if (!/^\d+$/.test(trimmed)) return null;
+    intPart = trimmed;
+  }
+
+  const cents = Number(intPart || "0") * 100 + Number((frac + "00").slice(0, 2));
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
 /**
  * Erstellt einen `Cents`-Wert aus einer rohen ganzen Zahl.
  * Verwende dies, wenn du einen Integer aus der Datenbank liest (`amountCents`).

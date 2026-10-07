@@ -9,7 +9,8 @@ const SOFT_DELETE_MODELS = new Set([
   "Category",
   "Transaction",
   "RecurringTransaction",
-  "Budget"
+  "Budget",
+  "CategoryBudgetPlan"
 ]);
 
 // Read operations that must exclude tombstones. A caller can still see deleted

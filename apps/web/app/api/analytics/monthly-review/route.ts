@@ -10,7 +10,14 @@
  * - `balanceAtStartCents`      — Kontostand am Monatsanfang (Übertrag)
  * - `balanceAtEndCents`        — Kontostand am Monatsende
  * - `savingsRatePct`           — Sparquote in % (savingsCents / incomeCents)
- * - `categories`               — Ausgaben je Kategorie inkl. Budget-Vergleich
+ * - `categories`               — Ausgaben je Kategorie inkl. Budget-Vergleich;
+ *                                je Eintrag `transactions` (id, description, positiver
+ *                                amountCents, occurredAt ISO, accountId, categoryId (null bei
+ *                                unkategorisiert), taxRelevant) der Monatsausgaben, betrag
+ *                                absteigend, bei Gleichstand Datum aufsteigend; ohne
+ *                                Spar-Kategorie und Einnahmen; Budget-only: []. `budgetCents` =
+ *                                effektives Budget (Budget-Plan, Vorrang vor einem
+ *                                Monats-Budget des Monats)
  * - `incomeCategories`         — Einnahmen je Quelle/Kategorie (größte zuerst)
  * - `topExpenses`              — Die 5 größten Einzelausgaben des Monats
  * - `completedGoals`           — In diesem Monat als erledigt markierte Sparziele
@@ -29,7 +36,28 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
+
+type ReviewTx = {
+  id: string;
+  description: string;
+  amountCents: number;
+  occurredAt: string;
+  accountId: string;
+  categoryId: string | null;
+  taxRelevant: boolean;
+  recurringTransactionId: string | null;
+};
+
+/** Largest amount first; ties by date ascending. */
+function byAmountDescThenDateAsc(a: ReviewTx, b: ReviewTx): number {
+  return b.amountCents - a.amountCents || a.occurredAt.localeCompare(b.occurredAt);
+}
+
+function transactionsFor(byCategory: Record<string, ReviewTx[]>, id: string): ReviewTx[] {
+  return [...(byCategory[id] ?? [])].sort(byAmountDescThenDateAsc);
+}
 
 export async function GET(request: Request) {
   const user = await getSessionUser();
@@ -88,10 +116,14 @@ export async function GET(request: Request) {
   const txs = await prisma.transaction.findMany({
     where: { accountId, occurredAt: { gte: prevMonthStart, lt: monthEnd } },
     select: {
+      id: true,
       amountCents: true,
       categoryId: true,
       occurredAt: true,
-      description: true
+      description: true,
+      accountId: true,
+      taxRelevant: true,
+      recurringTransactionId: true
     },
     orderBy: { amountCents: "asc" } // most negative first — enables O(1) top-expenses extraction
   });
@@ -108,6 +140,7 @@ export async function GET(request: Request) {
   let prevOutcomeCents = 0;
   let prevSavingsCents = 0;
   const byCategoryCents: Record<string, { spentCents: number; count: number }> = {};
+  const txsByCategory: Record<string, ReviewTx[]> = {};
   const incomeByCategoryCents: Record<string, { amountCents: number; count: number }> = {};
 
   for (const tx of txs) {
@@ -133,6 +166,16 @@ export async function GET(request: Request) {
         if (!byCategoryCents[key]) byCategoryCents[key] = { spentCents: 0, count: 0 };
         byCategoryCents[key].spentCents += -amt;
         byCategoryCents[key].count += 1;
+        (txsByCategory[key] ??= []).push({
+          id: tx.id,
+          description: tx.description,
+          amountCents: -amt,
+          occurredAt: tx.occurredAt.toISOString(),
+          accountId: tx.accountId,
+          categoryId: tx.categoryId,
+          taxRelevant: tx.taxRelevant,
+          recurringTransactionId: tx.recurringTransactionId
+        });
       }
     } else if (isPrev) {
       if (isSavings) {
@@ -153,15 +196,13 @@ export async function GET(request: Request) {
   const balanceAtStartCents = balanceAtStartAgg._sum.amountCents ?? 0;
   const balanceAtEndCents = balanceAtStartCents + incomeCents - outcomeCents - savingsCents;
 
-  // Budgets for selected month
-  const budgets = await prisma.budget.findMany({
-    where: { accountId, categoryId: { not: null }, month, year },
-    select: { categoryId: true, amountCents: true }
+  // Effective budgets for selected month (plan, overridden by a per-month Budget)
+  const budgetMap = await loadEffectiveCategoryBudgets({
+    householdId: user.householdId,
+    accountId,
+    year,
+    month
   });
-  const budgetMap: Record<string, number> = {};
-  for (const b of budgets) {
-    if (b.categoryId) budgetMap[b.categoryId] = b.amountCents ?? 0;
-  }
 
   // Resolve category names for all relevant IDs
   const catIds = Array.from(
@@ -190,13 +231,15 @@ export async function GET(request: Request) {
     spentCents: number;
     budgetCents: number | null;
     transactionCount: number;
+    transactions: ReviewTx[];
   }> = Array.from(allCatIds)
     .map((id) => ({
       id,
       name: catNameMap[id] ?? id,
       spentCents: byCategoryCents[id]?.spentCents ?? 0,
       budgetCents: (budgetMap[id] as number | undefined) ?? null,
-      transactionCount: byCategoryCents[id]?.count ?? 0
+      transactionCount: byCategoryCents[id]?.count ?? 0,
+      transactions: transactionsFor(txsByCategory, id)
     }))
     .sort((a, b) => {
       // Over-budget categories first, then by spend descending
@@ -214,7 +257,8 @@ export async function GET(request: Request) {
       name: "Uncategorized",
       spentCents: byCategoryCents["uncategorized"].spentCents,
       budgetCents: null,
-      transactionCount: byCategoryCents["uncategorized"].count
+      transactionCount: byCategoryCents["uncategorized"].count,
+      transactions: transactionsFor(txsByCategory, "uncategorized")
     });
   }
 

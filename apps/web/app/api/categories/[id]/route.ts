@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { moveBudgetPlanToCategory } from "../../../../lib/categoryPlanMerge";
 import { prisma } from "../../../../lib/prisma";
 
 // Protected category names that cannot be modified or deleted
@@ -66,6 +67,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         await tx.transaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategory.id } });
         await tx.recurringTransaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategory.id } });
         await tx.budget.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategory.id } });
+        await moveBudgetPlanToCategory(tx, sourceCategory.id, targetCategory.id);
         await tx.category.delete({ where: { id: sourceCategory.id } });
       });
       return NextResponse.json(targetCategory);
@@ -165,6 +167,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
       await tx.transaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategoryId } });
       await tx.recurringTransaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategoryId } });
       await tx.budget.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategoryId } });
+      await moveBudgetPlanToCategory(tx, sourceCategory.id, targetCategoryId);
       await tx.category.delete({ where: { id: sourceCategory.id } });
     });
     return NextResponse.json({ success: true, fallbackCategoryId: targetCategoryId });

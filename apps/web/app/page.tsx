@@ -18,8 +18,10 @@ import { Doughnut, Bar } from "react-chartjs-2";
 
 import OnboardingWizard from "../components/OnboardingWizard";
 import PageContainer from "../components/PageContainer";
+import { CategoryBreakdown } from "../components/review/CategoryBreakdown";
 import { Skeleton } from "../components/ui/Skeleton";
 import { useApiQuery } from "../lib/api/useApiQuery";
+import { toBreakdownRows, type DashboardCategoryBudget } from "../lib/budgetRows";
 import { useI18n } from "../lib/i18n";
 
 ChartJS.register(
@@ -44,7 +46,7 @@ type SummaryData = {
   completedGoalsSpent?: number;
   monthlySavingsActual: number;
   outgoingByCategory: Array<{ id: string; name: string; amount: number }>;
-  categoryBudgets?: Array<{ categoryId: string; name: string; budget: number; spent: number; diff: number }>;
+  categoryBudgets?: DashboardCategoryBudget[];
   recurringTransactions?: Array<{
     id: string;
     description: string;
@@ -300,39 +302,12 @@ export default function HomePage() {
     .filter((rec) => rec.dayOfMonth != null && rec.dayOfMonth >= todayOfMonth)
     .sort((a, b) => (a.dayOfMonth ?? 0) - (b.dayOfMonth ?? 0));
 
-  // Budgets: kritischste zuerst; nur Top 3 offen, Rest einklappbar
-  const sortedBudgets = categoryBudgets.slice().sort((a, b) => b.diff - a.diff);
-  const topBudgets = sortedBudgets.slice(0, 3);
-  const moreBudgets = sortedBudgets.slice(3);
+  // Budgets: kritischste zuerst (static rows, no bookings attached)
+  const budgetRows = toBreakdownRows(categoryBudgets.slice().sort((a, b) => b.diff - a.diff));
+  const budgetSpentCents = budgetRows.reduce((sum, row) => sum + row.spentCents, 0);
 
   // Leerer Account (Erstnutzung): Hero zeigt Willkommens-Einstieg statt 0-Werten
   const showWelcome = !loading && !hasIncomeData && projectedSpent === 0 && recurringTransactions.length === 0;
-
-  const renderBudgetItem = (c: { categoryId: string; name: string; budget: number; spent: number; diff: number }) => {
-    const pct = c.budget > 0 ? Math.min(200, Math.round((c.spent / c.budget) * 100)) : 0;
-    const over = c.diff > 0;
-    return (
-      <li key={c.categoryId} className="rounded-field border border-line bg-surface-2 p-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-medium text-ink">{c.name}</span>
-          <span className={`text-xs font-semibold tabular-nums ${over ? "text-danger" : "text-ink-muted"}`}>
-            {formatCurrency(c.spent)} / {formatCurrency(c.budget)}
-          </span>
-        </div>
-        <div className="h-2 w-full rounded-full bg-surface overflow-hidden" aria-hidden="true">
-          <div
-            className={`h-2 rounded-full ${over ? "bg-danger" : pct >= 85 ? "bg-warning" : "bg-brand"}`}
-            style={{ width: `${Math.min(100, pct)}%` }}
-          />
-        </div>
-        <p className={`mt-1 text-[11px] ${over ? "text-danger" : "text-ink-muted"}`}>
-          {over
-            ? t("dashboard.categoryBudgetOverBy", { amount: formatCurrency(c.diff) })
-            : t("dashboard.categoryBudgetUnderBy", { amount: formatCurrency(-c.diff) })}
-        </p>
-      </li>
-    );
-  };
 
   const renderRecurringItem = (rec: { id: string; description: string; amountCents: number; dayOfMonth: number | null }) => (
     <li key={rec.id} className="flex items-center justify-between rounded-field border border-line bg-surface-2 p-3">
@@ -519,19 +494,12 @@ export default function HomePage() {
               {overBudgetCategories.length === 0 && (
                 <p className="text-xs text-income mb-3">{t("dashboard.categoryBudgetsAllOk")}</p>
               )}
-              <ul className="grid gap-2 lg:grid-cols-2">
-                {topBudgets.map(renderBudgetItem)}
-              </ul>
-              {moreBudgets.length > 0 && (
-                <details className="mt-3">
-                  <summary className="cursor-pointer select-none text-sm font-medium text-brand">
-                    {t("dashboard.budgetsShowAll", { count: moreBudgets.length })}
-                  </summary>
-                  <ul className="mt-2 grid gap-2 lg:grid-cols-2">
-                    {moreBudgets.map(renderBudgetItem)}
-                  </ul>
-                </details>
-              )}
+              <CategoryBreakdown
+                categories={budgetRows}
+                outcomeCents={budgetSpentCents}
+                formatCurrency={(cents) => formatCurrency(cents / 100)}
+                dateLocale={dateLocale}
+              />
             </>
           )}
         </div>

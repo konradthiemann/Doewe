@@ -40,6 +40,7 @@ type Tx = {
   occurredAt: string;
   categoryId?: string | null;
   taxRelevant?: boolean;
+  recurringTransactionId?: string | null;
 };
 
 type RecurringTx = {
@@ -276,6 +277,13 @@ function TransactionsPage() {
     invalidateTransactionData();
     closeEditDialog();
     showFeedback(message ?? t("transactionForm.updated"));
+  };
+
+  const handleMadeRecurring = (message: string) => {
+    invalidateTransactionData();
+    invalidateRecurringData();
+    closeEditDialog();
+    showFeedback(message);
   };
 
   const handleDeleteSuccess = (message?: string) => {
@@ -889,38 +897,51 @@ function TransactionsPage() {
             </div>
           )}
 
+          <div
+            aria-hidden="true"
+            className="mb-1 hidden gap-x-3 px-[calc(0.75rem+1px)] text-xs font-medium text-ink-muted lg:grid lg:grid-cols-[8.5rem_minmax(0,1fr)_9rem_7rem_2.25rem]"
+          >
+            <span>{t("transactions.colDate")}</span>
+            <span>{t("transactions.colDescription")}</span>
+            <span>{t("transactions.colCategory")}</span>
+            <span className="text-right">{t("transactions.colAmount")}</span>
+            <span />
+          </div>
           <ul className="grid gap-2">
             {sortedItems.map((tx) => (
               <li
                 key={tx.id}
                 className="rounded-card border border-line bg-surface p-3 text-sm shadow-card transition hover:border-brand/40 focus-within:border-brand"
               >
-                <div className="flex items-stretch justify-between gap-3 lg:items-center">
-                  <div className="min-w-0 flex-1 lg:flex lg:items-center lg:gap-3">
-                    <div className="flex items-start justify-between gap-3 lg:min-w-0 lg:flex-1">
+                <div className="flex items-stretch justify-between gap-3 lg:grid lg:grid-cols-[8.5rem_minmax(0,1fr)_9rem_7rem_2.25rem] lg:items-center lg:gap-x-3">
+                  <div className="min-w-0 flex-1 lg:contents">
+                    <div className="flex items-start justify-between gap-3 lg:col-start-2 lg:row-start-1 lg:min-w-0">
                       <p className="text-sm font-semibold text-ink lg:truncate" title={tx.description}>
                         {tx.description}
                       </p>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:mt-0 lg:shrink-0 lg:flex-nowrap">
-                      <time dateTime={tx.occurredAt}>
-                        {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
-                      </time>
-                      {pendingTxIds.has(tx.id) && (
-                        <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">
-                          {t("transactions.pendingSync")}
-                        </span>
-                      )}
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:contents">
+                      <span className="contents lg:col-start-1 lg:row-start-1 lg:flex lg:flex-col lg:items-start lg:gap-1">
+                        <time dateTime={tx.occurredAt} className="lg:whitespace-nowrap">
+                          {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
+                        </time>
+                        {pendingTxIds.has(tx.id) && (
+                          <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">
+                            {t("transactions.pendingSync")}
+                          </span>
+                        )}
+                      </span>
                       {tx.categoryId && (
-                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted">
-                          {t("transactions.categoryLabel")}: {categoriesById[tx.categoryId] ?? tx.categoryId}
+                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted lg:col-start-3 lg:row-start-1 lg:min-w-0 lg:justify-self-start lg:truncate">
+                          <span className="lg:sr-only">{t("transactions.categoryLabel")}: </span>
+                          {categoriesById[tx.categoryId] ?? tx.categoryId}
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:w-auto lg:shrink-0 lg:flex-row lg:items-center lg:gap-3 lg:self-auto">
+                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:contents">
                     <span
-                      className={`text-sm font-semibold text-right ${
+                      className={`text-sm font-semibold text-right lg:col-start-4 lg:row-start-1 lg:whitespace-nowrap lg:tabular-nums ${
                         tx.amountCents < 0 ? "text-expense" : "text-income"
                       }`}
                     >
@@ -928,7 +949,7 @@ function TransactionsPage() {
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-brand transition hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:opacity-40"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-brand lg:col-start-5 lg:row-start-1 lg:justify-self-end transition hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg disabled:opacity-40"
                       disabled={pendingTxIds.has(tx.id)}
                       onClick={(event) => {
                         if (pendingTxIds.has(tx.id)) return;
@@ -991,33 +1012,45 @@ function TransactionsPage() {
               {toDecimalString(fromCents(recurringTotalCents))} €
             </span>
           </div>
+          <div
+            aria-hidden="true"
+            className="mb-1 hidden gap-x-3 px-[calc(0.75rem+1px)] text-xs font-medium text-ink-muted lg:grid lg:grid-cols-[minmax(0,1fr)_8.5rem_7.5rem_9rem_7rem_2.25rem]"
+          >
+            <span>{t("transactions.colDescription")}</span>
+            <span>{t("transactions.colInterval")}</span>
+            <span>{t("transactions.colNext")}</span>
+            <span>{t("transactions.colCategory")}</span>
+            <span className="text-right">{t("transactions.colAmount")}</span>
+            <span />
+          </div>
           <ul className="grid gap-2">
             {filteredRecurringItems.map((rec) => (
               <li key={rec.id} className="rounded-card border border-line bg-surface p-3 text-sm shadow-card">
-                <div className="flex items-stretch justify-between gap-3 lg:items-center">
-                  <div className="min-w-0 flex-1 lg:flex lg:items-center lg:gap-3">
-                    <div className="flex items-start justify-between gap-3 lg:min-w-0 lg:flex-1">
+                <div className="flex items-stretch justify-between gap-3 lg:grid lg:grid-cols-[minmax(0,1fr)_8.5rem_7.5rem_9rem_7rem_2.25rem] lg:items-center lg:gap-x-3">
+                  <div className="min-w-0 flex-1 lg:contents">
+                    <div className="flex items-start justify-between gap-3 lg:col-start-1 lg:row-start-1 lg:min-w-0">
                       <p className="text-sm font-semibold text-ink lg:truncate" title={rec.description}>{rec.description}</p>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:mt-0 lg:shrink-0 lg:flex-nowrap">
-                      <span>{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
-                      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:contents">
+                      <span className="lg:col-start-2 lg:row-start-1 lg:whitespace-nowrap">{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
+                      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted lg:col-start-3 lg:row-start-1 lg:justify-self-start lg:whitespace-nowrap">
                         {t("transactions.nextLabel", { date: format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }) })}
                       </span>
                       {rec.categoryId && (
-                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted">
-                          {t("transactions.categoryLabel")}: {categoriesById[rec.categoryId] ?? rec.categoryId}
+                        <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted lg:col-start-4 lg:row-start-1 lg:min-w-0 lg:justify-self-start lg:truncate">
+                          <span className="lg:sr-only">{t("transactions.categoryLabel")}: </span>
+                          {categoriesById[rec.categoryId] ?? rec.categoryId}
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:w-auto lg:shrink-0 lg:flex-row lg:items-center lg:gap-3 lg:self-auto">
-                    <span className={`text-sm font-semibold text-right ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
+                  <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:contents">
+                    <span className={`text-sm font-semibold text-right lg:col-start-5 lg:row-start-1 lg:whitespace-nowrap lg:tabular-nums ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
                       {toDecimalString(fromCents(rec.amountCents))} €
                     </span>
                     <button
                       type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-brand transition hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-lg text-brand lg:col-start-6 lg:row-start-1 lg:justify-self-end transition hover:text-brand-hover focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                       onClick={(event) => {
                         lastFocusedRef.current = event.currentTarget;
                         setEditingRecurring(rec);
@@ -1060,6 +1093,7 @@ function TransactionsPage() {
             headingId={dialogTitleId}
             onSuccess={handleEditSuccess}
             onDelete={handleDeleteSuccess}
+            onMadeRecurring={handleMadeRecurring}
             onClose={closeEditDialog}
           />
         )}

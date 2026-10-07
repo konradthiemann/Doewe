@@ -49,3 +49,24 @@ export function dueMonthsBetween(
   }
   return result;
 }
+
+export type CalendarDate = { year: number; month: number; day: number }; // month 1-12
+
+/**
+ * Adds `months` calendar months to `date`. The day is `dayOfMonth` (1-31) if
+ * given, else the date's own day, and is clamped to the length of the target
+ * month (Jan 31 + 1 month -> Feb 28/29).
+ */
+export function addMonthsClamped(date: CalendarDate, months: number, dayOfMonth?: number): CalendarDate {
+  if (!Number.isInteger(months) || months < 0) {
+    throw new RangeError(`months must be an integer >= 0, got ${months}`);
+  }
+  if (dayOfMonth !== undefined && (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31)) {
+    throw new RangeError(`dayOfMonth must be an integer in 1..31, got ${dayOfMonth}`);
+  }
+  const absoluteMonth = date.year * 12 + (date.month - 1) + months;
+  const year = Math.floor(absoluteMonth / 12);
+  const month = (absoluteMonth % 12) + 1;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { year, month, day: Math.min(dayOfMonth ?? date.day, daysInMonth) };
+}

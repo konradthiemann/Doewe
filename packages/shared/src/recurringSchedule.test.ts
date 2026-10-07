@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dueMonthsBetween, isRecurringDueInMonth } from "./recurringSchedule";
+import { addMonthsClamped, dueMonthsBetween, isRecurringDueInMonth } from "./recurringSchedule";
 
 describe("isRecurringDueInMonth", () => {
   it("is due in the anchor month itself", () => {
@@ -82,5 +82,41 @@ describe("dueMonthsBetween", () => {
       untilMonth: 9
     });
     expect(months).toEqual([]);
+  });
+});
+
+describe("addMonthsClamped", () => {
+  it("clamps Jan 31 + 1 month to the end of a non-leap February", () => {
+    expect(addMonthsClamped({ year: 2026, month: 1, day: 31 }, 1)).toEqual({ year: 2026, month: 2, day: 28 });
+  });
+
+  it("clamps Jan 31 + 1 month to Feb 29 in a leap year", () => {
+    expect(addMonthsClamped({ year: 2028, month: 1, day: 31 }, 1)).toEqual({ year: 2028, month: 2, day: 29 });
+  });
+
+  it("rolls over the year boundary", () => {
+    expect(addMonthsClamped({ year: 2026, month: 11, day: 15 }, 3)).toEqual({ year: 2027, month: 2, day: 15 });
+  });
+
+  it("adds 12 months to the same day next year", () => {
+    expect(addMonthsClamped({ year: 2026, month: 10, day: 7 }, 12)).toEqual({ year: 2027, month: 10, day: 7 });
+  });
+
+  it("uses dayOfMonth instead of the date's day and clamps it to the target month", () => {
+    expect(addMonthsClamped({ year: 2026, month: 3, day: 10 }, 1, 31)).toEqual({ year: 2026, month: 4, day: 30 });
+  });
+
+  it("stays in the same month for months = 0", () => {
+    expect(addMonthsClamped({ year: 2026, month: 5, day: 12 }, 0)).toEqual({ year: 2026, month: 5, day: 12 });
+  });
+
+  it("throws RangeError for negative or non-integer months", () => {
+    expect(() => addMonthsClamped({ year: 2026, month: 5, day: 12 }, -1)).toThrow(RangeError);
+    expect(() => addMonthsClamped({ year: 2026, month: 5, day: 12 }, 1.5)).toThrow(RangeError);
+  });
+
+  it("throws RangeError for dayOfMonth outside 1..31", () => {
+    expect(() => addMonthsClamped({ year: 2026, month: 5, day: 12 }, 1, 0)).toThrow(RangeError);
+    expect(() => addMonthsClamped({ year: 2026, month: 5, day: 12 }, 1, 32)).toThrow(RangeError);
   });
 });
