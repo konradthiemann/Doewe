@@ -65,3 +65,11 @@ export type {
   RecurringYearMatrix
 } from "./recurringYear";
 export { classifyRecurringKind, buildRecurringYearMatrix } from "./recurringYear";
+
+export type { BudgetPeriod, BudgetPlanLike } from "./budgetDistribution";
+export {
+  BUDGET_PERIODS,
+  distributeYearlyBudget,
+  planMonthlyCents,
+  resolveEffectiveBudgets
+} from "./budgetDistribution";
