@@ -89,3 +89,14 @@ html, body {
 main {
   @apply w-full;
 }
+/* iOS-Fokus-Zoom verhindern: Safari (auch als Home-Bildschirm-App) zoomt in jedes
+   fokussierte Feld unter 16px und zoomt danach nicht wieder heraus. Unterhalb von
+   md darum Felder mit text-xs/text-sm auf 16px anheben (wie `text-base md:text-sm`).
+   Element+Klasse schlägt die Utility-Klasse per Spezifität. Kein maximum-scale im
+   Viewport, das würde auf Android das Pinch-Zoomen sperren. */
+@media (max-width: 767.98px) {
+  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):is(.text-xs, .text-sm) {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+}
