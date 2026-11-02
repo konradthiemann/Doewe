@@ -42,12 +42,16 @@ export type BookedOccurrence = {
 
 export async function materializeDueRecurringTransactions(
   now: Date = new Date(),
-  options: { dryRun?: boolean } = {}
+  options: { dryRun?: boolean; householdId?: string } = {}
 ): Promise<BookedOccurrence[]> {
   const recurringTransactions = await prisma.recurringTransaction.findMany({
     // The public demo account is reseeded by /api/demo/seed and must never
     // receive real bookings — same exclusion as admin/usage/route.ts.
-    where: { deletedAt: null, accountId: { not: DEMO_ACCOUNT_ID } },
+    where: {
+      deletedAt: null,
+      accountId: { not: DEMO_ACCOUNT_ID },
+      ...(options.householdId ? { account: { householdId: options.householdId } } : {})
+    },
     select: {
       id: true,
       accountId: true,
@@ -59,6 +63,26 @@ export async function materializeDueRecurringTransactions(
       nextOccurrence: true
     }
   });
+
+  // Prefetch skips and already-booked months in two queries instead of one
+  // round trip per recurring x month — this runs on every dashboard load now
+  // (catchUpPastRecurringForHousehold), so the steady state must stay cheap.
+  const recurringIds = recurringTransactions.map((r) => r.id);
+  const monthKey = (recurringId: string, year: number, month: number) => `${recurringId}:${year}-${month}`;
+  const [skipRows, bookedRows] = await Promise.all([
+    prisma.recurringTransactionSkip.findMany({
+      where: { recurringId: { in: recurringIds } },
+      select: { recurringId: true, year: true, month: true }
+    }),
+    prisma.transaction.findMany({
+      where: { recurringTransactionId: { in: recurringIds } },
+      select: { recurringTransactionId: true, occurredAt: true }
+    })
+  ]);
+  const skipped = new Set(skipRows.map((s) => monthKey(s.recurringId, s.year, s.month)));
+  const alreadyBooked = new Set(
+    bookedRows.map((t) => monthKey(t.recurringTransactionId ?? "", t.occurredAt.getFullYear(), t.occurredAt.getMonth() + 1))
+  );
 
   const booked: BookedOccurrence[] = [];
 
@@ -80,18 +104,8 @@ export async function materializeDueRecurringTransactions(
       // Don't book an occurrence whose day hasn't arrived yet this month.
       if (occurredAt.getTime() > now.getTime()) continue;
 
-      const skip = await prisma.recurringTransactionSkip.findUnique({
-        where: { recurringId_year_month: { recurringId: rec.id, year, month } }
-      });
-      if (skip) continue;
-
-      const monthStart = new Date(year, month - 1, 1);
-      const monthEnd = new Date(year, month, 1);
-      const existing = await prisma.transaction.findFirst({
-        where: { recurringTransactionId: rec.id, occurredAt: { gte: monthStart, lt: monthEnd } },
-        select: { id: true }
-      });
-      if (existing) continue;
+      const key = monthKey(rec.id, year, month);
+      if (skipped.has(key) || alreadyBooked.has(key)) continue;
 
       if (options.dryRun) {
         booked.push({
@@ -106,16 +120,17 @@ export async function materializeDueRecurringTransactions(
         continue;
       }
 
-      const created = await prisma.transaction.create({
-        data: {
-          accountId: rec.accountId,
-          categoryId: rec.categoryId,
-          amountCents: rec.amountCents,
-          description: rec.description,
-          occurredAt,
-          recurringTransactionId: rec.id
-        }
-      });
+      // One failing occurrence (e.g. its account vanished mid-run) must not
+      // abort the bookings of every other recurring/household in this run.
+      let created: { id: string } | null;
+      try {
+        created = await bookOccurrenceOnce(rec, year, month, occurredAt);
+      } catch (error) {
+        // eslint-disable-next-line no-console -- surfaces in Railway logs, run continues
+        console.error("Failed to book recurring occurrence", { recurringId: rec.id, year, month }, error);
+        continue;
+      }
+      if (!created) continue;
 
       booked.push({
         recurringId: rec.id,
@@ -130,4 +145,55 @@ export async function materializeDueRecurringTransactions(
   }
 
   return booked;
+}
+
+/**
+ * Bucht ein Vorkommen genau einmal. Cron und die Selbstheilung beim Lesen
+ * (siehe catchUpPastRecurringForHousehold) können gleichzeitig laufen — der
+ * transaktionsgebundene Advisory-Lock je Dauerauftrag serialisiert das
+ * "schon gebucht?"-Prüfen und Anlegen, sonst entstünden Doppelbuchungen.
+ */
+async function bookOccurrenceOnce(
+  rec: { id: string; accountId: string; categoryId: string | null; amountCents: number; description: string },
+  year: number,
+  month: number,
+  occurredAt: Date
+): Promise<{ id: string } | null> {
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 1);
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${rec.id}))`;
+    const existing = await tx.transaction.findFirst({
+      where: { recurringTransactionId: rec.id, occurredAt: { gte: monthStart, lt: monthEnd } },
+      select: { id: true }
+    });
+    if (existing) return null;
+    return tx.transaction.create({
+      data: {
+        accountId: rec.accountId,
+        categoryId: rec.categoryId,
+        amountCents: rec.amountCents,
+        description: rec.description,
+        occurredAt,
+        recurringTransactionId: rec.id
+      },
+      select: { id: true }
+    });
+  });
+}
+
+/**
+ * Selbstheilung beim Lesen: bucht für einen Haushalt alle fälligen, noch nicht
+ * gebuchten Vorkommen ABGESCHLOSSENER Monate nach. Der laufende Monat bleibt
+ * Sache des täglichen Crons — bis dahin zeigt das Dashboard ihn als "geplant".
+ * So kann ein ausgefallener Cron Rückblick und Übertrag nie mehr still
+ * verfälschen (Vorfall: Cron war nie eingerichtet, Okt. 2026 fehlten alle
+ * Daueraufträge im Rückblick).
+ */
+export async function catchUpPastRecurringForHousehold(
+  householdId: string,
+  now: Date = new Date()
+): Promise<BookedOccurrence[]> {
+  const endOfPreviousMonth = new Date(new Date(now.getFullYear(), now.getMonth(), 1).getTime() - 1);
+  return materializeDueRecurringTransactions(endOfPreviousMonth, { householdId });
 }

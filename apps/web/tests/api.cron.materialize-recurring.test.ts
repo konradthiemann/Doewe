@@ -238,7 +238,11 @@ describe("POST /api/cron/materialize-recurring", () => {
     await routes.POST(authedRequest());
     const res = await routes.POST(authedRequest());
     const data = await res.json();
-    expect(data.booked).toBe(0);
+    // The cron runs globally; other test files create due recurring rows in
+    // parallel, so only this file's own recurring IDs must stay unbooked.
+    const ownIds = new Set([recurringIncomeId, recurringExpenseId, recurringSkippedId, recurringAlreadyManuallyBookedId]);
+    const ownBooked = data.occurrences.filter((o: { recurringId: string }) => ownIds.has(o.recurringId));
+    expect(ownBooked).toHaveLength(0);
 
     const income = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringIncomeId } });
     expect(income).toHaveLength(4);

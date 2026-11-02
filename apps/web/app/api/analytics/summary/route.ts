@@ -35,6 +35,7 @@ export const dynamic = "force-dynamic"; // Kein Build-Time-Prerendering — Date
 import { getSessionUser } from "../../../../lib/auth";
 import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
+import { catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
 
 /** Gibt Monat (1-12) und Jahr des übergebenen Datums zurück. Standard: heute. */
 function getMonthYear(date = new Date()) {
@@ -53,6 +54,10 @@ export async function GET() {
 
   const accountId = account.id;
   const now = new Date();
+
+  // Selbstheilung: fällige, nie gebuchte Daueraufträge abgeschlossener Monate
+  // nachbuchen, bevor gerechnet wird (siehe catchUpPastRecurringForHousehold).
+  await catchUpPastRecurringForHousehold(user.householdId, now);
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
