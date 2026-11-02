@@ -38,6 +38,7 @@ export const dynamic = "force-dynamic";
 import { getSessionUser } from "../../../../lib/auth";
 import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
+import { catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
 
 type ReviewTx = {
   id: string;
@@ -73,6 +74,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   const now = new Date();
+
+  // Selbstheilung: fällige, nie gebuchte Daueraufträge abgeschlossener Monate
+  // nachbuchen, bevor gerechnet wird (siehe catchUpPastRecurringForHousehold).
+  await catchUpPastRecurringForHousehold(user.householdId, now);
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 

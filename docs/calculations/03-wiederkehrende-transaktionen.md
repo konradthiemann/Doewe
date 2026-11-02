@@ -37,6 +37,12 @@ flowchart TD
 
 **Doppelzählung vermieden:** Sobald ein Vorkommen gebucht ist, zählt es nicht mehr zusätzlich in `recurringIncomeTotal`/`recurringOutcomeTotal`/`recurringPlannedSavings` (siehe [04-analytics-summary.md](./04-analytics-summary.md)) — sonst stünde derselbe Betrag einmal als echte Buchung und einmal als "geplant" in der Summe.
 
+**Selbstheilung beim Lesen (`catchUpPastRecurringForHousehold`):** `GET /api/analytics/summary` und `GET /api/analytics/monthly-review` buchen vor jeder Berechnung alle fälligen, noch nicht gebuchten Vorkommen **abgeschlossener Monate** des eigenen Haushalts nach (dieselbe Funktion, nur auf den Haushalt und bis Ende des Vormonats begrenzt). Der laufende Monat bleibt Aufgabe des Crons und erscheint bis dahin als "geplant". Hintergrund: Der Cron war in Produktion nie eingerichtet, dadurch fehlten ab Oktober 2026 alle Daueraufträge im Rückblick und im Übertrag, ohne dass es sichtbar wurde.
+
+**Nebenläufigkeit:** Cron und Selbstheilung (z.B. zwei Haushaltsmitglieder öffnen gleichzeitig das Dashboard) können parallel laufen. Gebuchte Monate und Skips werden vorab gesammelt geladen; nur für fehlende Vorkommen wird je Dauerauftrag ein transaktionsgebundener Advisory-Lock (`pg_advisory_xact_lock`) genommen und unter dem Lock erneut geprüft, sodass jeder Monat höchstens einmal gebucht wird. Schlägt ein einzelnes Vorkommen fehl, wird es geloggt und der Lauf läuft für alle anderen weiter.
+
+**Bekannte Grenze:** Ein automatisch gebuchtes Vorkommen, das gelöscht wird (Soft-Delete), gilt nicht mehr als gebucht und wird beim nächsten Lauf neu gebucht. Soll ein Monat entfallen, ist "Überspringen" (Skip) der richtige Weg.
+
 ## Datenmodell
 
 ```
