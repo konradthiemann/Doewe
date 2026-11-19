@@ -1,21 +1,26 @@
 /**
  * GET /api/analytics/monthly-review?month=X&year=Y
  *
- * Liefert eine vollständige Rückschau auf einen abgeschlossenen Monat:
+ * Liefert eine vollständige Rückschau auf einen abgeschlossenen Monat (Kalender
+ * Europe/Berlin, alle Konten des Haushalts, nur Gebuchtes — siehe
+ * docs/calculations/00-grundregeln.md):
  *
  * - `month`, `year`            — Der abgefragte Monat (Standard: Vormonat)
  * - `incomeCents`              — Summe aller Einnahmen des Monats
  * - `outcomeCents`             — Summe aller Ausgaben (ohne Sparbuchungen)
- * - `savingsCents`             — Tatsächliche Sparbuchungen des Monats
- * - `balanceAtStartCents`      — Kontostand am Monatsanfang (Übertrag)
+ * - `savingsCents`             — Sparen des Monats, netto (Einzahlungen − Entnahmen,
+ *                                kann negativ sein)
+ * - `balanceAtStartCents`      — Kontostand am Monatsanfang (Übertrag = Summe aller
+ *                                Buchungen vor Monatsbeginn)
  * - `balanceAtEndCents`        — Kontostand am Monatsende
- * - `savingsRatePct`           — Sparquote in % (savingsCents / incomeCents)
+ * - `savingsRatePct`           — Sparquote in % (savingsCents / incomeCents), auf 0–100
+ *                                begrenzt
  * - `categories`               — Ausgaben je Kategorie inkl. Budget-Vergleich;
  *                                je Eintrag `transactions` (id, description, positiver
  *                                amountCents, occurredAt ISO, accountId, categoryId (null bei
  *                                unkategorisiert), taxRelevant) der Monatsausgaben, betrag
  *                                absteigend, bei Gleichstand Datum aufsteigend; ohne
- *                                Spar-Kategorie und Einnahmen; Budget-only: []. `budgetCents` =
+ *                                Spar-Kategorien und Einnahmen; Budget-only: []. `budgetCents` =
  *                                effektives Budget (Budget-Plan, Vorrang vor einem
  *                                Monats-Budget des Monats)
  * - `incomeCategories`         — Einnahmen je Quelle/Kategorie (größte zuerst)
@@ -23,15 +28,32 @@
  * - `completedGoals`           — In diesem Monat als erledigt markierte Sparziele
  * - `completedGoalsSpentCents` — Summe der dafür entnommenen Beträge
  * - `prevMonth`                — Basiswerte des Vormonats für MoM-Vergleich
- * - `availableMonths`          — Alle Monate mit Transaktionen (neueste zuerst)
+ * - `availableMonths`          — Alle Monate von der frühesten Buchung bis zum Vormonat
+ *                                (neueste zuerst)
  *
- * Query-Params:
- *   month (1–12, optional) — Default: letzter abgeschlossener Monat
- *   year  (4-stellig, optional)
+ * Einordnung (classifyFlow): Buchungen in einer Spar-Kategorie (Name getrimmt, ohne
+ * Beachtung der Groß-/Kleinschreibung "savings" oder "sparen"; mehrere möglich) sind
+ * Sparen, alles andere nach Vorzeichen Einnahme (>= 0) oder Ausgabe (< 0).
  *
- * Der aktuelle Monat kann nicht abgefragt werden (nicht abgeschlossen).
+ * Query-Params (zod-validiert):
+ *   month (ganze Zahl 1–12, optional) — Default: letzter abgeschlossener Monat
+ *   year  (ganze Zahl 2000–2100, optional)
+ *
+ * Der aktuelle Monat und künftige Monate können nicht abgefragt werden (nicht
+ * abgeschlossen); sie und ungültige Parameter (z. B. month=23) fallen auf den
+ * Standard-Monat zurück. 404, wenn der Haushalt kein Konto hat.
  */
+import {
+  addFlow,
+  classifyFlow,
+  emptyFlowTotals,
+  shiftMonth,
+  zonedMonth,
+  zonedMonthRange,
+  type MonthRef
+} from "@doewe/shared";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +61,12 @@ import { getSessionUser } from "../../../../lib/auth";
 import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 import { catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
+import { loadSavingsCategoryIds } from "../../../../lib/savingsCategory";
+
+const MonthlyReviewQuery = z.object({
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  year: z.coerce.number().int().min(2000).max(2100).optional()
+});
 
 type ReviewTx = {
   id: string;
@@ -64,62 +92,49 @@ export async function GET(request: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const account = await prisma.account.findFirst({
-    where: { householdId: user.householdId },
-    orderBy: { createdAt: "asc" }
-  });
-  if (!account) return NextResponse.json({ error: "No account found for user" }, { status: 404 });
+  const householdId = user.householdId;
+  const anyAccount = await prisma.account.findFirst({ where: { householdId }, select: { id: true } });
+  if (!anyAccount) return NextResponse.json({ error: "No account found for user" }, { status: 404 });
 
-  const accountId = account.id;
+  // All accounts of the household — the same scope as the transaction list.
+  const inHousehold = { account: { householdId } };
   const { searchParams } = new URL(request.url);
 
   const now = new Date();
 
   // Selbstheilung: fällige, nie gebuchte Daueraufträge abgeschlossener Monate
   // nachbuchen, bevor gerechnet wird (siehe catchUpPastRecurringForHousehold).
-  await catchUpPastRecurringForHousehold(user.householdId, now);
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
+  await catchUpPastRecurringForHousehold(householdId, now);
 
-  // Default: last completed month
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const defaultMonth = prevMonthDate.getMonth() + 1;
-  const defaultYear = prevMonthDate.getFullYear();
+  // "Current month" in the app calendar (Europe/Berlin); default: last completed month
+  const current = zonedMonth(now);
+  const fallback = shiftMonth(current, -1);
+  const isBeforeCurrent = (ref: MonthRef) =>
+    ref.year < current.year || (ref.year === current.year && ref.month < current.month);
 
-  let month = searchParams.get("month") ? parseInt(searchParams.get("month")!, 10) : defaultMonth;
-  let year = searchParams.get("year") ? parseInt(searchParams.get("year")!, 10) : defaultYear;
-
-  // Never allow current or future months — clamp to last completed month
-  if (
-    isNaN(month) || isNaN(year) ||
-    year > currentYear ||
-    (year === currentYear && month >= currentMonth)
-  ) {
-    month = defaultMonth;
-    year = defaultYear;
-  }
-
-  // Resolve savings category (consistent with summary + quarterly routes)
-  const SAVINGS_NAMES = ["savings", "sparen"];
-  const savingsCategory = await prisma.category.findFirst({
-    where: { householdId: user.householdId, name: { in: SAVINGS_NAMES, mode: "insensitive" } },
-    select: { id: true }
+  // Invalid input (month=23, year=abc) and current or future months fall back
+  // to the last completed month.
+  const parsed = MonthlyReviewQuery.safeParse({
+    month: searchParams.get("month") || undefined,
+    year: searchParams.get("year") || undefined
   });
-  const savingsCatId = savingsCategory?.id ?? null;
+  const requested: MonthRef = parsed.success
+    ? { month: parsed.data.month ?? fallback.month, year: parsed.data.year ?? fallback.year }
+    : fallback;
+  const { month, year } = isBeforeCurrent(requested) ? requested : fallback;
 
-  // Month boundaries
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1);
+  const savingsIds = await loadSavingsCategoryIds(householdId);
+
+  // Month boundaries, half-open [monthStart, monthEnd)
+  const { start: monthStart, end: monthEnd } = zonedMonthRange(year, month);
 
   // Previous month for MoM comparison
-  const prevDate = new Date(year, month - 2, 1);
-  const prevMonthNum = prevDate.getMonth() + 1;
-  const prevYearNum = prevDate.getFullYear();
-  const prevMonthStart = new Date(prevYearNum, prevMonthNum - 1, 1);
+  const { year: prevYearNum, month: prevMonthNum } = shiftMonth({ year, month }, -1);
+  const { start: prevMonthStart } = zonedMonthRange(prevYearNum, prevMonthNum);
 
   // Single query: both selected month + previous month transactions
   const txs = await prisma.transaction.findMany({
-    where: { accountId, occurredAt: { gte: prevMonthStart, lt: monthEnd } },
+    where: { ...inHousehold, occurredAt: { gte: prevMonthStart, lt: monthEnd } },
     select: {
       id: true,
       amountCents: true,
@@ -133,81 +148,58 @@ export async function GET(request: Request) {
     orderBy: { amountCents: "asc" } // most negative first — enables O(1) top-expenses extraction
   });
 
+  // The query covers [prevMonthStart, monthEnd): a row before monthStart is last month's.
   const monthStartMs = monthStart.getTime();
-  const monthEndMs = monthEnd.getTime();
-  const prevMonthStartMs = prevMonthStart.getTime();
-  const prevMonthEndMs = monthStart.getTime();
 
-  let incomeCents = 0;
-  let outcomeCents = 0;
-  let savingsCents = 0;
-  let prevIncomeCents = 0;
-  let prevOutcomeCents = 0;
-  let prevSavingsCents = 0;
+  const selected = emptyFlowTotals();
+  const previous = emptyFlowTotals();
   const byCategoryCents: Record<string, { spentCents: number; count: number }> = {};
   const txsByCategory: Record<string, ReviewTx[]> = {};
   const incomeByCategoryCents: Record<string, { amountCents: number; count: number }> = {};
 
   for (const tx of txs) {
-    const tMs = tx.occurredAt.getTime();
-    const isCurrent = tMs >= monthStartMs && tMs < monthEndMs;
-    const isPrev = tMs >= prevMonthStartMs && tMs < prevMonthEndMs;
-    const amt = tx.amountCents;
-    const isSavings = savingsCatId !== null && tx.categoryId === savingsCatId;
+    if (tx.occurredAt.getTime() < monthStartMs) {
+      addFlow(previous, tx, savingsIds);
+      continue;
+    }
 
-    if (isCurrent) {
-      if (isSavings) {
-        // Netto-Sparen: Einzahlung (negativ) erhöht, Entnahme (positiv) verringert.
-        savingsCents += -amt;
-      } else if (amt >= 0) {
-        incomeCents += amt;
-        const key = tx.categoryId ?? "uncategorized";
-        if (!incomeByCategoryCents[key]) incomeByCategoryCents[key] = { amountCents: 0, count: 0 };
-        incomeByCategoryCents[key].amountCents += amt;
-        incomeByCategoryCents[key].count += 1;
-      } else {
-        outcomeCents += -amt;
-        const key = tx.categoryId ?? "uncategorized";
-        if (!byCategoryCents[key]) byCategoryCents[key] = { spentCents: 0, count: 0 };
-        byCategoryCents[key].spentCents += -amt;
-        byCategoryCents[key].count += 1;
-        (txsByCategory[key] ??= []).push({
-          id: tx.id,
-          description: tx.description,
-          amountCents: -amt,
-          occurredAt: tx.occurredAt.toISOString(),
-          accountId: tx.accountId,
-          categoryId: tx.categoryId,
-          taxRelevant: tx.taxRelevant,
-          recurringTransactionId: tx.recurringTransactionId
-        });
-      }
-    } else if (isPrev) {
-      if (isSavings) {
-        prevSavingsCents += -amt;
-      } else if (amt >= 0) {
-        prevIncomeCents += amt;
-      } else {
-        prevOutcomeCents += -amt;
-      }
+    const amt = tx.amountCents;
+    const kind = addFlow(selected, tx, savingsIds);
+    const key = tx.categoryId ?? "uncategorized";
+    if (kind === "income") {
+      if (!incomeByCategoryCents[key]) incomeByCategoryCents[key] = { amountCents: 0, count: 0 };
+      incomeByCategoryCents[key].amountCents += amt;
+      incomeByCategoryCents[key].count += 1;
+    } else if (kind === "outcome") {
+      if (!byCategoryCents[key]) byCategoryCents[key] = { spentCents: 0, count: 0 };
+      byCategoryCents[key].spentCents += -amt;
+      byCategoryCents[key].count += 1;
+      (txsByCategory[key] ??= []).push({
+        id: tx.id,
+        description: tx.description,
+        amountCents: -amt,
+        occurredAt: tx.occurredAt.toISOString(),
+        accountId: tx.accountId,
+        categoryId: tx.categoryId,
+        taxRelevant: tx.taxRelevant,
+        recurringTransactionId: tx.recurringTransactionId
+      });
     }
   }
 
+  const { incomeCents, outcomeCents, savingsCents } = selected;
+  const { incomeCents: prevIncomeCents, outcomeCents: prevOutcomeCents, savingsCents: prevSavingsCents } = previous;
+
   // Balance at start of selected month (all transactions before month start)
   const balanceAtStartAgg = await prisma.transaction.aggregate({
-    where: { accountId, occurredAt: { lt: monthStart } },
+    where: { ...inHousehold, occurredAt: { lt: monthStart } },
     _sum: { amountCents: true }
   });
   const balanceAtStartCents = balanceAtStartAgg._sum.amountCents ?? 0;
   const balanceAtEndCents = balanceAtStartCents + incomeCents - outcomeCents - savingsCents;
 
   // Effective budgets for selected month (plan, overridden by a per-month Budget)
-  const budgetMap = await loadEffectiveCategoryBudgets({
-    householdId: user.householdId,
-    accountId,
-    year,
-    month
-  });
+  const budgetMap = await loadEffectiveCategoryBudgets({ householdId, year, month });
 
   // Resolve category names for all relevant IDs
   const catIds = Array.from(
@@ -218,7 +210,7 @@ export async function GET(request: Request) {
     ])
   );
   const catRows = await prisma.category.findMany({
-    where: { id: { in: catIds }, householdId: user.householdId },
+    where: { id: { in: catIds }, householdId },
     select: { id: true, name: true }
   });
   const catNameMap: Record<string, string> = {};
@@ -284,15 +276,7 @@ export async function GET(request: Request) {
 
   // Top 5 individual expenses — txs is pre-sorted by amountCents ASC (most negative first)
   const topExpenses = txs
-    .filter((tx) => {
-      const tMs = tx.occurredAt.getTime();
-      return (
-        tMs >= monthStartMs &&
-        tMs < monthEndMs &&
-        tx.amountCents < 0 &&
-        !(savingsCatId !== null && tx.categoryId === savingsCatId)
-      );
-    })
+    .filter((tx) => tx.occurredAt.getTime() >= monthStartMs && classifyFlow(tx, savingsIds) === "outcome")
     .slice(0, 5)
     .map((tx) => ({
       description: tx.description,
@@ -303,22 +287,15 @@ export async function GET(request: Request) {
 
   // Available months: from earliest transaction month up to (but not including) current month
   const earliestTx = await prisma.transaction.findFirst({
-    where: { accountId },
+    where: inHousehold,
     orderBy: { occurredAt: "asc" },
     select: { occurredAt: true }
   });
 
   const availableMonths: Array<{ month: number; year: number }> = [];
   if (earliestTx) {
-    const cursor = new Date(
-      earliestTx.occurredAt.getFullYear(),
-      earliestTx.occurredAt.getMonth(),
-      1
-    );
-    const limit = new Date(currentYear, currentMonth - 1, 1); // start of current month
-    while (cursor < limit) {
-      availableMonths.push({ month: cursor.getMonth() + 1, year: cursor.getFullYear() });
-      cursor.setMonth(cursor.getMonth() + 1);
+    for (let cursor = zonedMonth(earliestTx.occurredAt); isBeforeCurrent(cursor); cursor = shiftMonth(cursor, 1)) {
+      availableMonths.push({ month: cursor.month, year: cursor.year });
     }
     availableMonths.reverse(); // most recent first
   }
@@ -327,7 +304,7 @@ export async function GET(request: Request) {
   // Goals are budgets without a category; `spentCents` is the amount withdrawn on completion.
   const completedGoalsRaw = await prisma.budget.findMany({
     where: {
-      accountId,
+      ...inHousehold,
       categoryId: null,
       completedAt: { gte: monthStart, lt: monthEnd }
     },
@@ -341,9 +318,10 @@ export async function GET(request: Request) {
   }));
   const completedGoalsSpentCents = completedGoals.reduce((sum, g) => sum + g.spentCents, 0);
 
+  // Net savings can be negative (more withdrawn than deposited): the rate stays within 0–100.
   const savingsRatePct =
     incomeCents > 0
-      ? Math.min(100, Math.round((savingsCents / incomeCents) * 100))
+      ? Math.max(0, Math.min(100, Math.round((savingsCents / incomeCents) * 100)))
       : 0;
 
   const hasPrevData =

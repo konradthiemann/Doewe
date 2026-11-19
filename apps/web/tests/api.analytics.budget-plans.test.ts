@@ -1,3 +1,4 @@
+import { zonedMonth, zonedTimeToUtc } from "@doewe/shared";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
@@ -22,9 +23,8 @@ let householdId: string;
 let foodId: string;
 let quietId: string;
 
-const now = new Date();
-const CURRENT_MONTH = now.getMonth() + 1;
-const CURRENT_YEAR = now.getFullYear();
+// The dashboard's "current month" is the calendar month in Europe/Berlin.
+const { year: CURRENT_YEAR, month: CURRENT_MONTH } = zonedMonth(new Date());
 
 async function fetchSummaryBudgets(): Promise<SummaryBudget[]> {
   const { GET } = await import("../app/api/analytics/summary/route");
@@ -105,7 +105,7 @@ describe("GET /api/analytics/summary - categoryBudgets from plans", () => {
         categoryId: foodId,
         amountCents: -12000,
         description: "ABP food",
-        occurredAt: new Date(CURRENT_YEAR, CURRENT_MONTH - 1, 1, 12)
+        occurredAt: zonedTimeToUtc({ year: CURRENT_YEAR, month: CURRENT_MONTH, day: 1, hour: 12 })
       }
     });
     const budgets = await fetchSummaryBudgets();
@@ -143,7 +143,7 @@ describe("GET /api/analytics/summary - categoryBudgets from plans", () => {
 });
 
 describe("GET /api/analytics/monthly-review - budgetCents from plans", () => {
-  const day = (d: number) => new Date(2025, 2, d, 12, 0, 0);
+  const day = (d: number) => new Date(Date.UTC(2025, 2, d, 12, 0, 0));
 
   it("takes budgetCents from the MONTHLY plan, also for categories without spending", async () => {
     await prisma.categoryBudgetPlan.createMany({

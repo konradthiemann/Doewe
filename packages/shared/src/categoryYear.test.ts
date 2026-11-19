@@ -15,10 +15,11 @@ const at = (entries: Record<number, number>): number[] => {
 };
 const flat = (cents: number): number[] => Array.from({ length: 12 }, () => cents);
 
-const food: CategoryYearCategory = { id: "food", name: "Food", kind: "expense" };
-const rent: CategoryYearCategory = { id: "rent", name: "Rent", kind: "expense" };
-const salary: CategoryYearCategory = { id: "salary", name: "Salary", kind: "income" };
-const savings: CategoryYearCategory = { id: "sav", name: "Savings", kind: "savings" };
+const food: CategoryYearCategory = { id: "food", name: "Food" };
+const rent: CategoryYearCategory = { id: "rent", name: "Rent" };
+const salary: CategoryYearCategory = { id: "salary", name: "Salary" };
+const savings: CategoryYearCategory = { id: "sav", name: "Savings" };
+const savingsIds: ReadonlySet<string> = new Set(["sav"]);
 
 const tx = (categoryId: string | null, amountCents: number, month: number): CategoryYearTx => ({
   categoryId,
@@ -31,7 +32,7 @@ function build(
   budgetsByCategory: Record<string, (number | null)[]> = {},
   categories: CategoryYearCategory[] = [food, rent, salary, savings]
 ) {
-  return buildCategoryYearMatrix({ year: 2036, categories, transactions, budgetsByCategory });
+  return buildCategoryYearMatrix({ year: 2036, categories, savingsIds, transactions, budgetsByCategory });
 }
 
 const rowOf = (rows: CategoryYearRow[], id: string): CategoryYearRow => {
@@ -63,10 +64,38 @@ describe("buildCategoryYearMatrix", () => {
     expect(m.expenses.totalCents).toBe(8500);
   });
 
-  it("lets a refund (positive amount) reduce an expense category", () => {
+  it("lists a refund (positive amount) as income of that category; the spend stays gross", () => {
     const m = build([tx("food", -5000, 2), tx("food", 1500, 2)]);
-    expect(rowOf(m.expenses.rows, "food").monthlyCents).toEqual(at({ 2: 3500 }));
-    expect(rowOf(m.expenses.rows, "food").totalCents).toBe(3500);
+    expect(rowOf(m.expenses.rows, "food").monthlyCents).toEqual(at({ 2: 5000 }));
+    expect(rowOf(m.expenses.rows, "food").totalCents).toBe(5000);
+    expect(rowOf(m.income.rows, "food")).toMatchObject({ id: "food", name: "Food", kind: "income" });
+    expect(rowOf(m.income.rows, "food").monthlyCents).toEqual(at({ 2: 1500 }));
+    expect(m.balanceMonthlyCents).toEqual(at({ 2: -3500 }));
+  });
+
+  it("lists a negative booking in an income-like category as an expense of that category", () => {
+    const m = build([tx("salary", 300000, 1), tx("salary", -50, 1)]);
+    expect(rowOf(m.income.rows, "salary").monthlyCents).toEqual(at({ 1: 300000 }));
+    expect(rowOf(m.expenses.rows, "salary")).toMatchObject({ id: "salary", name: "Salary", kind: "expense" });
+    expect(rowOf(m.expenses.rows, "salary").monthlyCents).toEqual(at({ 1: 50 }));
+    expect(m.balanceMonthlyCents).toEqual(at({ 1: 299950 }));
+  });
+
+  it("keeps group totals equal to income - outcome - savings of the plain sum", () => {
+    const transactions = [
+      tx("salary", 300000, 3),
+      tx("salary", -50, 3),
+      tx("food", -5000, 3),
+      tx("food", 2000, 3),
+      tx("sav", -20000, 3),
+      tx("sav", 3000, 3),
+      tx(null, -4999, 3)
+    ];
+    const m = build(transactions);
+    expect(m.income.monthlyTotalsCents[2]).toBe(302000);
+    expect(m.expenses.monthlyTotalsCents[2]).toBe(10049);
+    expect(m.savings.monthlyTotalsCents[2]).toBe(17000);
+    expect(m.balanceMonthlyCents[2]).toBe(transactions.reduce((total, t) => total + t.amountCents, 0));
   });
 
   it("sums income categories as positive amounts", () => {
@@ -86,6 +115,22 @@ describe("buildCategoryYearMatrix", () => {
     expect(row.monthlyCents).toEqual(at({ 1: 20000, 2: 15000 }));
     expect(row.totalCents).toBe(35000);
     expect(m.savings.monthlyTotalsCents).toEqual(at({ 1: 20000, 2: 15000 }));
+    expect(m.expenses.rows).toEqual([]);
+    expect(m.income.rows).toEqual([]);
+  });
+
+  it("treats every category in savingsIds as savings and lets net savings go negative", () => {
+    const sparen: CategoryYearCategory = { id: "sparen", name: " Sparen " };
+    const m = buildCategoryYearMatrix({
+      year: 2036,
+      categories: [savings, sparen],
+      savingsIds: new Set(["sav", "sparen"]),
+      transactions: [tx("sav", -20000, 1), tx("sparen", -5000, 1), tx("sparen", 9000, 2)],
+      budgetsByCategory: {}
+    });
+    expect(m.savings.rows.map((r) => r.id).sort()).toEqual(["sav", "sparen"]);
+    expect(m.savings.monthlyTotalsCents).toEqual(at({ 1: 25000, 2: -9000 }));
+    expect(m.income.rows).toEqual([]);
     expect(m.expenses.rows).toEqual([]);
   });
 
@@ -168,6 +213,23 @@ describe("buildCategoryYearMatrix", () => {
     expect(row.overYear).toBe(false);
   });
 
+  it("attaches the budget to the expense row only, also when the category has just a refund", () => {
+    const m = build([tx("food", 1500, 2)], { food: flat(10000) });
+    const expense = rowOf(m.expenses.rows, "food");
+    expect(expense.monthlyCents).toEqual(zeros());
+    expect(expense.budgetTotalCents).toBe(120000);
+    const income = rowOf(m.income.rows, "food");
+    expect(income.budgetMonthlyCents).toBeNull();
+    expect(income.budgetTotalCents).toBeNull();
+    expect(income.overMonths).toEqual([]);
+  });
+
+  it("does not create an expense row for a budget on a savings category", () => {
+    const m = build([tx("sav", -20000, 1)], { sav: flat(10000) });
+    expect(m.expenses.rows).toEqual([]);
+    expect(rowOf(m.savings.rows, "sav").budgetMonthlyCents).toBeNull();
+  });
+
   it("books null and unknown categories as uncategorized expense for negative amounts", () => {
     const m = build([tx(null, -1000, 4), tx("ghost", -500, 4)]);
     const row = rowOf(m.expenses.rows, "uncategorized");
@@ -193,9 +255,9 @@ describe("buildCategoryYearMatrix", () => {
   });
 
   it("sorts by total descending, ties by name ascending, uncategorized last", () => {
-    const zeta: CategoryYearCategory = { id: "z", name: "Zeta", kind: "expense" };
-    const alpha: CategoryYearCategory = { id: "a", name: "Älpha", kind: "expense" };
-    const big: CategoryYearCategory = { id: "b", name: "Big", kind: "expense" };
+    const zeta: CategoryYearCategory = { id: "z", name: "Zeta" };
+    const alpha: CategoryYearCategory = { id: "a", name: "Älpha" };
+    const big: CategoryYearCategory = { id: "b", name: "Big" };
     const m = build(
       [
         tx("z", -1000, 1),
@@ -214,7 +276,7 @@ describe("buildCategoryYearMatrix", () => {
     const transactions = [tx("food", -5000, 1), tx(null, 100, 2)];
     const budgets = { food: flat(10000) };
     const snapshot = JSON.stringify({ categories, transactions, budgets });
-    buildCategoryYearMatrix({ year: 2036, categories, transactions, budgetsByCategory: budgets });
+    buildCategoryYearMatrix({ year: 2036, categories, savingsIds, transactions, budgetsByCategory: budgets });
     expect(JSON.stringify({ categories, transactions, budgets })).toBe(snapshot);
   });
 });

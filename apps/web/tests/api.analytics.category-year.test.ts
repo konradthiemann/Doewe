@@ -1,4 +1,4 @@
-import type { CategoryYearMatrix, CategoryYearRow } from "@doewe/shared";
+import { zonedDate, type CategoryYearMatrix, type CategoryYearRow } from "@doewe/shared";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
@@ -6,9 +6,12 @@ import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
 // GET /api/analytics/category-year?year=2036 - category x month actuals with budget overruns.
 // Fixture year 2036; recurring fixtures (YEARLY plan distribution) are created per test and removed
 // afterwards, with future anchors so the cron test (books due recurring items globally) is unaffected.
+// Bookings are classified one by one (savings category first, then the sign), months and years are
+// those of Europe/Berlin, and all accounts of the household count (SECOND_ACCOUNT_ID).
 const TEST_USER_ID = "test-user-analytics-category-year";
 const OTHER_USER_ID = "test-user-analytics-category-year-other";
 const ACCOUNT_ID = "acc_analytics_category_year";
+const SECOND_ACCOUNT_ID = "acc_analytics_category_year_second";
 const OTHER_ACCOUNT_ID = "acc_analytics_category_year_other";
 const YEAR = 2036;
 process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
@@ -33,7 +36,8 @@ async function getMatrix(query?: string): Promise<CategoryYearMatrix> {
 
 const rowOf = (rows: CategoryYearRow[], id: string): CategoryYearRow | undefined => rows.find((r) => r.id === id);
 const sum = (values: ReadonlyArray<number | null>) => values.reduce<number>((a, b) => a + (b ?? 0), 0);
-const atMonth = (year: number, month: number, day = 10) => new Date(year, month - 1, day, 12);
+// Noon UTC is the same calendar day in Berlin and in any process time zone.
+const atMonth = (year: number, month: number, day = 10) => new Date(Date.UTC(year, month - 1, day, 12));
 
 async function book(categoryId: string | null, amountCents: number, month: number, opts: { year?: number; deletedAt?: Date } = {}) {
   await prisma.transaction.create({
@@ -49,7 +53,9 @@ async function book(categoryId: string | null, amountCents: number, month: numbe
 }
 
 async function clean() {
-  await prisma.transaction.deleteMany({ where: { accountId: { in: [ACCOUNT_ID, OTHER_ACCOUNT_ID] } } });
+  await prisma.transaction.deleteMany({
+    where: { accountId: { in: [ACCOUNT_ID, SECOND_ACCOUNT_ID, OTHER_ACCOUNT_ID] } }
+  });
   await prisma.categoryBudgetPlan.deleteMany({ where: { householdId } });
   await prisma.budget.deleteMany({ where: { accountId: ACCOUNT_ID } });
   await prisma.recurringTransactionSkip.deleteMany({ where: { recurring: { accountId: ACCOUNT_ID } } });
@@ -69,6 +75,11 @@ beforeAll(async () => {
     where: { id: ACCOUNT_ID },
     update: { userId: user.id, householdId },
     create: { id: ACCOUNT_ID, name: "CY Account", userId: user.id, householdId }
+  });
+  await prisma.account.upsert({
+    where: { id: SECOND_ACCOUNT_ID },
+    update: { userId: user.id, householdId },
+    create: { id: SECOND_ACCOUNT_ID, name: "CY Second Account", userId: user.id, householdId }
   });
   const mk = async (name: string, isIncome = false) =>
     (
@@ -107,13 +118,14 @@ beforeEach(clean);
 
 afterEach(() => {
   process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
+  vi.useRealTimers();
 });
 
 afterAll(async () => {
   if (!prisma) return;
   await clean();
   await prisma.category.deleteMany({ where: { householdId: { in: [householdId, otherHouseholdId] } } });
-  await prisma.account.deleteMany({ where: { id: { in: [ACCOUNT_ID, OTHER_ACCOUNT_ID] } } });
+  await prisma.account.deleteMany({ where: { id: { in: [ACCOUNT_ID, SECOND_ACCOUNT_ID, OTHER_ACCOUNT_ID] } } });
   await cleanupTestHousehold(prisma, TEST_USER_ID);
   await cleanupTestHousehold(prisma, OTHER_USER_ID);
   await prisma.user.deleteMany({ where: { id: { in: [TEST_USER_ID, OTHER_USER_ID] } } });
@@ -142,7 +154,14 @@ describe("GET /api/analytics/category-year", () => {
 
   it("defaults to the current year without a year parameter", async () => {
     const m = await getMatrix("");
-    expect(m.year).toBe(new Date().getFullYear());
+    expect(m.year).toBe(zonedDate(new Date()).year);
+  });
+
+  it("defaults to the year in Berlin: 00:30 on 1 January is the new year (23:30 UTC on 31 December)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-31T23:30:00.000Z") });
+    expect((await getMatrix("")).year).toBe(2027);
+    vi.setSystemTime(new Date("2026-12-31T22:30:00.000Z"));
+    expect((await getMatrix("")).year).toBe(2026);
   });
 
   it("returns an empty matrix for a year without data", async () => {
@@ -155,7 +174,7 @@ describe("GET /api/analytics/category-year", () => {
     expect(m.balanceTotalCents).toBe(0);
   });
 
-  it("sums expenses per category and local month as positive amounts", async () => {
+  it("sums expenses per category and month as positive amounts", async () => {
     await book(foodId, -5000, 3);
     await book(foodId, -2500, 3);
     await book(foodId, -1000, 7);
@@ -166,16 +185,50 @@ describe("GET /api/analytics/category-year", () => {
     expect(sum(row!.monthlyCents)).toBe(8500);
   });
 
-  it("assigns bookings to the local month of occurredAt (first and last day)", async () => {
+  it("assigns bookings to the Berlin month and year of occurredAt (first and last instant)", async () => {
+    const at = (amountCents: number, description: string, occurredAt: string) => ({
+      accountId: ACCOUNT_ID,
+      categoryId: foodId,
+      amountCents,
+      description,
+      occurredAt: new Date(occurredAt)
+    });
     await prisma.transaction.createMany({
       data: [
-        { accountId: ACCOUNT_ID, categoryId: foodId, amountCents: -100, description: "CY first", occurredAt: new Date(YEAR, 0, 1, 0, 0, 0) },
-        { accountId: ACCOUNT_ID, categoryId: foodId, amountCents: -200, description: "CY last", occurredAt: new Date(YEAR, 11, 31, 23, 59, 59) }
+        // 31 Dec 2035, 23:59:59 in Berlin: previous year
+        at(-1, "CY before", "2035-12-31T22:59:59.000Z"),
+        // 1 Jan 2036, 00:00:00 in Berlin — still 31 Dec 2035 in UTC
+        at(-100, "CY first", "2035-12-31T23:00:00.000Z"),
+        // 1 Apr 2036, 00:30 in Berlin (summer time) — still 31 Mar in UTC
+        at(-400, "CY april", "2036-03-31T22:30:00.000Z"),
+        // 31 Dec 2036, 23:59:59 in Berlin
+        at(-200, "CY last", "2036-12-31T22:59:59.000Z"),
+        // 1 Jan 2037, 00:30 in Berlin — still 31 Dec 2036 in UTC: next year
+        at(-2, "CY after", "2036-12-31T23:30:00.000Z")
       ]
     });
     const row = rowOf((await getMatrix()).expenses.rows, foodId)!;
     expect(row.monthlyCents[0]).toBe(100);
+    expect(row.monthlyCents[2]).toBe(0);
+    expect(row.monthlyCents[3]).toBe(400);
     expect(row.monthlyCents[11]).toBe(200);
+    expect(row.totalCents).toBe(700);
+  });
+
+  it("covers all accounts of the household", async () => {
+    await book(foodId, -5000, 3);
+    await prisma.transaction.create({
+      data: {
+        accountId: SECOND_ACCOUNT_ID,
+        categoryId: foodId,
+        amountCents: -700,
+        description: "CY second account",
+        occurredAt: atMonth(YEAR, 3)
+      }
+    });
+    const m = await getMatrix();
+    expect(rowOf(m.expenses.rows, foodId)!.monthlyCents[2]).toBe(5700);
+    expect(m.expenses.monthlyTotalsCents[2]).toBe(5700);
   });
 
   it("excludes soft-deleted bookings and bookings of other years", async () => {
@@ -198,12 +251,36 @@ describe("GET /api/analytics/category-year", () => {
     expect(rowOf(m.income.rows, savingsId)).toBeUndefined();
   });
 
-  it("puts an isIncome category into the income group", async () => {
+  it("puts positive bookings into the income group", async () => {
     await book(salaryId, 300000, 1);
     const m = await getMatrix();
     const row = rowOf(m.income.rows, salaryId)!;
     expect(row).toMatchObject({ kind: "income", totalCents: 300000 });
     expect(rowOf(m.expenses.rows, salaryId)).toBeUndefined();
+  });
+
+  it("classifies each booking by its sign, not by the category's isIncome flag", async () => {
+    await book(salaryId, 300000, 1);
+    await book(salaryId, -50, 1); // correction in an isIncome category: an expense
+    await book(foodId, -5000, 1);
+    await book(foodId, 2000, 1); // refund in an expense category: income, spend stays gross
+    const m = await getMatrix();
+    expect(rowOf(m.income.rows, salaryId)).toMatchObject({ kind: "income", totalCents: 300000 });
+    expect(rowOf(m.expenses.rows, salaryId)).toMatchObject({ kind: "expense", name: "CY Salary", totalCents: 50 });
+    expect(rowOf(m.expenses.rows, foodId)).toMatchObject({ kind: "expense", totalCents: 5000 });
+    expect(rowOf(m.income.rows, foodId)).toMatchObject({ kind: "income", name: "CY Food", totalCents: 2000 });
+    expect(m.income.monthlyTotalsCents[0]).toBe(302000);
+    expect(m.expenses.monthlyTotalsCents[0]).toBe(5050);
+    expect(m.balanceMonthlyCents[0]).toBe(296950);
+  });
+
+  it("attaches the budget to the expense row of a category that also has an income row", async () => {
+    await prisma.categoryBudgetPlan.create({ data: { householdId, categoryId: foodId, period: "MONTHLY", amountCents: 4000 } });
+    await book(foodId, -5000, 1);
+    await book(foodId, 2000, 1); // the refund does not bring the spend back under the budget
+    const m = await getMatrix();
+    expect(rowOf(m.expenses.rows, foodId)).toMatchObject({ budgetTotalCents: 48000, overMonths: [1] });
+    expect(rowOf(m.income.rows, foodId)).toMatchObject({ budgetMonthlyCents: null, budgetTotalCents: null, overMonths: [] });
   });
 
   it("computes the balance as income - expenses - savings", async () => {

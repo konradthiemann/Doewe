@@ -1,3 +1,4 @@
+import { zonedMonth, zonedTimeToUtc } from "@doewe/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
@@ -41,8 +42,8 @@ beforeAll(async () => {
 
   await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
 
-  const now = new Date();
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Noon on the 2nd of the current month in Europe/Berlin (the route's calendar).
+  const current = zonedMonth(new Date());
 
   await prisma.transaction.create({
     data: {
@@ -50,7 +51,7 @@ beforeAll(async () => {
       categoryId: savingsCat.id,
       amountCents: -15000, // -150€ deposit into savings this month
       description: "Savings deposit",
-      occurredAt: new Date(thisMonthStart.getTime() + 1 * 86400000)
+      occurredAt: zonedTimeToUtc({ ...current, day: 2, hour: 12 })
     }
   });
 });
