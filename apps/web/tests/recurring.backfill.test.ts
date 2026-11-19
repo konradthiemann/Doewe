@@ -278,6 +278,22 @@ describe("changing the interval of an existing template", () => {
     ]);
   });
 
+  it("lifts the lower bound when the user asks for the past months later, without changing the schedule", async () => {
+    const rent = await createTemplate({ startDate: "2029-06-01" });
+    expect(rent.bookFromPeriod).toBe("2029-11");
+    expect(await catchUp()).toEqual([]);
+
+    const updated = await patchTemplate(rent.id, { backfill: true });
+    expect(updated.bookFromPeriod).toBeNull();
+    expect(await catchUp()).toEqual([
+      [2029, 6],
+      [2029, 7],
+      [2029, 8],
+      [2029, 9],
+      [2029, 10]
+    ]);
+  });
+
   it("moving the start date into the past does not back-book either", async () => {
     const rent = await createTemplate({ startDate: "2029-12-01" });
     const updated = await patchTemplate(rent.id, { startDate: "2029-03-01" });

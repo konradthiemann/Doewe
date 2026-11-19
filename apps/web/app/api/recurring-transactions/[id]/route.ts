@@ -20,8 +20,9 @@
  * gespeicherten Anker-Tag abweicht, oder ein `intervalMonths`, das vom gespeicherten Wert
  * abweicht —, wird `bookFromPeriod` neu bestimmt wie beim Anlegen: liegt der Anker in einem
  * Monat vor dem laufenden Berliner Monat, wird ab dem laufenden Monat gebucht (die Monate
- * davor nicht), mit `backfill: true` ohne Untergrenze. Eine Anfrage, die den Rhythmus nicht
- * ändert, lässt `bookFromPeriod` unverändert — `backfill` hat dann keine Wirkung.
+ * davor nicht). `backfill: true` hebt die Untergrenze immer auf — auch ohne Änderung am
+ * Rhythmus: Die vergangenen Monate seit dem Anker werden dann nachgebucht. Eine Anfrage ohne
+ * `backfill: true`, die den Rhythmus nicht ändert, lässt `bookFromPeriod` unverändert.
  *
  * Ein geändertes `startDate` darf höchstens 10 Jahre vor oder nach heute liegen (400 sonst).
  * Der unverändert mitgeschickte Anker eines älteren Dauerauftrags wird nicht geprüft.
@@ -132,10 +133,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // A changed schedule must not back-book unasked: with an anchor before the
   // current month the series is booked from the current month on, unless the
   // user asked for the months in between. undefined = leave the bound alone.
-  const bookFromPeriod =
-    startChanged || intervalChanged
-      ? bookFromPeriodFor(zonedMonth(nextOccurrence ?? existing.nextOccurrence), zonedMonth(now), data.backfill ?? false)
-      : undefined;
+  // An explicit `backfill: true` always lifts the bound: it is the user asking
+  // for the past months, whether or not the schedule changes in this request.
+  let bookFromPeriod: string | null | undefined;
+  if (data.backfill === true) {
+    bookFromPeriod = null;
+  } else if (startChanged || intervalChanged) {
+    bookFromPeriod = bookFromPeriodFor(zonedMonth(nextOccurrence ?? existing.nextOccurrence), zonedMonth(now), false);
+  }
 
   const updateData = {
     accountId: data.accountId,
