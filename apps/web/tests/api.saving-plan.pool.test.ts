@@ -344,12 +344,3 @@ describe("completing and withdrawing use the household pool", () => {
     expect(((await next.json()) as { availableCents: number }).availableCents).toBe(5_000);
   });
 });
-
-describe("deprecated savings.ts exports stay available until all callers have moved", () => {
-  it("re-exports the names constant and resolves the oldest savings category", async () => {
-    const legacy = await import("../app/api/saving-plan/savings");
-    expect([...legacy.SAVINGS_CATEGORY_NAMES]).toEqual(["savings", "sparen"]);
-    expect(await legacy.findSavingsCategoryId(householdId)).toBe(savingsId);
-    expect(sparenId).not.toBe(savingsId);
-  });
-});

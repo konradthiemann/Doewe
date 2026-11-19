@@ -3,9 +3,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
 
-// Self-healing: monthly-review and summary book due recurring transactions of
-// past months for the requesting household on read, so a missing/broken cron
-// can never silently leave completed months without their standing orders.
+// Self-healing: monthly-review, summary, quarterly and category-year book due
+// recurring transactions of past months for the requesting household on read,
+// so a missing/broken cron can never silently leave completed months without
+// their standing orders — and the tiles the dashboard loads in parallel all
+// see the same bookings.
 //
 // Fixed instants and a pinned clock: "past month" and the anchor month are
 // Berlin calendar months, whatever time zone the process runs in.
@@ -157,6 +159,34 @@ describe("recurring self-healing on read", () => {
     expect(data.carryoverFromLastMonth).toBe(-3490);
     expect(await bookingsIn(currentMonthOnlyId, 2026, 11)).toBe(0);
     expect(data.recurringTransactions.map((r) => r.id)).toContain(currentMonthOnlyId);
+  }, 30000);
+
+  it("quarterly books missed occurrences before computing, so it matches the review", async () => {
+    await prisma.transaction.deleteMany({ where: { recurringTransactionId: rentId } });
+    const { GET } = await import("../app/api/analytics/quarterly/route");
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      quarters: Array<{ month: number; year: number; outcomeCents: number; balanceCents: number }>;
+    };
+
+    expect(await bookingsIn(rentId, prevYear, prevMonth)).toBe(1);
+    const column = data.quarters.find((q) => q.month === prevMonth && q.year === prevYear);
+    expect(column?.outcomeCents).toBe((await fetchReview()).outcomeCents);
+    expect(column?.outcomeCents).toBe(113000);
+    // 3 past months of rent + 2 unskipped past months of -50
+    expect(column?.balanceCents).toBe(-349000);
+  }, 30000);
+
+  it("category-year books missed occurrences before computing", async () => {
+    await prisma.transaction.deleteMany({ where: { recurringTransactionId: rentId } });
+    const { GET } = await import("../app/api/analytics/category-year/route");
+    const res = await GET(new Request(`http://localhost/api/analytics/category-year?year=${prevYear}`));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { expenses: { monthlyTotalsCents: number[] } };
+
+    expect(await bookingsIn(rentId, prevYear, prevMonth)).toBe(1);
+    expect(data.expenses.monthlyTotalsCents[prevMonth - 1]).toBe(113000);
   }, 30000);
 
   it("keeps booking the remaining occurrences when one booking fails", async () => {

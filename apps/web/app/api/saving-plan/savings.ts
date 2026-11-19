@@ -13,12 +13,6 @@ import { prisma } from "../../../lib/prisma";
 import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
 
 /**
- * @deprecated Import `SAVINGS_CATEGORY_NAMES` / `isSavingsCategoryName` from
- * `@doewe/shared`. Re-exported only until the remaining callers have moved.
- */
-export { SAVINGS_CATEGORY_NAMES } from "@doewe/shared";
-
-/**
  * The savings category a new pool booking (a withdrawal) is written to: the
  * oldest one, so the choice is stable when a household has several.
  */
@@ -29,15 +23,6 @@ export async function findSavingsBookingCategoryId(householdId: string): Promise
     orderBy: [{ createdAt: "asc" }, { id: "asc" }]
   });
   return categories.find((category) => isSavingsCategoryName(category.name))?.id ?? null;
-}
-
-/**
- * @deprecated A household can have several savings categories; reading "the"
- * savings category misses the others. Classify with `loadSavingsCategoryIds`
- * (lib/savingsCategory.ts). Kept only until the remaining callers have moved.
- */
-export async function findSavingsCategoryId(householdId: string): Promise<string | null> {
-  return findSavingsBookingCategoryId(householdId);
 }
 
 /**
