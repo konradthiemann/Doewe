@@ -3,17 +3,22 @@
  * POST /api/transactions  — Neue Transaktion anlegen
  *
  * Authentifizierung: Pflicht. Gibt 401 zurück wenn nicht eingeloggt.
- * Autorisierung: Nur Transaktionen des eigenen Accounts (via accountId → userId).
+ * Autorisierung: Nur Transaktionen des eigenen Haushalts (via accountId → householdId).
  *
  * POST Body (JSON):
- *   accountId    string   — Pflicht, muss dem Nutzer gehören
- *   amountCents  number   — Ganzzahl, positiv = Einnahme, negativ = Ausgabe
- *   description  string   — Pflicht, nicht leer
- *   occurredAt   string   — ISO-Datum-String
- *   categoryId?  string   — Optional, muss dem Nutzer gehören
+ *   accountId    string   — Pflicht, muss zum Haushalt gehören
+ *   amountCents  number   — Ganzzahl im int4-Bereich, positiv = Einnahme, negativ = Ausgabe
+ *   description  string   — Pflicht, nicht leer (Leerraum am Rand wird entfernt)
+ *   occurredAt   string   — ISO-Zeitpunkt, oder ein Kalendertag `yyyy-mm-dd`
+ *                           (wird als 12:00 Uhr Europe/Berlin dieses Tages gespeichert)
+ *   categoryId?  string   — Optional, muss zum Haushalt gehören
  *   savingGoalId? string  — Optional, verknüpft mit einem Budget-Ziel
  *   taxRelevant? boolean  — Optional, für die Steuererklärung vorgemerkt.
  *                           Default: isTaxRelevant der Kategorie, sonst false.
+ *
+ * Ungültige Eingaben (auch: kein JSON, Beschreibung nur aus Leerraum, Betrag
+ * außerhalb int4, ungültiges Datum) liefern 400 — nie 500: die Offline-Outbox
+ * hält bei jedem 5xx an und würde alle späteren Buchungen blockieren.
  */
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -22,7 +27,7 @@ import { getSessionUser } from "../../../lib/auth";
 import { checkBudgetAlerts } from "../../../lib/budgetAlerts";
 import { prisma } from "../../../lib/prisma";
 
-import { TransactionInput } from "./schema";
+import { parseOccurredAt, TransactionInput } from "./schema";
 
 export async function GET() {
   const user = await getSessionUser();
@@ -49,14 +54,18 @@ export async function POST(req: Request) {
     }
   }
 
-  const json = await req.json();
+  // Kein gültiges JSON → null → scheitert an der Validierung (400 statt 500).
+  const json: unknown = await req.json().catch(() => null);
   const parsed = TransactionInput.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const data = parsed.data;
-  const occurredAt =
-    typeof data.occurredAt === "string" ? new Date(data.occurredAt) : data.occurredAt;
+  // Das Schema hat das Datum bereits geprüft; der Guard hält nur den Typ eng.
+  const occurredAt = parseOccurredAt(data.occurredAt);
+  if (!occurredAt) {
+    return NextResponse.json({ error: "Invalid occurredAt" }, { status: 400 });
+  }
 
   const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId: user.householdId } });
   if (!account) {
