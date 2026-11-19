@@ -153,7 +153,7 @@ export const en: Record<string, string> = {
   "dashboard.doughnutRemainingToSave": "Remaining to save",
   "dashboard.balanceOverview": "Financial KPIs",
   "dashboard.totalBalance": "Current balance",
-  "dashboard.totalBalanceHint": "Sum of all transactions (total)",
+  "dashboard.totalBalanceHint": "All bookings up to the end of this month",
   "dashboard.carryoverFromLastMonth": "Carryover from last month",
   "dashboard.carryoverHint": "Balance at the end of last month",
   "dashboard.carryoverNegativeHint": "Last month in the red: reduces your budget.",
