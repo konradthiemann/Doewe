@@ -875,7 +875,7 @@ Update a recurring transaction template. Partial update — send only changed fi
 
 Occurrences that are already booked are left untouched in both cases. `categoryId: null` removes the category; omitting the field leaves it unchanged.
 
-**Schedule changes and `backfill`:** a request changes the schedule when its `startDate` differs from the Europe/Berlin calendar day of the stored anchor or its `intervalMonths` differs from the stored value. Only then is `bookFromPeriod` set again, as on create: with the (new) anchor in a month before the current one it becomes the current month — shortening the interval from 3 to 1 does not book the months in between — and with `backfill: true`, or an anchor in the current month or later, it becomes `null`. A request that resends the stored start date and interval leaves `bookFromPeriod` as it is; `backfill` has no effect then. The 10-year limit on `startDate` is likewise checked only for a changed start date, so an old template anchored further back can still be edited.
+**Schedule changes and `backfill`:** a request changes the schedule when its `startDate` differs from the Europe/Berlin calendar day of the stored anchor or its `intervalMonths` differs from the stored value. Only then is `bookFromPeriod` set again, as on create: with the (new) anchor in a month before the current one it becomes the current month — shortening the interval from 3 to 1 does not book the months in between — and with `backfill: true`, or an anchor in the current month or later, it becomes `null`. An explicit `backfill: true` always lifts the bound (`null`), also without a schedule change: the months since the anchor are then booked on the next run. Otherwise a request that resends the stored start date and interval leaves `bookFromPeriod` as it is. The 10-year limit on `startDate` is likewise checked only for a changed start date, so an old template anchored further back can still be edited.
 
 **Auth required:** Yes
 
@@ -1870,7 +1870,7 @@ Two-way offline sync (Phase 3b). Write-path v1 covers **transactions** only (the
 
 ### `POST /api/sync/push`
 
-Applies a FIFO batch of local transaction mutations.
+Applies a FIFO batch of local transaction mutations. `occurredAt` is read like in `POST /api/transactions` (a bare calendar day means 12:00 Europe/Berlin); an operation with an unreadable date is answered with `status: "conflict"` for that operation only.
 
 **Body:** `{ "ops": PushOp[] }` (1–100 ops), where each op is:
 ```json

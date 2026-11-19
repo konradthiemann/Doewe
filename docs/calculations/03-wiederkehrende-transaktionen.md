@@ -128,7 +128,7 @@ Gesetzt wird die Untergrenze an drei Stellen, jeweils auf den **laufenden Berlin
 | Auslöser | Regel |
 |---|---|
 | Anlegen (`POST`) | Liegt die erste Buchung in einem Monat **vor** dem laufenden Monat: laufender Monat. Mit `backfill: true` oder bei erster Buchung im laufenden oder einem späteren Monat: leer. |
-| Bearbeiten (`PATCH`) | Nur wenn die Anfrage den Rhythmus ändert — `startDate` weicht vom gespeicherten Anker-Tag ab oder `intervalMonths` vom gespeicherten Wert: wie beim Anlegen, gemessen am (neuen) Anker-Monat. Sonst bleibt der Wert unverändert, auch mit `backfill`. |
+| Bearbeiten (`PATCH`) | Nur wenn die Anfrage den Rhythmus ändert — `startDate` weicht vom gespeicherten Anker-Tag ab oder `intervalMonths` vom gespeicherten Wert: wie beim Anlegen, gemessen am (neuen) Anker-Monat. Ein ausdrückliches `backfill: true` hebt die Untergrenze immer auf, auch ohne Änderung am Rhythmus (die Monate seit dem Anker werden nachgebucht). Sonst bleibt der Wert unverändert. |
 | Dauerauftrag aus Buchung (`make-recurring`) | Immer der laufende Monat: die Serie läuft ab jetzt weiter. |
 
 Hintergrund: Ohne Untergrenze buchte ein Startdatum in der Vergangenheit für jeden Monat seit dem

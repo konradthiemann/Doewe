@@ -10,6 +10,7 @@ import {
 import { loadEffectiveCategoryBudgets } from "./categoryBudgets";
 import { prisma } from "./prisma";
 import { sendPushToUser } from "./push";
+import { adoptManualBookingsForCurrentMonth } from "./recurringBooking";
 import { loadBookedOccurrenceKeys, occurrenceKey } from "./recurringPeriods";
 import { loadSavingsCategoryIds } from "./savingsCategory";
 
@@ -145,6 +146,13 @@ export async function checkBudgetAlerts(params: {
       select: { amountCents: true, categoryId: true }
     });
     const bookedExpenseCents = sumFlows(bookedRows, savingsIds).outcomeCents;
+    // A payment entered by hand may be this month's occurrence of a standing
+    // order. Recognise it first, otherwise it counts once as booked and once
+    // as planned (the dashboard does the same before it computes "planned").
+    const current = zonedMonth(new Date());
+    if (current.year === year && current.month === month) {
+      await adoptManualBookingsForCurrentMonth(householdId);
+    }
     const recurringCents = await plannedRecurringExpenseCents(householdId, categoryId, month, year, savingsIds);
     const spentCents = bookedExpenseCents + recurringCents;
 

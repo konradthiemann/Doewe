@@ -45,7 +45,10 @@ flowchart TD
 **Schreibender GET:** Der erste Schritt bucht fällige, nie gebuchte Vorkommen abgeschlossener Monate
 nach, bevor gerechnet wird (siehe
 [03-wiederkehrende-transaktionen.md](./03-wiederkehrende-transaktionen.md), „Selbstheilung beim
-Lesen"). Der laufende Monat wird hier nicht gebucht.
+Lesen"). Der laufende Monat wird hier nicht gebucht. Danach erkennt die Route von Hand erfasste
+Zahlungen des laufenden Monats als Vorkommen ihres Dauerauftrags (gleicher Betrag, gleiche Kategorie,
+bis zu 7 Tage um den Fälligkeitstag — siehe dort „Übernahme"), damit eine solche Zahlung nicht einmal
+als gebucht und einmal als geplant zählt.
 
 ## Alle Kennzahlen im Detail
 

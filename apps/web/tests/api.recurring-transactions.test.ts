@@ -411,9 +411,12 @@ describe("/api/recurring-transactions", () => {
       vi.setSystemTime(new Date("2027-02-10T10:00:00.000Z"));
       const again = (await (await patch(row.id, { ...resent, amountCents: -31000 })).json()) as Created;
       expect(again.bookFromPeriod).toBe("2026-08");
-      // backfill has no effect without a schedule change
+      // backfill: false is the form's default and changes nothing either
+      const unticked = (await (await patch(row.id, { ...resent, backfill: false })).json()) as Created;
+      expect(unticked.bookFromPeriod).toBe("2026-08");
+      // an explicit backfill: true is the user asking for the past months: it lifts the bound
       const withFlag = (await (await patch(row.id, { ...resent, backfill: true })).json()) as Created;
-      expect(withFlag.bookFromPeriod).toBe("2026-08");
+      expect(withFlag.bookFromPeriod).toBeNull();
     }, 20000);
 
     it("leaves it alone when only dayOfMonth changes", async () => {
