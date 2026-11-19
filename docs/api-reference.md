@@ -582,6 +582,8 @@ Turns an existing booking into a recurring transaction (`MONTHLY`). Creates a `R
 
 The anchor `nextOccurrence` = booking day (calendar day in Europe/Berlin) + `intervalMonths` (day = `dayOfMonth`, clamped to the target month's length, e.g. 31 Jan + 1 month → 28/29 Feb), stored as 12:00 Europe/Berlin of that day. The origin month is therefore not booked again by the auto-booking run. The booking itself becomes the occurrence of its own Berlin month: it gets `recurringPeriod` = that month, so moving it into the next month later does not hide that month's own occurrence. Create and link happen in one database transaction.
 
+The new template gets `bookFromPeriod` = the current Europe/Berlin month: the series continues from now. Turning a two-month-old booking into a recurring transaction therefore books nothing for the month in between; the current month is booked once its day has come.
+
 **Success response — `201 Created`:** the new recurring transaction object.
 
 **Error responses:**
@@ -773,7 +775,9 @@ A recurring transaction is a template. Its due occurrences are **booked automati
 
 - **Anchor:** `nextOccurrence` is the anchor of the series, **not** "the next" occurrence, and is not advanced after a booking. Scheduling reads only its month (in Europe/Berlin): the template is due in the anchor month and every `intervalMonths` months after it. The day of the booking is `dayOfMonth`, clamped to the length of the month. The anchor is always stored as 12:00 Europe/Berlin of the intended calendar day.
 - **Occurrence identity:** an occurrence is `(recurringTransactionId, recurringPeriod)`, where `recurringPeriod` (`"YYYY-MM"`) is the month it was booked for. A month counts as booked as soon as such a booking exists — also when it was later moved into another month or deleted.
-- **Known limitations:** a payment entered by hand is not recognised as an occurrence (it has no `recurringTransactionId`), so a hand-entered payment plus a template books it twice; an anchor in the past back-books every due month since then; back-booked months use the template's current amount.
+- **No unasked back-booking:** `bookFromPeriod` (`"YYYY-MM"` or `null`) is the first month that may be booked automatically; occurrences before it are never booked. It is set to the current Europe/Berlin month when a template is created with a first occurrence in an earlier month, when a `PATCH` changes the schedule of a template anchored in the past, and by `make-recurring` — unless the request carries `backfill: true`. `null` means no lower bound (every template created before the field existed). The yearly matrix and the CSV show the schedule and ignore it.
+- **Hand-entered payments:** before an occurrence is booked, the run looks for a booking the user entered by hand that stands for it and **adopts** it instead: same account, not deleted, not linked to any recurring transaction, exactly the same `amountCents`, the same category (for a template without category: no category and the same description, ignoring case and surrounding whitespace), and dated at most 7 calendar days (Europe/Berlin) before or after the due day. Of several, the one closest to the due day wins, then the oldest. Adopting sets `recurringTransactionId` and `recurringPeriod` on that booking and changes nothing else; each booking stands for one occurrence only. `GET /api/analytics/summary` does the same for every unbooked occurrence of the current month, also before its due day, without ever creating a booking.
+- **Known limitations:** a hand-entered payment outside that rule (other amount, more than 7 days away, or entered after the month was already auto-booked) is still there twice; a link made by adoption cannot be removed through the API; back-booked months use the template's current amount.
 
 ### `GET /api/recurring-transactions`
 
@@ -796,6 +800,7 @@ List all recurring transactions of the household, ordered by `nextOccurrence` as
     "intervalMonths": 1,
     "dayOfMonth": 1,
     "nextOccurrence": "2026-05-01T10:00:00.000Z",
+    "bookFromPeriod": null,
     "createdAt": "2026-01-01T00:00:00.000Z"
   }
 ]
@@ -818,7 +823,9 @@ Create a new recurring transaction template. `frequency` is set server-side to `
 How the anchor `nextOccurrence` is set:
 
 - **Without `startDate`:** from `dayOfMonth` and today's calendar day in Europe/Berlin. The series starts this month only if the day (clamped to the month's length) is still ahead, i.e. **strictly after today**; if it is today or already past, it starts next month. A due day that is today counts as passed so that someone who entered today's payment by hand and then creates the template does not get it booked a second time. Example on 30 November: `dayOfMonth` 30 and 31 both clamp to today and both start in December.
-- **With `startDate`** (`yyyy-mm-dd`): the anchor is that date — e.g. a subscription whose first charge is a few months out. `dayOfMonth` defaults to the day of `startDate`; if a different `dayOfMonth` is sent as well, the series starts in the month of `startDate` and books on `dayOfMonth`. A `startDate` in the past back-books every due month since then on the next run.
+- **With `startDate`** (`yyyy-mm-dd`): that date is the first booking — e.g. a subscription whose first charge is a few months out. `dayOfMonth` defaults to the day of `startDate`. `startDate` and `dayOfMonth` are independent fields and the booking day is `dayOfMonth`: if it (clamped to the length of the start month) is the start day or later, the series starts in the month of `startDate` and the anchor is `startDate`; if it lies **before** the start day, the series starts in the following month and the anchor is `dayOfMonth` of that month (start 20 November, day 5 → first booking and anchor 5 December). Nothing is ever booked before the date entered as the first booking.
+
+**Past start dates:** if the first occurrence lies in a month before the current Europe/Berlin month, the template gets `bookFromPeriod` = the current month and the months before it are **not** booked. Send `backfill: true` to have every due month since the start booked on the next run (`bookFromPeriod` stays `null`). A first occurrence earlier in the current month is not "the past": it is booked on the next run.
 
 **Auth required:** Yes
 
@@ -831,7 +838,8 @@ How the anchor `nextOccurrence` is set:
   "description": "Miete",
   "intervalMonths": 1,
   "dayOfMonth": 1,
-  "startDate": "2026-10-01"
+  "startDate": "2026-10-01",
+  "backfill": false
 }
 ```
 
@@ -843,15 +851,16 @@ How the anchor `nextOccurrence` is set:
 | `description` | string | Required; non-empty |
 | `intervalMonths` | integer | Optional; 1–24, defaults to `1` (e.g., `3` = quarterly) |
 | `dayOfMonth` | integer | Optional; 1–31. Defaults to the day of `startDate` if given, else `1` |
-| `startDate` | string | Optional; `yyyy-mm-dd`, must be a real calendar day. When set, becomes the anchor; otherwise the anchor is derived from `dayOfMonth` (see above) |
+| `startDate` | string | Optional; `yyyy-mm-dd`, must be a real calendar day at most 10 years before or after today in Europe/Berlin (the same day 10 years away is still accepted). When set, it is the first booking; otherwise the anchor is derived from `dayOfMonth` (see above) |
+| `backfill` | boolean | Optional, default `false`. `true` = also book the months between a past start and now |
 
-**Success response — `201 Created`:** Full recurring transaction object (with computed `nextOccurrence` and `frequency: "MONTHLY"`).
+**Success response — `201 Created`:** Full recurring transaction object (with computed `nextOccurrence`, `bookFromPeriod` and `frequency: "MONTHLY"`).
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
-| `400` | Validation failed |
+| `400` | Validation failed — also a `startDate` more than 10 years away: `{ "error": { "formErrors": [], "fieldErrors": { "startDate": ["Start date must be within 10 years of today"] } } }` |
 | `401` | Not authenticated |
 | `404` | Account or category not found / not in the household |
 
@@ -861,10 +870,12 @@ How the anchor `nextOccurrence` is set:
 
 Update a recurring transaction template. Partial update — send only changed fields. Accepts the same fields as the create endpoint. The anchor `nextOccurrence` is only touched when `startDate` or `dayOfMonth` is in the body:
 
-- `startDate` (`yyyy-mm-dd`, takes precedence) re-anchors the series to that date.
+- `startDate` (`yyyy-mm-dd`, takes precedence) re-anchors the series to that date. Unlike on create, the anchor is not moved into the following month when `dayOfMonth` lies before the start day: the edit form resends the stored anchor with every save, and a stored anchor may have another day than `dayOfMonth`.
 - `dayOfMonth` alone only moves the day: the anchor **month is kept** and the day is clamped to the length of that month. The series is not re-anchored — with an interval above 1 the due months stay the same, and no earlier month drops out of the yearly view or the CSV.
 
 Occurrences that are already booked are left untouched in both cases. `categoryId: null` removes the category; omitting the field leaves it unchanged.
+
+**Schedule changes and `backfill`:** a request changes the schedule when its `startDate` differs from the Europe/Berlin calendar day of the stored anchor or its `intervalMonths` differs from the stored value. Only then is `bookFromPeriod` set again, as on create: with the (new) anchor in a month before the current one it becomes the current month — shortening the interval from 3 to 1 does not book the months in between — and with `backfill: true`, or an anchor in the current month or later, it becomes `null`. A request that resends the stored start date and interval leaves `bookFromPeriod` as it is; `backfill` has no effect then. The 10-year limit on `startDate` is likewise checked only for a changed start date, so an old template anchored further back can still be edited.
 
 **Auth required:** Yes
 
@@ -874,7 +885,7 @@ Occurrences that are already booked are left untouched in both cases. `categoryI
 
 | Status | Reason |
 |---|---|
-| `400` | Validation failed |
+| `400` | Validation failed — also a changed `startDate` more than 10 years away (same body as on create) |
 | `401` | Not authenticated |
 | `404` | Template, account or category not found / not in the household |
 
@@ -967,9 +978,11 @@ Format: separator `;`, decimal comma, CRLF line breaks. Columns: `Beschreibung`,
 
 ### `POST /api/cron/materialize-recurring`
 
-Books every due, not yet booked and not skipped occurrence of every recurring transaction as a real transaction — including months missed in the past (one code path for the daily run and for back-booking). Called daily by a Railway cron. The public demo account is excluded.
+Books every due, not yet booked and not skipped occurrence of every recurring transaction as a real transaction — including months missed in the past (one code path for the daily run and for back-booking), but never a month before the template's `bookFromPeriod`. Called daily by a Railway cron. The public demo account is excluded.
 
 An occurrence is due once the calendar day of the run **in Europe/Berlin** has reached its due day (`dayOfMonth`, clamped to the length of the month). The booking is dated 12:00 Europe/Berlin of the due day, carries `recurringTransactionId` and `recurringPeriod`, copies account, category, amount and description from the template (the template's **current** amount, also for past months) and inherits the tax flag of its category. A month counts as booked as soon as a booking of the template for that period exists — also a moved or deleted one — so a second run on the same day books nothing twice.
+
+If a booking the user entered by hand stands for the occurrence (see "Hand-entered payments" above), it is adopted instead: it gets `recurringTransactionId` and `recurringPeriod`, nothing else on it changes, and no booking is created.
 
 **Auth required:** No session. `Authorization: Bearer <CRON_SECRET>`; without a configured `CRON_SECRET` the endpoint always answers `401`.
 
@@ -977,23 +990,25 @@ An occurrence is due once the calendar day of the run **in Europe/Berlin** has r
 
 | Param | Type | Description |
 |---|---|---|
-| `dryRun` | `"true"` | Optional. Writes nothing and only lists what would be booked. Check it against the existing bookings before the first real run on real data: payments already entered by hand are not recognised and would be booked a second time |
+| `dryRun` | `"true"` | Optional. Writes nothing and only lists what would be booked or adopted |
 
 **Success response — `200 OK`:**
 ```json
 {
   "ok": true,
   "dryRun": false,
-  "booked": 1,
+  "booked": 2,
+  "adopted": 1,
   "occurrences": [
-    { "recurringId": "rec_01", "accountId": "acc_01", "transactionId": "txn_31", "year": 2026, "month": 5, "amountCents": -85000, "description": "Miete" }
+    { "recurringId": "rec_01", "accountId": "acc_01", "transactionId": "txn_31", "year": 2026, "month": 5, "amountCents": -85000, "description": "Miete", "adopted": false },
+    { "recurringId": "rec_02", "accountId": "acc_01", "transactionId": "txn_27", "year": 2026, "month": 5, "amountCents": -4999, "description": "Fitnessstudio", "adopted": true }
   ]
 }
 ```
 
-`transactionId` is `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
+`booked` is the number of entries in `occurrences`; `adopted` counts those among them where an existing hand-entered booking was linked instead of a new one created (`"adopted": true`, `transactionId` = that booking). `transactionId` is `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
 
-The analytics endpoints (`summary`, `quarterly`, `monthly-review`, `category-year`) run the same booking for the caller's household, limited to **completed** months, before they calculate — so a cron outage cannot silently distort review and carryover. The current month is left to the cron and shows up as "planned" on the dashboard until then.
+The analytics endpoints (`summary`, `quarterly`, `monthly-review`, `category-year`) run the same booking for the caller's household, limited to **completed** months, before they calculate — so a cron outage cannot silently distort review and carryover. The current month is left to the cron and shows up as "planned" on the dashboard until then; `summary` additionally adopts hand-entered payments for the current month's unbooked occurrences so that they are not counted as booked and planned at once.
 
 **Error responses:**
 
