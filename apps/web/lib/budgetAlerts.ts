@@ -1,7 +1,16 @@
-import { isRecurringDueInMonth, reachedBudgetThresholds } from "@doewe/shared";
+import {
+  isRecurringDueInMonth,
+  monthKey,
+  reachedBudgetThresholds,
+  sumFlows,
+  zonedMonth,
+  zonedMonthRange
+} from "@doewe/shared";
 
 import { prisma } from "./prisma";
 import { sendPushToUser } from "./push";
+import { loadBookedOccurrenceKeys, occurrenceKey } from "./recurringPeriods";
+import { loadSavingsCategoryIds } from "./savingsCategory";
 
 /**
  * Budget-Warnungen (Teil C): Nach einer Transaktions-Mutation prüfen, ob eine
@@ -10,63 +19,60 @@ import { sendPushToUser } from "./push";
  * (Unique auf [budgetId, year, month, threshold]), damit dieselbe Schwelle im
  * selben Monat nur einmal meldet.
  *
- * Der Ausgaben-Betrag pro Kategorie spiegelt die Logik aus
- * /api/analytics/summary: gebuchte Ausgaben (negative Beträge, Betragsbetrag)
- * PLUS aktive Daueraufträge dieser Kategorie im Monat.
+ * "Ausgegeben" je Kategorie ist dieselbe Zahl wie in /api/analytics/summary
+ * (docs/calculations/00-grundregeln.md): die gebuchten Ausgaben der Kategorie
+ * im Monat der Buchung (Kalender Europe/Berlin, alle Konten des Haushalts,
+ * eingeordnet mit classifyFlow — Erstattungen mindern nichts, Buchungen einer
+ * Spar-Kategorie sind keine Ausgaben) PLUS die geplanten Daueraufträge der
+ * Kategorie: im Monat fällig, nicht übersprungen und für den Monat noch nicht
+ * gebucht (siehe lib/recurringPeriods.ts).
+ *
+ * Bekannte Einschränkung: Als Budget wird nur ein Monats-Budget (`Budget`-Zeile
+ * mit Kategorie, Monat und Jahr auf dem Konto der Buchung) gelesen. Budget-Pläne
+ * (`CategoryBudgetPlan`), die die Oberfläche anlegt, lösen keine Warnung aus —
+ * der BudgetAlertLog hängt an `budgetId`.
  */
 
-/** Monat (1-12) + Jahr eines Datums. */
-function monthYearOf(date: Date) {
-  return { month: date.getMonth() + 1, year: date.getFullYear() };
-}
-
-/** Aktive (nicht geskippte) Daueraufträge einer Kategorie im Monat, Ausgaben in Cents. */
-async function recurringExpenseCents(
-  accountId: string,
+/** Geplante Daueraufträge einer Kategorie im Monat (siehe oben), Ausgaben in Cents. */
+async function plannedRecurringExpenseCents(
+  householdId: string,
   categoryId: string,
   month: number,
-  year: number
+  year: number,
+  savingsIds: ReadonlySet<string>
 ): Promise<number> {
   const recurring = await prisma.recurringTransaction.findMany({
-    where: { accountId, categoryId },
-    select: { id: true, amountCents: true, intervalMonths: true, nextOccurrence: true }
+    where: { account: { householdId }, categoryId },
+    select: { id: true, amountCents: true, categoryId: true, intervalMonths: true, nextOccurrence: true }
   });
 
-  const active = recurring.filter((rec) => {
-    const nextDate = new Date(rec.nextOccurrence);
+  const due = recurring.filter((rec) => {
+    const anchor = zonedMonth(rec.nextOccurrence);
     return isRecurringDueInMonth({
-      nextYear: nextDate.getFullYear(),
-      nextMonth: nextDate.getMonth() + 1,
+      nextYear: anchor.year,
+      nextMonth: anchor.month,
       intervalMonths: rec.intervalMonths,
       year,
       month
     });
   });
 
-  if (active.length === 0) return 0;
+  if (due.length === 0) return 0;
+  const dueIds = due.map((r) => r.id);
 
   const skips = await prisma.recurringTransactionSkip.findMany({
-    where: { recurringId: { in: active.map((r) => r.id) }, year, month },
+    where: { recurringId: { in: dueIds }, year, month },
     select: { recurringId: true }
   });
   const skipped = new Set(skips.map((s) => s.recurringId));
 
-  // Bereits automatisch gebuchte Vorkommen (siehe recurringBooking.ts) stecken
-  // schon in den echten Ausgaben oben — hier nicht nochmal addieren.
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 1);
-  const booked = await prisma.transaction.findMany({
-    where: {
-      recurringTransactionId: { in: active.map((r) => r.id) },
-      occurredAt: { gte: start, lt: end }
-    },
-    select: { recurringTransactionId: true }
-  });
-  const bookedIds = new Set(booked.map((t) => t.recurringTransactionId));
+  // Bereits gebuchte Vorkommen stecken schon in den gebuchten Ausgaben (oder
+  // wurden vom Nutzer gelöscht/verschoben) — hier nicht nochmal addieren.
+  const bookedKeys = await loadBookedOccurrenceKeys(dueIds);
+  const period = monthKey({ year, month });
 
-  return active
-    .filter((r) => !skipped.has(r.id) && !bookedIds.has(r.id))
-    .reduce((sum, r) => (r.amountCents < 0 ? sum + -r.amountCents : sum), 0);
+  const planned = due.filter((r) => !skipped.has(r.id) && !bookedKeys.has(occurrenceKey(r.id, period)));
+  return sumFlows(planned, savingsIds).outcomeCents;
 }
 
 /**
@@ -90,22 +96,30 @@ export async function checkBudgetAlerts(params: {
     });
     if (!user?.notifyBudgetAlerts) return;
 
-    const { month, year } = monthYearOf(params.occurredAt);
+    // Monat der Buchung im App-Kalender (Europe/Berlin), halboffen [start, end).
+    const { month, year } = zonedMonth(params.occurredAt);
+    const { start, end } = zonedMonthRange(year, month);
 
     const budget = await prisma.budget.findFirst({
       where: { accountId, categoryId, month, year },
-      select: { id: true, amountCents: true, category: { select: { name: true } } }
+      select: {
+        id: true,
+        amountCents: true,
+        category: { select: { name: true } },
+        account: { select: { householdId: true } }
+      }
     });
     if (!budget?.amountCents || budget.amountCents <= 0) return;
 
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 1);
-    const spentAgg = await prisma.transaction.aggregate({
-      where: { accountId, categoryId, amountCents: { lt: 0 }, occurredAt: { gte: start, lt: end } },
-      _sum: { amountCents: true }
+    const householdId = budget.account.householdId;
+    const savingsIds = await loadSavingsCategoryIds(householdId);
+
+    const bookedRows = await prisma.transaction.findMany({
+      where: { account: { householdId }, categoryId, occurredAt: { gte: start, lt: end } },
+      select: { amountCents: true, categoryId: true }
     });
-    const bookedExpenseCents = -(spentAgg._sum.amountCents ?? 0);
-    const recurringCents = await recurringExpenseCents(accountId, categoryId, month, year);
+    const bookedExpenseCents = sumFlows(bookedRows, savingsIds).outcomeCents;
+    const recurringCents = await plannedRecurringExpenseCents(householdId, categoryId, month, year, savingsIds);
     const spentCents = bookedExpenseCents + recurringCents;
 
     const reached = reachedBudgetThresholds(spentCents, budget.amountCents);
