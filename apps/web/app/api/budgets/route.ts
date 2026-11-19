@@ -7,11 +7,17 @@
  * Unique-Constraint: (accountId, categoryId, month, year) — kein doppeltes Budget.
  *
  * POST Body: { accountId, categoryId?, month (1-12), year, amountCents }
+ *
+ * Vor dem Anlegen eines Kategorie-Budgets werden die abgeschlossenen Monate seit der
+ * ersten Buchung, die noch keinen Snapshot haben, eingefroren (freezePastMonths,
+ * lib/categoryBudgets.ts); ein Budget für einen dieser Monate ändert dessen Stand
+ * nicht mehr.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../lib/auth";
+import { freezePastMonths } from "../../../lib/categoryBudgets";
 import { prisma } from "../../../lib/prisma";
 
 const BudgetInput = z.object({
@@ -54,6 +60,9 @@ export async function POST(req: Request) {
     }
   }
 
+  // A category budget changes what budgets are computed from; months that are
+  // over keep the budgets they had. (A row without category is a saving goal.)
+  if (parsed.data.categoryId) await freezePastMonths(user.householdId);
   const created = await prisma.budget.create({ data: parsed.data });
   return NextResponse.json(created, { status: 201 });
 }

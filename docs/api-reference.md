@@ -316,7 +316,7 @@ or
 |---|---|---|
 | `name` | string | Optional; new name (unique per user) |
 | `isTaxRelevant` | boolean | Optional. `true` marks the category as tax-relevant **and retroactively earmarks all existing transactions of the category** (`taxRelevant: true`); new transactions inherit the flag by default. `false` unmarks only the category — transaction flags are kept |
-| `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted. Takes precedence over the other fields |
+| `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted. The frozen budgets of completed months move along: months not frozen yet are frozen first, then in every snapshot the source's amount is added to the target's (see [Budget Plans](#budget-plans)). Takes precedence over the other fields |
 
 **Success response — `200 OK`:** The updated category (rename) or the merge target category (merge).
 
@@ -334,7 +334,7 @@ or
 
 ### `DELETE /api/categories/[id]`
 
-Delete a category. A **fallback category is mandatory**: all transactions, recurring transactions, and budgets of the deleted category are reassigned to it. The protected savings category cannot be deleted.
+Delete a category. A **fallback category is mandatory**: all transactions, recurring transactions, and budgets of the deleted category are reassigned to it, and its frozen budgets of completed months are added to the fallback's, as in a merge. The protected savings category cannot be deleted.
 
 **Auth required:** Yes
 
@@ -1116,12 +1116,12 @@ Remove a skip (un-skip a month). Uses `deleteMany` — the response is `204` whe
 
 `/api/budgets` manages **legacy per-month** category budgets (`Budget` rows with a category). The app's `/budgets` page works with [Budget Plans](#budget-plans) instead; a per-month budget only applies to categories without a plan. "Spent" per category is the same figure everywhere (dashboard, review, yearly table, budget alert): the bookings of the category classified as outcome in the Europe/Berlin month, across all accounts of the household — a refund does not reduce it.
 
-**Budget alerts:** a push notification is sent when a category reaches 80 % or 100 % of its budget for the Europe/Berlin month of a booking. The budget is the one the dashboard shows — the category's [budget plan](#budget-plans), otherwise the household's per-month rows added up — and "spent" is the dashboard's figure too: booked outcome of the category plus recurring occurrences still planned for the month.
+**Budget alerts:** a push notification is sent when a category reaches 80 % or 100 % of its budget in the current Europe/Berlin month. A booking in any other month — an old booking corrected later, or one dated into the past or future — triggers nothing: no push, no log entry, and the budgets are not loaded. The budget is the one the dashboard shows — the category's [budget plan](#budget-plans), otherwise the household's per-month rows added up — and "spent" is the dashboard's figure too: booked outcome of the category plus recurring occurrences still planned for the month.
 
-- **Checked after** `POST /api/transactions`, `PATCH /api/transactions/[id]` (for the category and month the booking is in after the edit), each booked group of `POST /api/transactions/batch`, and the purchase booked by `POST /api/saving-plan/[id]/complete`. Sync and automatically booked recurring transactions do not trigger the check.
-- **Sent to** every member of the household who has `notifyBudgetAlerts` on (see [Push & Notifications](#push--notifications)), each in their own `locale` — not only to the person who booked.
+- **Checked after** `POST /api/transactions`, `PATCH /api/transactions/[id]` (for the category and month the booking is in after the edit, if that is the current month), each booked group of `POST /api/transactions/batch`, and the purchase booked by `POST /api/saving-plan/[id]/complete`. Sync and automatically booked recurring transactions do not trigger the check.
+- **Sent to** every member of the household who has `notifyBudgetAlerts` on (see [Push & Notifications](#push--notifications)), each in their own `locale` — not only to the person who booked. Suspended and deleted users get nothing.
 - **Once per threshold:** a threshold is announced once per household, category and month, whoever books and on whichever account. Only the highest threshold reached is announced; lower ones count as announced. Thresholds announced before this keying was introduced stay announced.
-- A push failure never fails the request that triggered it.
+- A push failure never fails the request that triggered it. Each send to a push service waits at most 5 seconds; a timeout counts as a failed send and keeps the subscription (only `404`/`410` remove it).
 
 ### `GET /api/budgets`
 
@@ -1157,7 +1157,7 @@ List **all** budget rows of the household — including saving goals (`categoryI
 
 ### `POST /api/budgets`
 
-Create a new category budget for a month. (Saving goals are created via `POST /api/saving-plan` instead.)
+Create a new category budget for a month. (Saving goals are created via `POST /api/saving-plan` instead.) With a `categoryId`, the completed months that have no snapshot yet are frozen first (see [Budget Plans](#budget-plans)), so a row for a month that is over does not change that month's frozen budget.
 
 **Auth required:** Yes
 
@@ -1199,7 +1199,11 @@ There is **no `title` field** in the schema — the DB default `""` is used.
 
 Standing per-category budgets (`MONTHLY` or `YEARLY`); the plan takes precedence over a per-month budget from `/api/budgets`, which only applies to categories without a plan (legacy rows are read for all accounts of the household and summed per category and month). All endpoints require auth (`401`) and are household-scoped. Calculation: `docs/calculations/06-budgets.md`.
 
-**Completed months are frozen.** Plans have no start date and no history, and the monthly shares of a `YEARLY` plan are derived from the recurring templates of that year. So that the budget of a month that is over does not change afterwards, the analytics endpoints (`summary`, `monthly-review`, `category-year`) and the budget alert read a stored snapshot for every month before the current Europe/Berlin month. A month's snapshot is written the first time the month is read after it ended — and when the current month is read, for the month just before it, so a month freezes as soon as it is over and anyone opens the app. A month that was never read freezes with the plans and templates as they are at that first read; "no budgets" is frozen as well. The current and future months are computed on every read. After a plan or template was edited during a year, the twelve monthly values shown for a `YEARLY` plan therefore need not add up to the yearly amount. A category deleted later is left out of a frozen month.
+**Completed months are frozen.** Plans have no start date and no history, and the monthly shares of a `YEARLY` plan are derived from the recurring templates of that year. So that the budget of a month that is over does not change afterwards, the analytics endpoints (`summary`, `monthly-review`, `category-year`) and the budget alert read a stored snapshot for every month before the current Europe/Berlin month. A month's snapshot is written the first time the month is read after it ended — and when the current month is read, for the month just before it, so a month freezes as soon as it is over and anyone opens the app. A month that was never read freezes with the plans and templates as they are at that first read; "no budgets" is frozen as well. The current and future months are computed on every read.
+
+**Frozen before every change.** Before anything changes what budgets are computed from — creating, editing or deleting a budget plan, creating a per-month budget with a category, merging a category or deleting it with a fallback, and creating, editing or deleting a recurring transaction (also via make-recurring) — every completed month without a snapshot is frozen with the figures as they are before the change: from the Europe/Berlin month of the household's earliest non-deleted booking through the month before the current one. Months that already have a snapshot keep it. So a plan edit never reaches the month that just ended, even if nobody opened the app since, and months from before snapshots existed keep their budgets. When all months are frozen this costs one query; otherwise the missing months are computed once per year. Concurrent calls are safe (`ON CONFLICT DO NOTHING`).
+
+After a plan or template was edited during a year, the twelve monthly values shown for a `YEARLY` plan therefore need not add up to the yearly amount. A category deleted later is left out of a frozen month; a merged category's amount is added to the target's.
 
 `GET /api/budget-plans` itself (the preview below) always shows the distribution computed from the current plans and templates.
 
@@ -1291,7 +1295,7 @@ List the saving goals of the household plus the computed plan totals. Saving goa
 - `transactionSpentCents` is what was spent on the goal: the outcome of the **not deleted** transactions linked to it via `savingGoalId` minus the refunds linked to it, never below `0`. Linked bookings in a savings category (deposits, withdrawals) do not count.
 - `totals.rawAvailableCents` is the savings pool: the negated sum of all bookings in all savings categories of the household (deposits are stored negative, withdrawals positive). Completing a goal takes its money out with a real withdrawal booking, so for most households `availableCents` equals `rawAvailableCents`. `withdrawnForCompletedCents` is a legacy figure: the amount still held back by goals that were completed before withdrawals were booked (`reservedCents`, set once by the migration; `0` for everyone else). `availableCents = max(rawAvailableCents − withdrawnForCompletedCents, 0)`.
 - `totalTargetCents` and `suggestedMonthlyCents` consider only active **dated** goals — undated goals are excluded from the forward-looking plan.
-- `suggestedMonthlyCents` is the amount to set aside in each remaining month, the current one included. It is measured against the pool **as it stood at the start of the current Europe/Berlin month** (`availableCents` minus this month's net deposits), so the rate does not drop as soon as the user saves. See `docs/calculations/07-sparziele.md`.
+- `suggestedMonthlyCents` is the amount to set aside in each remaining month, the current one included. It is measured against what was **covered at the start of the current Europe/Berlin month**: `max(availableCents − this month's gross deposits, 0)`. Deposits are counted without subtracting this month's withdrawals — a withdrawal (including the one booked when a goal is completed) stays taken out of the pool — so the rate neither drops as soon as the user saves nor when another goal is completed that month. In a month with only withdrawals the pool counts as it is. See `docs/calculations/07-sparziele.md`.
 
 **Error responses:**
 
@@ -1501,7 +1505,7 @@ Reopen a completed saving goal. Clears `completedAt`, `spentCents`, `withdrawalT
 
 ### `POST /api/saving-plan/withdraw`
 
-Withdraw money from the savings pool back into everyday spending. Creates a **positive** transaction in a savings category of the household (money returns from the pool to the account), dated at the instant of the request; analytics treat it as a reduction of net savings, not as income. If the household has several savings categories, the booking goes to the oldest one. The cap is the household's pool — all savings categories, all accounts, minus what goals completed before withdrawals were booked still hold back (`totals.availableCents` of `GET /api/saving-plan`). Cap check and booking run in one database transaction, so two withdrawals sent at the same moment cannot both use the same money.
+Withdraw money from the savings pool back into everyday spending. Creates a **positive** transaction in a savings category of the household (money returns from the pool to the account), dated at the instant of the request; analytics treat it as a reduction of net savings, not as income. If the household has several savings categories, the booking goes to the oldest one. The cap is the household's pool — all savings categories, all accounts, minus what goals completed before withdrawals were booked still hold back (`totals.availableCents` of `GET /api/saving-plan`). Cap check and booking run in one database transaction under the household's pool lock, so two withdrawals sent at the same moment cannot both use the same money: if several together exceed the pool, only as many go through as fit, the others get `409`.
 
 **Auth required:** Yes
 

@@ -27,6 +27,13 @@
  * for, and only for categories without a plan. Saving goals (categoryId null) are ignored.
  * Months before the current month come from their snapshots (missing ones are created), so
  * the 12 values of a YEARLY plan need not add up to the yearly amount once it was edited.
+ *
+ * `freezePastMonths` freezes every past month of a household that has no snapshot yet, from
+ * the month of its earliest booking on. The routes that change what budgets are computed from
+ * (budget plans, per-month budgets, standing orders, merging a category) call it before they
+ * write, so months from before snapshots existed — or the month that just ended, when nobody
+ * opened the app since — keep the budgets they had. `mergeFrozenBudgets` carries a merged
+ * category's frozen budgets over to the category that takes its bookings.
  */
 import {
   BUDGET_PERIODS,
@@ -41,6 +48,8 @@ import {
 
 import { prisma } from "./prisma";
 import { loadRecurringYearMatrix } from "./recurringYear";
+
+import type { Prisma } from "@prisma/client";
 
 type MonthBudgets = Record<string, number>;
 type YearBudgets = Record<string, (number | null)[]>;
@@ -254,4 +263,102 @@ export async function loadEffectiveCategoryBudgetsForYear(input: {
     }
   }
   return result;
+}
+
+/** Month as one integer (year * 12 + month - 1), so ranges of months are plain integer ranges. */
+function monthIndex(ref: MonthRef): number {
+  return ref.year * 12 + (ref.month - 1);
+}
+
+/** The snapshot of the `budgets` a year's live figures give for one month. */
+function monthOfYear(live: YearBudgets, month: number): MonthBudgets {
+  const budgets: MonthBudgets = {};
+  for (const [categoryId, months] of Object.entries(live)) {
+    const cents = months[month - 1];
+    if (cents != null) budgets[categoryId] = cents;
+  }
+  return budgets;
+}
+
+/**
+ * Freezes every completed month of the household that has no snapshot yet:
+ * from the Europe/Berlin month of its earliest (not deleted) booking through
+ * the month before the current one, computed from the plans, per-month budgets
+ * and standing orders as they are now. Months that already have a snapshot
+ * keep it.
+ *
+ * Called before a write that changes what budgets are computed from, so the
+ * months that are over keep the budgets they had before the write.
+ *
+ * - Cheap when there is nothing to do: one query returns the earliest booking
+ *   and the frozen months.
+ * - Bounded: the missing months are computed one year at a time (one plan and
+ *   standing-order load per year), not one month at a time.
+ * - Safe under concurrent calls: the snapshots are inserted with
+ *   `skipDuplicates` (ON CONFLICT DO NOTHING), so a month frozen by someone
+ *   else in the meantime keeps that row and nothing fails.
+ */
+export async function freezePastMonths(householdId: string): Promise<void> {
+  const last = monthIndex(shiftMonth(zonedMonth(new Date()), -1));
+
+  // Explicit deletedAt: the soft-delete extension does not reach raw queries.
+  const [row] = await prisma.$queryRaw<{ first: Date | null; frozen: number[] }[]>`
+    SELECT
+      (SELECT MIN(t."occurredAt")
+         FROM "Transaction" t
+         JOIN "Account" a ON a."id" = t."accountId"
+        WHERE a."householdId" = ${householdId} AND t."deletedAt" IS NULL) AS "first",
+      ARRAY(SELECT s."year" * 12 + (s."month" - 1)
+              FROM "BudgetMonthSnapshot" s
+             WHERE s."householdId" = ${householdId}) AS "frozen"`;
+  if (!row?.first) return;
+
+  const first = monthIndex(zonedMonth(row.first));
+  if (first > last) return;
+
+  const frozen = new Set(row.frozen.map(Number));
+  const missingByYear = new Map<number, number[]>();
+  for (let index = first; index <= last; index += 1) {
+    if (frozen.has(index)) continue;
+    const year = Math.floor(index / 12);
+    const months = missingByYear.get(year) ?? [];
+    months.push((index % 12) + 1);
+    missingByYear.set(year, months);
+  }
+
+  for (const [year, months] of missingByYear) {
+    const live = await computeYearBudgets(householdId, year);
+    await prisma.budgetMonthSnapshot.createMany({
+      data: months.map((month) => ({ householdId, year, month, budgets: monthOfYear(live, month) })),
+      skipDuplicates: true
+    });
+  }
+}
+
+/**
+ * Carries the frozen budgets of a category that is merged into (or replaced
+ * by) another one over to that category: in every snapshot of the household,
+ * the source's amount is added to the target's (or becomes the target's if it
+ * had none) and the source key is removed. The merge moves the source's
+ * bookings of those months to the target, so the target's frozen budget must
+ * cover them. Runs inside the merge transaction, before the source is deleted.
+ */
+export async function mergeFrozenBudgets(
+  tx: Prisma.TransactionClient,
+  householdId: string,
+  sourceCategoryId: string,
+  targetCategoryId: string
+): Promise<void> {
+  const snapshots = await tx.budgetMonthSnapshot.findMany({
+    where: { householdId },
+    select: { id: true, budgets: true }
+  });
+  for (const snapshot of snapshots) {
+    const budgets = parseSnapshotBudgets(snapshot.budgets);
+    const sourceCents = budgets[sourceCategoryId] as number | undefined;
+    if (sourceCents === undefined) continue;
+    budgets[targetCategoryId] = ((budgets[targetCategoryId] as number | undefined) ?? 0) + sourceCents;
+    delete budgets[sourceCategoryId];
+    await tx.budgetMonthSnapshot.update({ where: { id: snapshot.id }, data: { budgets } });
+  }
 }

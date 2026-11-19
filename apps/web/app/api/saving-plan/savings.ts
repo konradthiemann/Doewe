@@ -49,14 +49,16 @@ export async function findSavingsBookingCategoryId(householdId: string, db: Db =
 
 /**
  * Negated net sum of the household's savings bookings, optionally within
- * `[start, end)`. A caller that needs several sums passes the same
- * `savingsIds` (from `loadSavingsCategoryIds`) to each of them.
+ * `[start, end)` and optionally only the deposits (negative amounts). A caller
+ * that needs several sums passes the same `savingsIds` (from
+ * `loadSavingsCategoryIds`) to each of them.
  */
 async function sumSavingsCents(
   householdId: string,
   savingsIds: ReadonlySet<string> | undefined,
   range?: { start: Date; end: Date },
-  db: Db = prisma
+  db: Db = prisma,
+  depositsOnly = false
 ): Promise<number> {
   savingsIds ??= await loadSavingsCategoryIds(householdId);
   if (savingsIds.size === 0) {
@@ -68,7 +70,8 @@ async function sumSavingsCents(
       account: { householdId },
       categoryId: { in: [...savingsIds] },
       deletedAt: null,
-      ...(range ? { occurredAt: { gte: range.start, lt: range.end } } : {})
+      ...(range ? { occurredAt: { gte: range.start, lt: range.end } } : {}),
+      ...(depositsOnly ? { amountCents: { lt: 0 } } : {})
     },
     _sum: { amountCents: true }
   });
@@ -87,16 +90,18 @@ export async function resolveSavingsBalanceCents(
 }
 
 /**
- * Net amount moved into the pool (deposits minus withdrawals, may be negative)
- * within the Europe/Berlin calendar month of `now`.
+ * Gross amount deposited into the pool (deposits only, withdrawals NOT
+ * subtracted, never negative) within the Europe/Berlin calendar month of `now`.
+ * The pool minus this is what was covered when the month began, with this
+ * month's withdrawals already taken out (see computeSavingPlanTotals).
  */
-export async function resolveSavedThisMonthCents(
+export async function resolveDepositedThisMonthCents(
   householdId: string,
   now: Date,
   savingsIds?: ReadonlySet<string>
 ): Promise<number> {
   const { year, month } = zonedMonth(now);
-  return sumSavingsCents(householdId, savingsIds, zonedMonthRange(year, month));
+  return sumSavingsCents(householdId, savingsIds, zonedMonthRange(year, month), prisma, true);
 }
 
 /**

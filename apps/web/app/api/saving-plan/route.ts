@@ -19,8 +19,10 @@
  *                    was Ziele zurückhalten, die vor den Entnahme-Buchungen
  *                    abgeschlossen wurden (`reservedCents`), sonst 0.
  *                    `availableCents` = Topf minus Altbestand, mindestens 0.
- *                    Die Sparrate (`suggestedMonthlyCents`) rechnet gegen den
- *                    Topf zu Beginn des laufenden Berliner Monats.
+ *                    Die Sparrate (`suggestedMonthlyCents`) rechnet gegen das,
+ *                    was zu Beginn des laufenden Berliner Monats gedeckt war:
+ *                    Topf minus die Einzahlungen dieses Monats (brutto;
+ *                    Entnahmen dieses Monats bleiben abgezogen).
  *   `transactionSpentCents` je Ziel: Ausgaben der verknüpften, nicht gelöschten
  *                    Buchungen minus verknüpfte Erstattungen, mindestens 0
  *                    (classifyFlow; Buchungen einer Spar-Kategorie zählen nicht).
@@ -38,7 +40,7 @@ import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
 import { INT4_MAX } from "../transactions/schema";
 
 import { computeSavingPlanTotals, linkedSpentCents } from "./compute";
-import { resolveSavedThisMonthCents, resolveSavingsBalanceCents } from "./savings";
+import { resolveDepositedThisMonthCents, resolveSavingsBalanceCents } from "./savings";
 
 const SavingPlanInput = z
   .object({
@@ -95,7 +97,7 @@ export async function GET() {
   // Einmal geladen, damit Topf und Monats-Einzahlungen dieselben Kategorien meinen.
   const savingsIds = await loadSavingsCategoryIds(user.householdId);
 
-  const [goalsRaw, rawSavingsBalanceCents, savedThisMonthCents] = await Promise.all([
+  const [goalsRaw, rawSavingsBalanceCents, depositedThisMonthCents] = await Promise.all([
     prisma.budget.findMany({
       // Sparziele = Budget-Zeilen ohne Kategorie, über alle Konten des Haushalts.
       where: { account: { householdId: user.householdId }, categoryId: null },
@@ -108,7 +110,7 @@ export async function GET() {
       }
     }),
     resolveSavingsBalanceCents(user.householdId, savingsIds),
-    resolveSavedThisMonthCents(user.householdId, now, savingsIds)
+    resolveDepositedThisMonthCents(user.householdId, now, savingsIds)
   ]);
 
   const mapGoal = (goal: (typeof goalsRaw)[number]) => ({
@@ -141,7 +143,8 @@ export async function GET() {
 
   // computeSavingPlanTotals holds back what goals completed before withdrawals
   // were booked still reserve, and measures the suggested monthly rate against
-  // the pool at the start of the current month (hence this month's net deposits).
+  // what was covered at the start of the current month: the pool minus this
+  // month's gross deposits (withdrawals this month stay taken out).
   const totals = computeSavingPlanTotals(
     goalsRaw.map((goal) => ({
       amountCents: goal.amountCents,
@@ -152,7 +155,7 @@ export async function GET() {
     })),
     rawSavingsBalanceCents,
     now,
-    savedThisMonthCents
+    depositedThisMonthCents
   );
 
   return NextResponse.json({

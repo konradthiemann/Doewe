@@ -133,7 +133,10 @@ beforeAll(async () => {
   vi.useFakeTimers({ toFake: ["Date"], now: nov(19) });
 });
 
-beforeEach(clean);
+beforeEach(async () => {
+  vi.setSystemTime(nov(19));
+  await clean();
+});
 
 afterAll(async () => {
   vi.useRealTimers();
@@ -207,11 +210,44 @@ describe("checkBudgetAlerts — budget plans", () => {
     await booking(-9_000, nov(3));
     expect(await alertsFor()).toEqual([80]);
 
+    // December, once it is the running month.
     const december = new Date(Date.UTC(2031, 11, 3, 11));
+    vi.setSystemTime(december);
     await booking(-8_500, december);
     await checkBudgetAlerts({ householdId, categoryId: foodId, occurredAt: december });
     expect(await loggedThresholds(foodId, 12)).toEqual([80]);
     expect(await loggedThresholds(foodId, 11)).toEqual([80]);
+  });
+});
+
+describe("checkBudgetAlerts — only the running month", () => {
+  it("does nothing for a booking in a month that is over: no log, no frozen snapshot", async () => {
+    await plan(foodId, 10_000);
+    const march = new Date(Date.UTC(2031, 2, 10, 11));
+    await booking(-15_000, march);
+
+    await checkBudgetAlerts({ householdId, categoryId: foodId, occurredAt: march });
+    expect(await loggedThresholds(foodId, 3)).toEqual([]);
+    // The budgets were not even loaded: loading them would have frozen March.
+    expect(await prisma.budgetMonthSnapshot.count({ where: { householdId } })).toBe(0);
+  });
+
+  it("does nothing for a booking dated into a future month", async () => {
+    await plan(foodId, 10_000);
+    const january = new Date(Date.UTC(2032, 0, 10, 11));
+    await booking(-15_000, january);
+
+    await checkBudgetAlerts({ householdId, categoryId: foodId, occurredAt: january });
+    expect(await prisma.budgetAlertLog.count({ where: { householdId } })).toBe(0);
+  });
+
+  it("decides the running month in Berlin: 1 Nov 00:30 Berlin is November", async () => {
+    await plan(foodId, 10_000);
+    // 31 Oct 23:30 UTC = 1 Nov 00:30 in Berlin
+    vi.setSystemTime(new Date("2031-10-31T23:30:00.000Z"));
+    const booked = new Date("2031-10-31T23:15:00.000Z");
+    await booking(-8_500, booked);
+    expect(await alertsFor(booked)).toEqual([80]);
   });
 });
 
@@ -332,6 +368,7 @@ describe("checkBudgetAlerts — recurring occurrences", () => {
     // From its first bookable month on it counts as planned.
     await budget(foodId, 10_000, 12);
     const december = new Date(Date.UTC(2031, 11, 3, 11));
+    vi.setSystemTime(december);
     await checkBudgetAlerts({ householdId, categoryId: foodId, occurredAt: december });
     expect(await loggedThresholds(foodId, 12)).toEqual([80]);
   });

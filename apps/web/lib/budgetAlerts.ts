@@ -100,9 +100,13 @@ async function plannedRecurringExpenseCents(
 
 /**
  * Prüft die Budget-Schwellen der Kategorie für den Berliner Monat von
- * `occurredAt` und versendet ggf. neue Warn-Pushes an den Haushalt. Fehler
- * werden geschluckt (Fire-and-forget aus dem Request-Pfad) — die Mutation
- * selbst darf nie an einem Push-Problem scheitern.
+ * `occurredAt` und versendet ggf. neue Warn-Pushes an den Haushalt. Eine
+ * Warnung gilt nur dem laufenden Monat: Liegt `occurredAt` in einem anderen
+ * Berliner Monat (eine korrigierte alte oder eine vordatierte Buchung),
+ * passiert nichts — kein Push, kein Log-Eintrag und kein Laden der Budgets,
+ * das einen vergangenen Monat nebenbei einfrieren würde. Fehler werden
+ * geschluckt (Fire-and-forget aus dem Request-Pfad) — die Mutation selbst darf
+ * nie an einem Push-Problem scheitern.
  */
 export async function checkBudgetAlerts(params: {
   householdId: string;
@@ -113,8 +117,12 @@ export async function checkBudgetAlerts(params: {
   if (!categoryId) return;
 
   try {
-    // Monat der Buchung im App-Kalender (Europe/Berlin), halboffen [start, end).
+    // Month of the booking in the app calendar (Europe/Berlin). Only the
+    // running month is alerted; this check comes before any query.
     const { month, year } = zonedMonth(params.occurredAt);
+    const running = zonedMonth(new Date());
+    if (running.year !== year || running.month !== month) return;
+    // Halboffen [start, end).
     const { start, end } = zonedMonthRange(year, month);
 
     // Empfänger: alle Mitglieder des Haushalts, die die Warnung nicht

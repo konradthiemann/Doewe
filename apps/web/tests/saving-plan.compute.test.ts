@@ -172,11 +172,27 @@ describe("computeSavingPlanTotals — rate against the pool at the start of the 
     expect(totals.suggestedMonthlyCents).toBe(45000);
   });
 
-  it("does not ignore a net withdrawal this month", () => {
-    // 500 € saved before November, 200 € withdrawn in November → pool 300 €.
-    // The withdrawn money is gone: (1200 − 300) / 2 = 450, not (1200 − 500) / 2.
-    const totals = computeSavingPlanTotals(goals, 30000, NOVEMBER, -20000);
+  it("uses the pool as it is in a month with only a withdrawal", () => {
+    // 500 € saved before November, 200 € withdrawn in November → pool 300 €,
+    // nothing deposited this month. The withdrawn money is gone:
+    // (1200 − 300) / 2 = 450, not (1200 − 500) / 2.
+    const totals = computeSavingPlanTotals(goals, 30000, NOVEMBER, 0);
     expect(totals.suggestedMonthlyCents).toBe(45000);
+  });
+
+  it("does not lower the rate when a goal is completed in the month of a deposit", () => {
+    // Pool 500 € on 1 Nov (it belonged to goal A), 300 € deposited in November,
+    // A completed for 500 € (a booked withdrawal) → pool 300 €. Goal B: 1,200 €
+    // due February 2027, three months open. Covered at the start of November:
+    // 300 − 300 = 0, so 1200 / 3 = 400 — the withdrawal does not cancel the deposit.
+    const withB = [datedGoal(120000, 2, 2027), { ...datedGoal(50000, 11, 2026), completedAt: NOVEMBER }];
+    const totals = computeSavingPlanTotals(withB, 30000, NOVEMBER, 30000);
+    expect(totals.availableCents).toBe(30000);
+    expect(totals.suggestedMonthlyCents).toBe(40000);
+  });
+
+  it("treats a negative deposit figure as no deposit", () => {
+    expect(computeSavingPlanTotals(goals, 30000, NOVEMBER, -20000).suggestedMonthlyCents).toBe(45000);
   });
 
   it("never treats more than the available pool as deposited this month", () => {

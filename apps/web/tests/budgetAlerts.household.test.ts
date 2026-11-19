@@ -14,8 +14,9 @@ const OWNER_ID = "test-user-budget-alerts-hh-owner";
 const PARTNER_ID = "test-user-budget-alerts-hh-partner";
 const MUTED_ID = "test-user-budget-alerts-hh-muted";
 const SUSPENDED_ID = "test-user-budget-alerts-hh-suspended";
+const DELETED_ID = "test-user-budget-alerts-hh-deleted";
 const OUTSIDER_ID = "test-user-budget-alerts-hh-outsider";
-const MEMBER_IDS = [OWNER_ID, PARTNER_ID, MUTED_ID, SUSPENDED_ID];
+const MEMBER_IDS = [OWNER_ID, PARTNER_ID, MUTED_ID, SUSPENDED_ID, DELETED_ID];
 const ACCOUNT_ID = "acc_budget_alerts_hh";
 
 /** 19 Nov 2032, 11:00 in Berlin. */
@@ -50,20 +51,26 @@ beforeAll(async () => {
   const { PrismaClient } = await import("@prisma/client");
   prisma = new PrismaClient();
 
-  const mkUser = (id: string, data: { locale?: string; notifyBudgetAlerts?: boolean; suspendedAt?: Date } = {}) =>
+  const mkUser = (
+    id: string,
+    data: { locale?: string; notifyBudgetAlerts?: boolean; suspendedAt?: Date; deletedAt?: Date } = {}
+  ) =>
     prisma.user.upsert({
       where: { email: `${id}@example.com` },
-      update: { locale: "de", notifyBudgetAlerts: true, suspendedAt: null, ...data },
+      update: { locale: "de", notifyBudgetAlerts: true, suspendedAt: null, deletedAt: null, ...data },
       create: { id, email: `${id}@example.com`, password: "hashed", ...data }
     });
   await mkUser(OWNER_ID, { locale: "de" });
   await mkUser(PARTNER_ID, { locale: "en" });
   await mkUser(MUTED_ID, { notifyBudgetAlerts: false });
+  // Both keep budget alerts switched on: only the suspension or the deletion
+  // keeps them from being notified.
   await mkUser(SUSPENDED_ID, { suspendedAt: new Date("2032-01-01T00:00:00.000Z") });
+  await mkUser(DELETED_ID, { deletedAt: new Date("2032-02-01T00:00:00.000Z") });
   await mkUser(OUTSIDER_ID);
 
   householdId = await ensureTestHousehold(prisma, OWNER_ID);
-  for (const userId of [PARTNER_ID, MUTED_ID, SUSPENDED_ID]) {
+  for (const userId of [PARTNER_ID, MUTED_ID, SUSPENDED_ID, DELETED_ID]) {
     await prisma.householdMember.upsert({
       where: { userId },
       update: { householdId, role: "MEMBER" },
@@ -150,6 +157,21 @@ describe("checkBudgetAlerts — recipients", () => {
     // 80 is marked as sent and never follows later.
     await check();
     expect(push).toHaveBeenCalledTimes(2);
+  });
+
+  it("notifies neither a suspended nor a deleted member, although both have alerts switched on", async () => {
+    const muted = await prisma.user.findMany({
+      where: { id: { in: [SUSPENDED_ID, DELETED_ID] } },
+      select: { notifyBudgetAlerts: true }
+    });
+    expect(muted.map((u) => u.notifyBudgetAlerts)).toEqual([true, true]);
+
+    await spend(-12_000);
+    await check();
+    const notified = sent().map(([userId]) => userId);
+    expect(notified).not.toContain(SUSPENDED_ID);
+    expect(notified).not.toContain(DELETED_ID);
+    expect(notified.sort()).toEqual([OWNER_ID, PARTNER_ID]);
   });
 
   it("still notifies the partner when the other one switched alerts off", async () => {

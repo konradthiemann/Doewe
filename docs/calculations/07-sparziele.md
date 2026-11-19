@@ -135,17 +135,23 @@ Der Algorithmus berechnet den **kleinsten konstanten Monatsbetrag** X, mit dem a
 aktiven Sparziele mit Termin pünktlich erreicht werden können. X ist der Betrag, der in **jedem
 verbleibenden Monat einschließlich des laufenden** zurückzulegen ist.
 
-Deshalb wird gegen den Topf gerechnet, **wie er zu Beginn des laufenden Monats stand**: Was in diesem
-Monat schon eingezahlt wurde, ist der Nutzer, der der Rate folgt — kein Grund, sie zu senken. (Würde
-man die Einzahlungen dieses Monats als gedeckt zählen und den laufenden Monat trotzdem als offen,
-zählte der Monat doppelt, und die Rate fiele, sobald man spart.)
+Deshalb wird gegen das gerechnet, **was zu Beginn des laufenden Monats gedeckt war**: den Topf heute
+ohne die Einzahlungen dieses Monats. Was in diesem Monat schon eingezahlt wurde, ist der Nutzer, der
+der Rate folgt — kein Grund, sie zu senken. (Würde man die Einzahlungen dieses Monats als gedeckt
+zählen und den laufenden Monat trotzdem als offen, zählte der Monat doppelt, und die Rate fiele,
+sobald man spart.)
+
+Abgezogen werden die Einzahlungen **brutto**. Entnahmen dieses Monats — auch die, die der Abschluss
+eines Ziels bucht — stecken schon im Topf und bleiben abgezogen; sie heben keine Einzahlung auf.
+Sonst sänke die Rate der übrigen Ziele in dem Monat, in dem ein Ziel abgeschlossen wird.
 
 ### Algorithmus
 
 ```
-savedThisMonth = Netto-Einzahlungen in die Spar-Kategorien im laufenden Monat
-                 (resolveSavedThisMonthCents; Entnahmen abgezogen, kann negativ sein)
-coveredAtMonthStart = max(availableCents - max(savedThisMonth, 0), 0)
+depositedThisMonth = Einzahlungen in die Spar-Kategorien im laufenden Monat, brutto
+                     (resolveDepositedThisMonthCents; nur negative Beträge, Entnahmen
+                     nicht abgezogen, nie negativ)
+coveredAtMonthStart = max(availableCents - depositedThisMonth, 0)
 
 Für jedes aktive Ziel i mit Termin (sortiert nach Jahr, Monat):
   cumulativeAmount[i] = Summe der Zielbeträge von Ziel 1 bis i
@@ -156,14 +162,15 @@ Für jedes aktive Ziel i mit Termin (sortiert nach Jahr, Monat):
 suggestedMonthlyCents = max(requiredMonthly[1..n])     (ohne Ziele: 0)
 ```
 
-Eine Netto-Entnahme im laufenden Monat (`savedThisMonth < 0`) wird nicht zurückaddiert — dieses Geld
-ist aus dem Topf.
+Eine Entnahme im laufenden Monat wird nicht zurückaddiert — dieses Geld ist aus dem Topf, egal ob es
+aus früheren Einzahlungen oder aus denen dieses Monats stammt. Gab es im Monat nur Entnahmen, gilt
+der Topf, wie er ist.
 
 ```mermaid
 flowchart TD
     A["Aktive Sparziele mit Termin, sortiert nach Termin"] --> B
     B["availableCents = max(rawSaldo - Altbestand reservedCents, 0)"] --> C
-    C["coveredAtMonthStart = max(availableCents - max(savedThisMonth, 0), 0)"] --> LOOP
+    C["coveredAtMonthStart = max(availableCents - depositedThisMonth, 0)"] --> LOOP
     LOOP["Für jedes Ziel i in Reihenfolge:"] --> CUM["cumulativeAmount += goal.amountCents"]
     CUM --> REM["cumulativeRemaining = max(cumulativeAmount - coveredAtMonthStart, 0)"]
     REM --> MONTHS["monthsUntil = max((zielJahr-jetzt)*12 + (zielMonat-jetzt), 1)"]
@@ -196,12 +203,18 @@ flowchart TD
 Zahlt der Nutzer im Juni 216,67 € ein, steigt `availableCents` auf 121.667 Cents;
 `coveredAtMonthStart` bleibt `121.667 − 21.667 = 100.000`, und die Rate bleibt bei 21.667 Cents.
 
+**Abschluss im selben Monat:** Topf am 1. November 500 € (für Ziel A gedacht), im November 300 €
+eingezahlt, dann A für 500 € abgeschlossen (Entnahme gebucht) → Topf 300 €. Ziel B: 1.200 € bis
+Februar, also November, Dezember und Januar offen. `coveredAtMonthStart = max(300 − 300, 0) = 0`,
+Rate `1.200 / 3 = 400 €`. Mit der Netto-Rechnung (300 − 500 = −200, also nichts abgezogen) wären
+300 € als gedeckt gezählt worden und die Rate auf 300 € gefallen.
+
 ### Wichtige Details
 
 - `monthsUntil` wird auf **mindestens 1** geclampt — Division durch 0 ausgeschlossen; ein Ziel, dessen Termin der laufende Monat ist oder schon vorbei ist, wird mit einem Monat gerechnet
 - `Math.ceil()` — immer aufgerundet, kein Untersparen möglich
 - Der gedeckte Betrag wird nicht pro Ziel erneut abgezogen: Er steht den Zielen in Terminreihenfolge einmalig als Puffer zur Verfügung.
-- Alle anderen Werte der `totals` (`rawAvailableCents`, `availableCents`, `totalTargetCents`) rechnen gegen den echten, aktuellen Topf — nur die Rate gegen den Stand zu Monatsbeginn.
+- Alle anderen Werte der `totals` (`rawAvailableCents`, `availableCents`, `totalTargetCents`) rechnen gegen den echten, aktuellen Topf — nur die Rate gegen das zu Monatsbeginn Gedeckte.
 
 ## API-Besonderheit: flexible Feldnamen
 
@@ -276,7 +289,8 @@ verringert „Gespart" des Monats und ist keine Einnahme.
 - **Obergrenze:** `getAvailableSavingsCents` — der Topf des Haushalts (abzüglich des Altbestands,
   siehe oben). Mehr geht nicht: `409` mit `availableCents`. Prüfung und Buchung laufen in einer
   Datenbank-Transaktion unter der Topf-Sperre des Haushalts (`lockSavingsPool`), damit zwei
-  gleichzeitige Entnahmen nicht dasselbe Geld verwenden
+  gleichzeitige Entnahmen nicht dasselbe Geld verwenden: Übersteigen mehrere gleichzeitige Entnahmen
+  zusammen den Topf, geht genau so viel durch, wie hineinpasst, der Rest bekommt `409`
 - **Kategorie:** Bei mehreren Spar-Kategorien geht die Buchung in die älteste
   (`findSavingsBookingCategoryId`). Gibt es keine: `409`
 - **Datum:** `occurredAt` ist der Zeitpunkt der Anfrage

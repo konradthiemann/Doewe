@@ -18,12 +18,15 @@
  * planned total, the suggested monthly rate, and the savings-pool cascade.
  *
  * The suggested monthly rate is the amount to set aside in EACH remaining month,
- * the current one included. It is therefore measured against the pool as it stood
- * at the start of the current month: what was deposited this month is the user
+ * the current one included. It is therefore measured against what was covered at
+ * the start of the current month: what was deposited this month is the user
  * following the rate, not a reason to lower it. (Counting this month's deposits as
  * covered AND the current month as still open would count the month twice — the
- * rate would drop as soon as the user saves.) "Current month" is the Europe/Berlin
- * calendar month of `now`.
+ * rate would drop as soon as the user saves.) The covered amount is the pool now
+ * minus this month's GROSS deposits: a withdrawal this month (also the one booked
+ * when a goal is completed) stays taken out and does not cancel a deposit, so
+ * completing a goal never lowers the rate of the others. "Current month" is the
+ * Europe/Berlin calendar month of `now`.
  */
 import { sumFlows, zonedMonth, type FlowRow } from "@doewe/shared";
 
@@ -85,15 +88,15 @@ function isScheduled(goal: SavingPlanGoal): goal is SavingPlanGoal & { month: nu
  * @param goals               all goals of the household, sorted by (year, month)
  * @param rawSavingsBalance   the net savings balance (all savings categories)
  * @param now                 reference instant; its Europe/Berlin month is the current month
- * @param savedThisMonthCents net deposits (deposits minus withdrawals) into the savings
- *                            categories within the current month; only affects the
- *                            suggested monthly rate
+ * @param depositedThisMonthCents gross deposits into the savings categories within the
+ *                            current month (withdrawals not subtracted, >= 0); only
+ *                            affects the suggested monthly rate
  */
 export function computeSavingPlanTotals(
   goals: SavingPlanGoal[],
   rawSavingsBalance: number,
   now: Date,
-  savedThisMonthCents = 0
+  depositedThisMonthCents = 0
 ): SavingPlanTotals {
   // Only dated, non-completed goals drive the forward-looking plan.
   // Undated goals are an idea backlog and are ignored here entirely.
@@ -123,10 +126,10 @@ export function computeSavingPlanTotals(
   const { year: currentYear, month: currentMonth } = zonedMonth(now); // month 1-12
 
   // monthsUntil below counts the current month as still open, so the covered
-  // amount must be the pool at the start of this month: without this month's
-  // net deposits. A net withdrawal this month is not added back — that money
-  // is gone from the pool.
-  const coveredAtMonthStartCents = Math.max(availableCents - Math.max(savedThisMonthCents, 0), 0);
+  // amount is what was covered when this month began: the pool now without
+  // this month's gross deposits. This month's withdrawals stay taken out —
+  // that money is gone from the pool, whether it came from old or new savings.
+  const coveredAtMonthStartCents = Math.max(availableCents - Math.max(depositedThisMonthCents, 0), 0);
 
   let suggestedMonthlyCents = 0;
   let cumulativeAmount = 0;

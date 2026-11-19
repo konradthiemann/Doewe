@@ -339,9 +339,10 @@ describe("completing and withdrawing use the household pool", () => {
 
     const data = await plan();
     expect(data.totals.availableCents).toBe(5_000);
-    // November is now a net withdrawal (450 − 800): it is not added back, the
-    // rate is measured against the 50 € that are left: ceil((1200 − 50) / 2).
-    expect(data.totals.suggestedMonthlyCents).toBe(57_500);
+    // The rate is measured against the pool minus November's 450 € of
+    // deposits; the 800 € withdrawal stays taken out: max(50 − 450, 0) = 0
+    // covered at the start of the month, two months left: 1200 / 2.
+    expect(data.totals.suggestedMonthlyCents).toBe(60_000);
 
     const next = await withdraw({ amountCents: 5_001 });
     expect(next.status).toBe(409);
