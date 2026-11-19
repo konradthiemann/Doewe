@@ -90,4 +90,4 @@ jeden Monat `M`:
 | Rückblick `M` | Spalte `M` der Quartalsübersicht |
 | Jahresübersicht nach Kategorien, Monat `M`: Gruppen-Summen | Rückblick `M`: Einnahmen, Ausgaben, Gespart |
 | Dashboard nach Monatsende (alles gebucht) | Rückblick desselben Monats |
-| „Ausgegeben" je Kategorie | überall dieselbe Zahl: Budgets, Dashboard, Rückblick, Budget-Warnung |
+| „Ausgegeben" je Kategorie, gebucht | dieselbe Zahl im Rückblick und in der Jahresübersicht; Dashboard und Budget-Warnung rechnen im laufenden Monat zusätzlich das Geplante ein |

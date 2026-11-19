@@ -198,7 +198,7 @@ export async function GET(request: Request) {
   const balanceAtStartCents = balanceAtStartAgg._sum.amountCents ?? 0;
   const balanceAtEndCents = balanceAtStartCents + incomeCents - outcomeCents - savingsCents;
 
-  // Effective budgets for selected month (plan, overridden by a per-month Budget)
+  // Effective budgets for selected month (the plan; a per-month Budget only without a plan)
   const budgetMap = await loadEffectiveCategoryBudgets({ householdId, year, month });
 
   // Resolve category names for all relevant IDs

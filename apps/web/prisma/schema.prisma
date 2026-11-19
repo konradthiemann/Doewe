@@ -96,9 +96,10 @@ model Transaction {
   deletedAt     DateTime?
   receiptMerchant  String?
   // Set when this row was auto-booked from a due RecurringTransaction
-  // (see lib/recurringBooking.ts). Used to detect "already booked this month"
-  // and avoid double-counting it as still-planned in analytics. Kept (SetNull)
-  // if the originating recurring template is later deleted.
+  // (see lib/recurringBooking.ts), or linked to one via "make recurring".
+  // Together with recurringPeriod it identifies the occurrence, so it is not
+  // booked twice or counted as still planned. Kept (SetNull) if the
+  // originating recurring template is later deleted.
   recurringTransactionId String?
   // The month ("YYYY-MM", Europe/Berlin) this auto-booked occurrence was
   // booked FOR. It identifies the occurrence: the row keeps it when the user
