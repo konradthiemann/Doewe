@@ -1,8 +1,6 @@
 "use client";
 
-import { fromCents, toDecimalString } from "@doewe/shared";
-import { format, parseISO } from "date-fns";
-import { de, enUS } from "date-fns/locale";
+import { fromCents, toDecimalString, zonedMonth } from "@doewe/shared";
 import { useMemo, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
@@ -10,6 +8,7 @@ import { Button } from "../../components/ui/Button";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { type AttachmentMeta, TAX_EXPORT_MAX_RECEIPT_BYTES, formatAttachmentBytes } from "../../lib/attachments";
+import { formatBookingDate } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
 
 type TaxTransaction = {
@@ -39,9 +38,9 @@ const YEAR_RANGE = 6;
 
 export default function TaxPage() {
   const { locale, t } = useI18n();
-  const dfLocale = locale === "de" ? de : enUS;
 
-  const currentYear = new Date().getFullYear();
+  // Current tax year = the calendar year in the app's time zone (Europe/Berlin).
+  const currentYear = zonedMonth(new Date()).year;
   const [year, setYear] = useState(currentYear);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -260,7 +259,7 @@ export default function TaxPage() {
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{tx.description}</p>
                           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-                            <span>{format(parseISO(tx.occurredAt), "P", { locale: dfLocale })}</span>
+                            <span>{formatBookingDate(tx.occurredAt, locale)}</span>
                             {tx.category && (
                               <span className="rounded-full bg-surface-2 px-2 py-0.5 font-medium text-ink">
                                 {tx.category.name}

@@ -24,8 +24,9 @@ let prisma: import("@prisma/client").PrismaClient;
 let householdId: string;
 let foodId: string;
 
-// Fixed past month: March 2025 (local time, as the route uses local boundaries)
-const day = (d: number, h = 12) => new Date(2025, 2, d, h, 0, 0);
+// Fixed past month: March 2025. Fixed UTC instants around noon — the same calendar day in
+// Europe/Berlin (the route's calendar) whatever time zone the test process runs in.
+const day = (d: number, h = 12) => new Date(Date.UTC(2025, 2, d, h, 0, 0));
 
 async function fetchReview(): Promise<ReviewResponse> {
   const { GET } = await import("../app/api/analytics/monthly-review/route");

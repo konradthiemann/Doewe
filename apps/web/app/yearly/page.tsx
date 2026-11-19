@@ -1,5 +1,6 @@
 "use client";
 
+import { zonedMonth } from "@doewe/shared";
 import Link from "next/link";
 import { parseAsInteger, useQueryState } from "nuqs";
 import { Suspense, useCallback, useMemo } from "react";
@@ -9,6 +10,7 @@ import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
 import { CategoryYearTable } from "../../components/yearly/CategoryYearTable";
 import { RecurringYearTable } from "../../components/yearly/RecurringYearTable";
 import { useApiQuery } from "../../lib/api/useApiQuery";
+import { formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
 
 import type { CategoryYearMatrix, RecurringYearMatrix } from "@doewe/shared";
@@ -19,7 +21,7 @@ const MAX_YEAR = 2100;
 function YearlyPage() {
   const { locale, t } = useI18n();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
-  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const currentYear = useMemo(() => zonedMonth(new Date()).year, []);
   const [rawYear, setYear] = useQueryState("year", parseAsInteger.withDefault(currentYear));
   const year = Math.min(MAX_YEAR, Math.max(MIN_YEAR, rawYear));
 
@@ -47,7 +49,7 @@ function YearlyPage() {
   const monthLabels = useMemo(
     () =>
       Array.from({ length: 12 }, (_, index) =>
-        new Date(2000, index, 1).toLocaleDateString(dateLocale, { month: "short" })
+        formatMonth({ year: 2000, month: index + 1 }, dateLocale, { month: "short", year: false })
       ),
     [dateLocale]
   );

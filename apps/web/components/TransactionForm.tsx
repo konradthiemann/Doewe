@@ -1,6 +1,6 @@
 "use client";
 
-import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
+import { fromCents, parseCents, toDecimalString, zonedDate } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createId } from "@paralleldrive/cuid2";
 import { useQueryClient } from "@tanstack/react-query";
@@ -186,14 +186,22 @@ export default function TransactionForm({
     return base;
   }, [categories, mode, transaction?.categoryId, txType]);
 
+  // Keep the selected category within the kind the type toggle shows.
+  // Exception: the category a booking is stored with stays, whatever its kind —
+  // a savings withdrawal is a positive amount in "Savings", a correction can be
+  // a negative amount in an income category. Replacing it here would move the
+  // booking into another category on any unrelated edit and change the month's
+  // income, outcome and savings. It only changes when the user switches the
+  // type (the toggle picks a category itself) or chooses another category.
   useEffect(() => {
     if (!categoryId || categoryId === "" || categoryId === "__new__" || categories.length === 0) return;
+    if (mode === "edit" && transaction?.categoryId && categoryId === transaction.categoryId) return;
 
     const allowed = categories.filter((c) => (txType === "income" ? c.isIncome : !c.isIncome));
     if (!allowed.some((c) => c.id === categoryId)) {
       setValue("categoryId", allowed[0]?.id ?? "");
     }
-  }, [categories, categoryId, txType, setValue]);
+  }, [categories, categoryId, mode, transaction?.categoryId, txType, setValue]);
 
   // Nach jeder Transaktions-Mutation alle davon abgeleiteten Caches invalidieren
   // (Listen, Analytics, Sparplan-Fortschritt, Steuer-Ansicht, Kategorien-Nutzung).
@@ -921,8 +929,8 @@ export default function TransactionForm({
         {mode === "edit" && transaction && (
           <MakeRecurringSection
             transactionId={transaction.id}
-            // Same local calendar day the date field above shows.
-            bookingDay={new Date(transaction.occurredAt).getDate()}
+            // Same calendar day (Europe/Berlin) the date field above shows.
+            bookingDay={zonedDate(new Date(transaction.occurredAt)).day}
             recurringTransactionId={transaction.recurringTransactionId}
             onMade={(message) => onMadeRecurring?.(message)}
           />

@@ -3,6 +3,7 @@
 import { computeCategoryBar } from "@doewe/shared";
 import { useId, useMemo, useState } from "react";
 
+import { formatBookingDayMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
 import { budgetTone, ProgressBar } from "../ui/ProgressBar";
 
@@ -265,7 +266,7 @@ function CategoryRow({
                 const cells = (
                   <>
                     <span className="text-xs text-ink-muted tabular-nums">
-                      {new Date(tx.occurredAt).toLocaleDateString(dateLocale, { day: "numeric", month: "short" })}
+                      {formatBookingDayMonth(tx.occurredAt, dateLocale)}
                     </span>
                     <span className="truncate text-sm text-ink">{tx.description}</span>
                     <span className="whitespace-nowrap text-right text-sm font-semibold text-expense tabular-nums">

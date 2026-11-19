@@ -5,7 +5,13 @@
  * caller into nextYear/nextMonth) and repeats every `intervalMonths` months
  * from there. This was previously duplicated between the analytics summary
  * endpoint and the budget-alert check; both now share this module.
+ *
+ * Everything here works on calendar values (year, month, day), never on
+ * instants. The caller reads them in the app's time zone (`zonedMonth`,
+ * `zonedDate` from ./calendar) and turns a calendar day back into an instant
+ * with `zonedTimeToUtc({ ...day, hour: 12 })`.
  */
+import { daysInMonth, shiftMonth } from "./calendar";
 
 export type RecurringAnchor = {
   nextYear: number;
@@ -69,4 +75,39 @@ export function addMonthsClamped(date: CalendarDate, months: number, dayOfMonth?
   const month = (absoluteMonth % 12) + 1;
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   return { year, month, day: Math.min(dayOfMonth ?? date.day, daysInMonth) };
+}
+
+/**
+ * The calendar day on which a recurring transaction with `dayOfMonth` falls in
+ * the given month: the day is clamped to the length of the month (31 -> 30 in
+ * November, 28/29 in February).
+ */
+export function occurrenceDate(ref: MonthRef, dayOfMonth: number): CalendarDate {
+  return { year: ref.year, month: ref.month, day: Math.min(dayOfMonth, daysInMonth(ref.year, ref.month)) };
+}
+
+/**
+ * Whether the calendar day `date` is `other` or an earlier day. An occurrence
+ * is due when its day is on or before today — compare days, not instants: an
+ * occurrence is dated at noon, so an instant comparison would delay the
+ * booking until the afternoon of its day.
+ */
+export function isOnOrBeforeDate(date: CalendarDate, other: CalendarDate): boolean {
+  if (date.year !== other.year) return date.year < other.year;
+  if (date.month !== other.month) return date.month < other.month;
+  return date.day <= other.day;
+}
+
+/**
+ * First occurrence of a recurring transaction created `today` without an
+ * explicit start date: this month only if its (clamped) day is still ahead,
+ * i.e. strictly after today; otherwise next month. A day that is today counts
+ * as passed: whoever entered today's payment by hand and then creates the
+ * template must not get it booked a second time. The decision uses the
+ * clamped day, so on 30 November both day 30 and day 31 start in December.
+ */
+export function firstOccurrenceFrom(today: CalendarDate, dayOfMonth: number): CalendarDate {
+  const thisMonth = occurrenceDate(today, dayOfMonth);
+  if (thisMonth.day > today.day) return thisMonth;
+  return occurrenceDate(shiftMonth(today, 1), dayOfMonth);
 }

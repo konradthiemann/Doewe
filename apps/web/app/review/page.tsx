@@ -1,5 +1,6 @@
 "use client";
 
+import { percentOf } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo, useRef, useState } from "react";
@@ -11,6 +12,7 @@ import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
 import { Dialog } from "../../components/ui/Dialog";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
+import { formatBookingDayMonth, formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
 
 type ReviewData = {
@@ -182,11 +184,7 @@ function ReviewPage() {
   );
 
   const formatMonthLabel = useCallback(
-    (month: number, year: number) =>
-      new Date(year, month - 1, 1).toLocaleDateString(dateLocale, {
-        month: "long",
-        year: "numeric"
-      }),
+    (month: number, year: number) => formatMonth({ year, month }, dateLocale),
     [dateLocale]
   );
 
@@ -225,7 +223,7 @@ function ReviewPage() {
     const prev = data.prevMonth;
     const diff = (a: number, b: number) => ({
       absDiff: (a - b) / 100,
-      pct: b !== 0 ? Math.round(((a - b) / Math.abs(b)) * 100) : null
+      pct: b !== 0 ? percentOf(a - b, Math.abs(b)) : null
     });
     return {
       income: diff(cur.incomeCents, prev.incomeCents),
@@ -432,7 +430,7 @@ function ReviewPage() {
                 {data.incomeCategories.map((cat) => {
                   const sharePct =
                     data.incomeCents > 0
-                      ? Math.round((cat.amountCents / data.incomeCents) * 100)
+                      ? percentOf(cat.amountCents, data.incomeCents)
                       : 0;
                   return (
                     <li
@@ -482,10 +480,7 @@ function ReviewPage() {
                       <p className="truncate text-xs text-ink-muted">
                         {exp.categoryName ?? "—"}
                         {" · "}
-                        {new Date(exp.occurredAt).toLocaleDateString(dateLocale, {
-                          day: "numeric",
-                          month: "short"
-                        })}
+                        {formatBookingDayMonth(exp.occurredAt, dateLocale)}
                       </p>
                     </div>
                     <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-expense">

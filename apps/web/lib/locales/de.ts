@@ -153,7 +153,7 @@ export const de: Record<string, string> = {
   "dashboard.doughnutRemainingToSave": "Noch zu sparen",
   "dashboard.balanceOverview": "Finanzkennzahlen",
   "dashboard.totalBalance": "Aktueller Kontostand",
-  "dashboard.totalBalanceHint": "Summe aller Transaktionen (gesamt)",
+  "dashboard.totalBalanceHint": "Alle Buchungen bis Ende dieses Monats",
   "dashboard.carryoverFromLastMonth": "Übertrag aus Vormonat",
   "dashboard.carryoverHint": "Kontostand am Ende des letzten Monats",
   "dashboard.carryoverNegativeHint": "Vormonat im Minus: reduziert das Budget.",
@@ -793,5 +793,10 @@ export const de: Record<string, string> = {
   "budgets.nextYear": "Nächstes Jahr",
   "budgets.colCategory": "Kategorie",
   "budgets.colPeriod": "Zeitraum",
-  "budgets.colAmount": "Betrag"
+  "budgets.colAmount": "Betrag",
+  "transactions.filterTypeSavings": "Sparen",
+  "transactions.savingsLabel": "Gespart",
+  "transactions.filterMonthLabel": "Monat",
+  "transactions.filterMonthAll": "Alle Monate",
+  "transactions.filterMonthCustom": "Eigener Zeitraum"
 };

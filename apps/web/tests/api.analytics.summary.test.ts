@@ -1,3 +1,4 @@
+import { shiftMonth, zonedMonth, zonedTimeToUtc, type MonthRef } from "@doewe/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
@@ -14,6 +15,12 @@ let testHouseholdId: string;
 let testAccountId: string;
 let savingsCategoryId: string;
 let foodCategoryId: string;
+
+// "This month" is the calendar month in Europe/Berlin (the route's calendar), not the month of
+// the test process. Fixtures are dated at noon in Berlin on a given day of that month.
+const thisMonth = zonedMonth(new Date());
+const lastMonth = shiftMonth(thisMonth, -1);
+const noonOn = (ref: MonthRef, day: number) => zonedTimeToUtc({ ...ref, day, hour: 12 });
 
 beforeAll(async () => {
   const { PrismaClient } = await import("@prisma/client");
@@ -58,10 +65,6 @@ beforeAll(async () => {
   await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
   await prisma.budget.deleteMany({ where: { accountId: testAccountId } });
 
-  const now = new Date();
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15);
-
   // Transactions: last month (+1000, -300), this month (+500, -200 food, -100 savings)
   await prisma.transaction.createMany({
     data: [
@@ -69,40 +72,40 @@ beforeAll(async () => {
         accountId: testAccountId,
         amountCents: 100000, // +1000€ income last month
         description: "Last month income",
-        occurredAt: lastMonth
+        occurredAt: noonOn(lastMonth, 15)
       },
       {
         accountId: testAccountId,
         amountCents: -30000, // -300€ expense last month
         description: "Last month expense",
-        occurredAt: new Date(lastMonth.getTime() + 5 * 86400000)
+        occurredAt: noonOn(lastMonth, 20)
       },
       {
         accountId: testAccountId,
         amountCents: 50000, // +500€ income this month
         description: "This month income",
-        occurredAt: new Date(thisMonthStart.getTime() + 1 * 86400000)
+        occurredAt: noonOn(thisMonth, 2)
       },
       {
         accountId: testAccountId,
         categoryId: foodCategoryId,
         amountCents: -20000, // -200€ food expense this month
         description: "This month food expense",
-        occurredAt: new Date(thisMonthStart.getTime() + 2 * 86400000)
+        occurredAt: noonOn(thisMonth, 3)
       },
       {
         accountId: testAccountId,
         categoryId: savingsCategoryId,
         amountCents: -10000, // -100€ savings transfer this month
         description: "Monthly savings transfer",
-        occurredAt: new Date(thisMonthStart.getTime() + 4 * 86400000)
+        occurredAt: noonOn(thisMonth, 5)
       }
     ]
   });
 
   // Recurring transactions for this month
-  const thisMonthRecurringIncome = new Date(now.getFullYear(), now.getMonth(), 20);
-  const thisMonthRecurringExpense = new Date(now.getFullYear(), now.getMonth(), 25);
+  const thisMonthRecurringIncome = noonOn(thisMonth, 20);
+  const thisMonthRecurringExpense = noonOn(thisMonth, 25);
 
   await prisma.recurringTransaction.createMany({
     data: [
@@ -131,8 +134,7 @@ beforeAll(async () => {
   });
 
   // Budget goals for this month (planned savings)
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+  const { month, year } = thisMonth;
 
   await prisma.budget.createMany({
     data: [
@@ -173,7 +175,7 @@ afterAll(async () => {
 });
 
 describe("/api/analytics/summary", () => {
-  it("returns correct totalBalance across all months", async () => {
+  it("returns correct totalBalance up to the end of the current month", async () => {
     const routes = await import("../app/api/analytics/summary/route");
     const res = await routes.GET();
     expect(res.status).toBe(200);
@@ -302,15 +304,13 @@ describe("/api/analytics/summary — savings withdrawal", () => {
   // Adds a POSITIVE savings transaction (a withdrawal) on top of the base setup.
   // Runs after the base suite; cleans up its own transaction afterwards.
   beforeAll(async () => {
-    const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     await prisma.transaction.create({
       data: {
         accountId: testAccountId,
         categoryId: savingsCategoryId,
         amountCents: 4000, // +40€ withdrawn from savings this month
         description: "Withdrawal test tx",
-        occurredAt: new Date(thisMonthStart.getTime() + 6 * 86400000)
+        occurredAt: noonOn(thisMonth, 7)
       }
     });
   });

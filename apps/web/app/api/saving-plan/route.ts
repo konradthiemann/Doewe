@@ -1,24 +1,47 @@
-import { ensureNonEmpty } from "@doewe/shared";
+/**
+ * GET  /api/saving-plan — Sparziele des Haushalts samt Spartopf und Sparrate
+ * POST /api/saving-plan — Sparziel anlegen
+ *
+ * Authentifizierung: Pflicht (401). Haushaltsbezogen: Ziele aller Konten des
+ * Haushalts, Spartopf über alle Spar-Kategorien und alle Konten.
+ *
+ * Ein Sparziel ist eine `Budget`-Zeile mit `categoryId = null`. Zeilen mit
+ * Kategorie sind Kategorie-Budgets und gehören nicht in den Sparplan.
+ *
+ * GET Antwort: { goals, undatedGoals, completedGoals, totals }
+ *   goals          — aktive Ziele mit Termin (Monat/Jahr), sortiert nach Termin
+ *   undatedGoals   — aktive Ziele ohne Termin (Ideen-Liste)
+ *   completedGoals — abgeschlossene Ziele
+ *   totals         — siehe computeSavingPlanTotals (./compute.ts). Die Sparrate
+ *                    (`suggestedMonthlyCents`) rechnet gegen den Topf zu Beginn des
+ *                    laufenden Berliner Monats; alles andere gegen den echten Topf.
+ *   `transactionSpentCents` je Ziel zählt nur nicht gelöschte Buchungen.
+ *
+ * POST Body: { accountId, title, targetMonth?, targetYear?, amountCents? }
+ *   (Monat und Jahr nur gemeinsam; Alias `month`/`year`, `dueMonth`/`dueYear`)
+ *   201 Budget-Zeile | 400 Validierung | 404 "Account not found"
+ */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
+import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
+import { INT4_MAX } from "../transactions/schema";
 
 import { computeSavingPlanTotals } from "./compute";
-import { resolveSavingsBalanceCents } from "./savings";
+import { resolveSavedThisMonthCents, resolveSavingsBalanceCents } from "./savings";
 
 const SavingPlanInput = z
   .object({
     accountId: z.string().min(1),
-    title: z
-      .string()
-      .transform((value) => ensureNonEmpty(value))
-      .transform((value) => value.trim()),
+    // trim().min(1) statt eines werfenden Transforms: ein Titel nur aus
+    // Leerraum ist ein 400, kein 500.
+    title: z.string().trim().min(1),
     // Undated goals omit month/year; amount is optional for idea-backlog goals.
     targetMonth: z.number().int().min(1).max(12).nullish(),
     targetYear: z.number().int().min(1970).max(9999).nullish(),
-    amountCents: z.number().int().min(1).nullish()
+    amountCents: z.number().int().min(1).max(INT4_MAX).nullish()
   })
   .refine((data) => (data.targetMonth == null) === (data.targetYear == null), {
     message: "targetMonth and targetYear must both be provided or both omitted",
@@ -53,23 +76,31 @@ export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const account = await prisma.account.findFirst({ where: { householdId: user.householdId }, orderBy: { createdAt: "asc" } });
+  // Unverändertes Verhalten für einen Haushalt ohne Konto; gelesen wird danach
+  // haushaltsweit, nicht mehr nur das erste Konto.
+  const account = await prisma.account.findFirst({ where: { householdId: user.householdId }, select: { id: true } });
   if (!account) {
     return NextResponse.json({ error: "No account found for user" }, { status: 404 });
   }
 
-  const accountId = account.id;
+  const now = new Date();
+  // Einmal geladen, damit Topf und Monats-Einzahlungen dieselben Kategorien meinen.
+  const savingsIds = await loadSavingsCategoryIds(user.householdId);
 
-  const [goalsRaw, availableCents] = await Promise.all([
+  const [goalsRaw, rawSavingsBalanceCents, savedThisMonthCents] = await Promise.all([
     prisma.budget.findMany({
-      where: { accountId },
+      // Sparziele = Budget-Zeilen ohne Kategorie, über alle Konten des Haushalts.
+      where: { account: { householdId: user.householdId }, categoryId: null },
       orderBy: [{ year: "asc" }, { month: "asc" }, { createdAt: "asc" }],
       include: {
         category: { select: { name: true } },
-        transactions: { select: { amountCents: true } }
+        // Der Soft-Delete-Filter aus lib/prisma.ts greift nur im obersten
+        // `where` — gelöschte Buchungen hier selbst ausschließen.
+        transactions: { where: { deletedAt: null }, select: { amountCents: true } }
       }
     }),
-    resolveSavingsBalanceCents(accountId, user.householdId)
+    resolveSavingsBalanceCents(user.householdId, savingsIds),
+    resolveSavedThisMonthCents(user.householdId, now, savingsIds)
   ]);
 
   const mapGoal = (goal: (typeof goalsRaw)[number]) => ({
@@ -100,8 +131,9 @@ export async function GET() {
   const undatedGoals = activeRaw.filter((goal) => goal.month == null || goal.year == null).map(mapGoal);
   const completedGoals = goalsRaw.filter((goal) => goal.completedAt != null).map(mapGoal);
 
-  // `availableCents` from resolveSavingsBalanceCents is the raw savings balance.
-  // computeSavingPlanTotals reserves the amount withdrawn for completed goals out of it.
+  // computeSavingPlanTotals reserves the amount withdrawn for completed goals out
+  // of the raw balance, and measures the suggested monthly rate against the pool
+  // at the start of the current month (hence this month's net deposits).
   const totals = computeSavingPlanTotals(
     goalsRaw.map((goal) => ({
       amountCents: goal.amountCents,
@@ -110,8 +142,9 @@ export async function GET() {
       month: goal.month,
       year: goal.year
     })),
-    availableCents,
-    new Date()
+    rawSavingsBalanceCents,
+    now,
+    savedThisMonthCents
   );
 
   return NextResponse.json({

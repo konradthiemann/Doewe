@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
 
-import { add, formatEuro, fromCents, multiply, parseCents, parseMoneyInput, sub, toDecimalString } from "./money";
+import {
+  add,
+  formatEuro,
+  fromCents,
+  multiply,
+  parseCents,
+  parseMoneyInput,
+  percentOf,
+  sub,
+  toDecimalString
+} from "./money";
 
 describe("money", () => {
   it("parses valid strings to cents", () => {
@@ -99,5 +109,26 @@ describe("parseMoneyInput", () => {
     expect(parseMoneyInput("0,29")).toBe(29);
     expect(parseMoneyInput("1.005,07")).toBe(100507);
     expect(parseMoneyInput("19,99")).toBe(1999);
+  });
+});
+
+describe("percentOf", () => {
+  it("rounds an exact half up, where dividing first would round it down", () => {
+    // (43500 / 300000) * 100 === 14.499999999999998
+    expect(percentOf(43_500, 300_000)).toBe(15);
+    expect(percentOf(1, 200)).toBe(1); // 0.5 %
+    expect(percentOf(29, 200)).toBe(15); // 14.5 %
+  });
+
+  it("rounds ordinary values to the nearest whole percent", () => {
+    expect(percentOf(250, 600)).toBe(42);
+    expect(percentOf(995, 1000)).toBe(100);
+    expect(percentOf(994, 1000)).toBe(99);
+    expect(percentOf(0, 500)).toBe(0);
+    expect(percentOf(750, 500)).toBe(150);
+  });
+
+  it("is 0 when the whole is 0", () => {
+    expect(percentOf(100, 0)).toBe(0);
   });
 });

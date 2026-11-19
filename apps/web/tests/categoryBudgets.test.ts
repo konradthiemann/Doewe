@@ -9,8 +9,11 @@ import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
 // Smoothed availability 2037: income is spread evenly (3_600_000 / 12 = 3000 EUR per month), only fixed
 // costs vary: Jan 3000 - 3000 = 0, Feb-Dec 3000 - 1000 = 2000 EUR (salary +3000, rent -1000, insurance -2000 in Jan).
 // Plans beat legacy per-month Budget rows; a Budget only applies to categories without a plan.
+// Legacy Budget rows are read for every account of the household (SECOND_ACCOUNT_ID).
 const USER_ID = "test-user-category-budgets";
 const ACCOUNT_ID = "acc_category_budgets";
+const SECOND_ACCOUNT_ID = "acc_category_budgets_second";
+const ACCOUNT_IDS = [ACCOUNT_ID, SECOND_ACCOUNT_ID];
 const YEAR = 2037;
 
 let prisma: import("@prisma/client").PrismaClient;
@@ -19,7 +22,7 @@ let foodId: string;
 let hobbyId: string;
 let travelId: string;
 
-const load = (month: number) => loadEffectiveCategoryBudgets({ householdId, accountId: ACCOUNT_ID, year: YEAR, month });
+const load = (month: number) => loadEffectiveCategoryBudgets({ householdId, year: YEAR, month });
 
 const anchorOf = (month: number) => new Date(Date.UTC(YEAR, month - 1, 1, 12));
 
@@ -62,6 +65,11 @@ beforeAll(async () => {
     update: { userId: user.id, householdId },
     create: { id: ACCOUNT_ID, name: "Category Budgets Account", userId: user.id, householdId }
   });
+  await prisma.account.upsert({
+    where: { id: SECOND_ACCOUNT_ID },
+    update: { userId: user.id, householdId },
+    create: { id: SECOND_ACCOUNT_ID, name: "Category Budgets Second Account", userId: user.id, householdId }
+  });
   const mk = async (name: string) =>
     (
       await prisma.category.upsert({
@@ -79,16 +87,16 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.categoryBudgetPlan.deleteMany({ where: { householdId } });
-  await prisma.budget.deleteMany({ where: { accountId: ACCOUNT_ID } });
+  await prisma.budget.deleteMany({ where: { accountId: { in: ACCOUNT_IDS } } });
 });
 
 afterAll(async () => {
   if (!prisma) return;
   await prisma.categoryBudgetPlan.deleteMany({ where: { householdId } });
-  await prisma.budget.deleteMany({ where: { accountId: ACCOUNT_ID } });
+  await prisma.budget.deleteMany({ where: { accountId: { in: ACCOUNT_IDS } } });
   await prisma.recurringTransaction.deleteMany({ where: { accountId: ACCOUNT_ID } });
   await prisma.category.deleteMany({ where: { householdId } });
-  await prisma.account.deleteMany({ where: { id: ACCOUNT_ID } });
+  await prisma.account.deleteMany({ where: { id: { in: ACCOUNT_IDS } } });
   await cleanupTestHousehold(prisma, USER_ID);
   await prisma.user.deleteMany({ where: { id: USER_ID } });
   await prisma.$disconnect();
@@ -133,6 +141,23 @@ describe("loadEffectiveCategoryBudgets", () => {
   it("falls back to a legacy Budget for a category without a plan", async () => {
     await prisma.budget.create({ data: { accountId: ACCOUNT_ID, categoryId: travelId, month: 4, year: YEAR, amountCents: 7000 } });
     expect(await load(4)).toEqual({ [travelId]: 7000 });
+  });
+
+  it("reads the legacy Budget of any account of the household", async () => {
+    await prisma.budget.create({
+      data: { accountId: SECOND_ACCOUNT_ID, categoryId: travelId, month: 4, year: YEAR, amountCents: 7000 }
+    });
+    expect(await load(4)).toEqual({ [travelId]: 7000 });
+  });
+
+  it("adds up the legacy Budgets two accounts hold for the same category and month", async () => {
+    await prisma.budget.createMany({
+      data: [
+        { accountId: ACCOUNT_ID, categoryId: travelId, month: 4, year: YEAR, amountCents: 7000 },
+        { accountId: SECOND_ACCOUNT_ID, categoryId: travelId, month: 4, year: YEAR, amountCents: 3000 }
+      ]
+    });
+    expect(await load(4)).toEqual({ [travelId]: 10000 });
   });
 
   it("ignores a Budget of another month or year", async () => {

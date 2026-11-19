@@ -3,20 +3,25 @@ import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
-import { TransactionInput } from "../schema";
+import { parseOccurredAt, TransactionInput } from "../schema";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const json = await request.json();
+  // Invalid JSON → null → fails validation (400 instead of 500).
+  const json: unknown = await request.json().catch(() => null);
   const parsed = TransactionInput.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const data = parsed.data;
-  const occurredAt = typeof data.occurredAt === "string" ? new Date(data.occurredAt) : data.occurredAt;
+  // Same reading as POST: a bare calendar day means noon in Berlin of that day.
+  const occurredAt = parseOccurredAt(data.occurredAt);
+  if (!occurredAt) {
+    return NextResponse.json({ error: "Invalid occurredAt" }, { status: 400 });
+  }
 
   const existing = await prisma.transaction.findFirst({ where: { id: params.id, account: { householdId: user.householdId } } });
   if (!existing) {

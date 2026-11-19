@@ -116,13 +116,15 @@ describe("POST /api/transactions/[id]/make-recurring", () => {
     expect(created.description).toBe("Make recurring source");
     expect(created.intervalMonths).toBe(1);
     expect(created.dayOfMonth).toBe(1);
-    // Booking day 1 in September (Berlin) + 1 month -> 1 Oct 2035, local midnight.
-    expect(new Date(created.nextOccurrence).getTime()).toBe(new Date(2035, 9, 1).getTime());
+    // Booking day 1 in September (Berlin) + 1 month -> 1 Oct 2035, noon in Berlin (summer time).
+    expect(created.nextOccurrence).toBe("2035-10-01T10:00:00.000Z");
 
     const row = await prisma.recurringTransaction.findUniqueOrThrow({ where: { id: created.id } });
     expect(row.frequency).toBe("MONTHLY");
     const linked = await prisma.transaction.findUniqueOrThrow({ where: { id: tx.id } });
     expect(linked.recurringTransactionId).toBe(created.id);
+    // The booking is the occurrence of its Berlin month — September, although it is still August in UTC.
+    expect(linked.recurringPeriod).toBe("2035-09");
   }, 20000);
 
   it("uses an explicit dayOfMonth, clamped via addMonthsClamped, and keeps the sign", async () => {
@@ -133,8 +135,8 @@ describe("POST /api/transactions/[id]/make-recurring", () => {
     const created: { amountCents: number; dayOfMonth: number; nextOccurrence: string } = await res.json();
     expect(created.amountCents).toBe(250000);
     expect(created.dayOfMonth).toBe(31);
-    // 15 Jan + 1 month with dayOfMonth 31 -> clamped to 28 Feb 2035.
-    expect(new Date(created.nextOccurrence).getTime()).toBe(new Date(2035, 1, 28).getTime());
+    // 15 Jan + 1 month with dayOfMonth 31 -> clamped to 28 Feb 2035, noon in Berlin (winter time).
+    expect(created.nextOccurrence).toBe("2035-02-28T11:00:00.000Z");
   }, 20000);
 
   it.each([
@@ -184,7 +186,7 @@ describe("POST /api/transactions/[id]/make-recurring", () => {
         frequency: "MONTHLY",
         intervalMonths: 1,
         dayOfMonth: 5,
-        nextOccurrence: new Date(2099, 0, 5)
+        nextOccurrence: new Date("2099-01-05T11:00:00.000Z")
       }
     });
     const tx = await createTx({ occurredAt: new Date(Date.UTC(2035, 5, 10, 12)) });
@@ -211,20 +213,37 @@ describe("POST /api/transactions/[id]/make-recurring", () => {
 
   describe("integration with the auto-booking run", () => {
     it("does not book the origin month again, but proposes exactly one booking in the next occurrence month", async () => {
-      const tx = await createTx({ occurredAt: new Date(2035, 8, 10, 12) }); // 10 Sept 2035
+      const tx = await createTx({ occurredAt: new Date("2035-09-10T10:00:00.000Z") }); // 10 Sept 2035, noon in Berlin
       const res = await post(tx.id, { intervalMonths: 1, dayOfMonth: 10 });
       expect(res.status).toBe(201);
       const { id: recurringId }: { id: string } = await res.json();
 
       const { materializeDueRecurringTransactions } = await import("../lib/recurringBooking");
 
-      const inOriginMonth = await materializeDueRecurringTransactions(new Date(2035, 8, 15), { dryRun: true });
+      const inOriginMonth = await materializeDueRecurringTransactions(new Date("2035-09-15T10:00:00.000Z"), { dryRun: true });
       expect(inOriginMonth.filter((b) => b.recurringId === recurringId)).toHaveLength(0);
 
-      const inNextMonth = await materializeDueRecurringTransactions(new Date(2035, 9, 15), { dryRun: true });
+      const inNextMonth = await materializeDueRecurringTransactions(new Date("2035-10-15T10:00:00.000Z"), { dryRun: true });
       const proposed = inNextMonth.filter((b) => b.recurringId === recurringId);
       expect(proposed).toHaveLength(1);
       expect(proposed[0]).toMatchObject({ year: 2035, month: 10 });
+    }, 20000);
+
+    it("still proposes the next month after the origin booking was moved into it", async () => {
+      // Booked on 30 Sept, 23:30 in Berlin; the user later corrects the date to 2 Oct.
+      const tx = await createTx({ occurredAt: new Date("2035-09-30T21:30:00.000Z") });
+      const res = await post(tx.id, { intervalMonths: 1 });
+      expect(res.status).toBe(201);
+      const created: { id: string; nextOccurrence: string; dayOfMonth: number } = await res.json();
+      expect(created.dayOfMonth).toBe(30);
+      expect(created.nextOccurrence).toBe("2035-10-30T11:00:00.000Z"); // winter time from 28 Oct 2035
+
+      await prisma.transaction.update({ where: { id: tx.id }, data: { occurredAt: new Date("2035-10-02T10:00:00.000Z") } });
+
+      const { materializeDueRecurringTransactions } = await import("../lib/recurringBooking");
+      const inNextMonth = await materializeDueRecurringTransactions(new Date("2035-10-30T12:00:00.000Z"), { dryRun: true });
+      // The moved booking still stands for September, so October's own occurrence is due.
+      expect(inNextMonth.filter((b) => b.recurringId === created.id).map((b) => [b.year, b.month])).toEqual([[2035, 10]]);
     }, 20000);
   });
 });

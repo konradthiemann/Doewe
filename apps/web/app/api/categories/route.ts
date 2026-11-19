@@ -40,7 +40,8 @@ export async function GET(req: Request) {
         _count: {
           select: {
             transactions: {
-              where: { accountId: { in: accountIds } }
+              // Nested counts are not covered by the soft-delete filter.
+              where: { accountId: { in: accountIds }, deletedAt: null }
             }
           }
         }

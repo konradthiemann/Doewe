@@ -1,3 +1,22 @@
+/**
+ * PATCH  /api/recurring-transactions/[id] — Dauerauftrag ändern
+ * DELETE /api/recurring-transactions/[id] — Dauerauftrag löschen (Soft-Delete)
+ *
+ * Haushaltsbezogen (401 ohne Session, 404 außerhalb des eigenen Haushalts).
+ *
+ * Der Anker `nextOccurrence` wird nur angefasst, wenn `startDate` oder `dayOfMonth` im Body
+ * steht, und immer als 12:00 Uhr Berliner Zeit des gemeinten Kalendertags gespeichert:
+ * - `startDate` (yyyy-mm-dd, hat Vorrang) setzt die Serie neu auf: dieses Datum ist die
+ *   erste Buchung.
+ * - `dayOfMonth` allein ändert nur den Tag: der Anker-Monat bleibt, der Tag wird auf die
+ *   Länge dieses Monats begrenzt. Die Serie wird dadurch NICHT neu aufgesetzt — bei einem
+ *   Intervall über 1 bleiben die fälligen Monate dieselben, und kein früherer Monat fällt
+ *   aus der Jahresübersicht.
+ * Bereits gebuchte Vorkommen bleiben in beiden Fällen unberührt.
+ *
+ * PATCH Body: { accountId?, categoryId? (null erlaubt), amountCents?, description?, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd) }
+ */
+import { occurrenceDate, parseDayKey, zonedMonth, zonedTimeToUtc, type CalendarDate } from "@doewe/shared";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -15,47 +34,9 @@ const UpdateInput = z.object({
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .refine(isRealCalendarDate, "Ungültiges Datum")
+    .refine((value) => parseDayKey(value) !== null, "Ungültiges Datum")
     .optional()
 });
-
-function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
-  const today = now.getDate();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  
-  if (dayOfMonth > today) {
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const clampedDay = Math.min(dayOfMonth, daysInMonth);
-    return new Date(currentYear, currentMonth, clampedDay, 0, 0, 0, 0);
-  }
-  
-  const nextMonth = currentMonth + 1;
-  const nextYear = nextMonth > 11 ? currentYear + 1 : currentYear;
-  const normalizedMonth = nextMonth % 12;
-  const daysInNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
-  const clampedDay = Math.min(dayOfMonth, daysInNextMonth);
-  return new Date(nextYear, normalizedMonth, clampedDay, 0, 0, 0, 0);
-}
-
-/** Prüft, ob ein `yyyy-mm-dd`-String ein gültiges Kalenderdatum ist. */
-function isRealCalendarDate(startDate: string): boolean {
-  const [year, month, day] = startDate.split("-").map(Number);
-  if (month < 1 || month > 12) return false;
-  const daysInMonth = new Date(year, month, 0).getDate();
-  return day >= 1 && day <= daysInMonth;
-}
-
-/**
- * Wandelt einen `yyyy-mm-dd`-String in ein lokales Date (Mitternacht) um.
- * Der Tag wird defensiv auf den letzten Tag des Monats geclampt.
- */
-function startDateToDate(startDate: string): Date {
-  const [year, month, day] = startDate.split("-").map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const clampedDay = Math.min(day, daysInMonth);
-  return new Date(year, month - 1, clampedDay, 0, 0, 0, 0);
-}
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
@@ -89,20 +70,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
   }
 
-  // nextOccurrence neu bestimmen: ein explizites startDate hat Vorrang; sonst wird
-  // (wie bisher) aus einem geänderten dayOfMonth neu berechnet.
-  const resolvedDayOfMonth =
-    data.dayOfMonth ?? (data.startDate ? Number(data.startDate.slice(8, 10)) : undefined);
-  let nextOccurrence: Date | undefined;
-  if (data.startDate) {
-    nextOccurrence = startDateToDate(data.startDate);
+  // nextOccurrence neu bestimmen: ein explizites startDate setzt die Serie neu auf. Ein
+  // geändertes dayOfMonth allein verschiebt nur den Tag im bestehenden Anker-Monat — die
+  // Fälligkeit rechnet ohnehin nur mit dem Anker-MONAT, so bleibt die Phase der Serie.
+  const startDay = data.startDate ? parseDayKey(data.startDate) : null;
+  const resolvedDayOfMonth = data.dayOfMonth ?? startDay?.day;
+  let firstDay: CalendarDate | undefined;
+  if (startDay) {
+    firstDay = startDay;
   } else if (data.dayOfMonth !== undefined) {
-    nextOccurrence = nextOccurrenceDate(data.dayOfMonth);
+    firstDay = occurrenceDate(zonedMonth(existing.nextOccurrence), data.dayOfMonth);
   }
+  // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
+  const nextOccurrence = firstDay ? zonedTimeToUtc({ ...firstDay, hour: 12 }) : undefined;
 
   const updateData = {
     accountId: data.accountId,
-    categoryId: data.categoryId ?? undefined,
+    // undefined = unchanged, null = remove the category
+    categoryId: data.categoryId,
     amountCents: data.amountCents,
     description: data.description,
     intervalMonths: data.intervalMonths,

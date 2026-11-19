@@ -2,7 +2,10 @@
  * Effective category budgets of one month (integer cents, keyed by categoryId).
  *
  * Plans (CategoryBudgetPlan) take precedence; a legacy per-month Budget row of
- * the same account/month/year is only a fallback for categories without a plan.
+ * the same month/year is only a fallback for categories without a plan. Legacy
+ * rows are read for all accounts of the household (like the spend they are
+ * compared with); if several accounts hold a row for the same category and
+ * month, the household's budget is their sum.
  * YEARLY plans are distributed by the smoothed availability of the year
  * (income spread evenly, recurring expenses/savings per month), which is only loaded when a YEARLY
  * plan exists. Plans of soft-deleted categories are ignored.
@@ -52,23 +55,22 @@ async function loadAvailablePerMonth(householdId: string, year: number, plans: C
 
 export async function loadEffectiveCategoryBudgets(input: {
   householdId: string;
-  accountId: string;
   year: number;
   month: number;
 }): Promise<Record<string, number>> {
-  const { householdId, accountId, year, month } = input;
+  const { householdId, year, month } = input;
 
   const [plans, budgetRows] = await Promise.all([
     loadCategoryPlans(householdId),
     prisma.budget.findMany({
-      where: { accountId, categoryId: { not: null }, month, year },
+      where: { account: { householdId }, categoryId: { not: null }, month, year },
       select: { categoryId: true, amountCents: true }
     })
   ]);
 
   const overrides: Record<string, number> = {};
   for (const b of budgetRows) {
-    if (b.categoryId) overrides[b.categoryId] = b.amountCents ?? 0;
+    if (b.categoryId) overrides[b.categoryId] = (overrides[b.categoryId] ?? 0) + (b.amountCents ?? 0);
   }
 
   const availablePerMonth = await loadAvailablePerMonth(householdId, year, plans);
@@ -77,16 +79,21 @@ export async function loadEffectiveCategoryBudgets(input: {
 
 export async function loadEffectiveCategoryBudgetsForYear(input: {
   householdId: string;
-  accountId: string;
   year: number;
 }): Promise<Record<string, (number | null)[]>> {
-  const { householdId, accountId, year } = input;
+  const { householdId, year } = input;
 
   const [plans, budgetRows] = await Promise.all([
     loadCategoryPlans(householdId),
     prisma.budget.findMany({
       // Explicit deletedAt filters (like the plan loader) keep tombstoned rows and categories out.
-      where: { accountId, categoryId: { not: null }, year, deletedAt: null, category: { deletedAt: null } },
+      where: {
+        account: { householdId },
+        categoryId: { not: null },
+        year,
+        deletedAt: null,
+        category: { deletedAt: null }
+      },
       select: { categoryId: true, month: true, amountCents: true }
     })
   ]);
@@ -100,7 +107,7 @@ export async function loadEffectiveCategoryBudgetsForYear(input: {
   for (const b of budgetRows) {
     if (!b.categoryId || !b.month || planned.has(b.categoryId)) continue;
     const months = (result[b.categoryId] ??= Array.from({ length: 12 }, () => null));
-    months[b.month - 1] = b.amountCents ?? 0;
+    months[b.month - 1] = (months[b.month - 1] ?? 0) + (b.amountCents ?? 0);
   }
   return result;
 }

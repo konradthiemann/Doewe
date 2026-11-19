@@ -1,33 +1,62 @@
 /**
  * GET /api/analytics/summary
  *
- * Das Herzstück des Dashboards. Liefert alle Finanzdaten für den aktuellen Monat:
+ * Das Herzstück des Dashboards. Liefert alle Finanzdaten für den aktuellen Monat
+ * (Kalender Europe/Berlin, alle Konten des Haushalts — siehe
+ * docs/calculations/00-grundregeln.md):
  *
- * - `totalBalance`          — Gesamtkontostand (alle Transaktionen aller Zeiten)
- * - `carryoverFromLastMonth`— Kontostand am Ende des Vormonats
- * - `incomeTotal`           — Summe aller tatsächlichen Einnahmen diesen Monat
- * - `outcomeTotal`          — Summe aller Ausgaben (ohne Sparbuchungen) diesen Monat
- * - `monthlySavingsActual`  — Tatsächliche Sparbuchungen diesen Monat
+ * - `totalBalance`          — Kontostand: Summe aller Buchungen bis zum Ende des laufenden
+ *                             Monats (für spätere Monate vorerfasste Buchungen zählen nicht)
+ * - `carryoverFromLastMonth`— Übertrag: Summe aller Buchungen vor Beginn des laufenden Monats
+ * - `incomeTotal`           — Summe aller gebuchten Einnahmen diesen Monat
+ * - `outcomeTotal`          — Summe aller gebuchten Ausgaben (ohne Sparbuchungen) diesen Monat
+ * - `monthlySavingsActual`  — Gebuchtes Sparen diesen Monat, netto (Einzahlungen − Entnahmen)
  * - `plannedSavings`        — Budget-Ziel ohne Kategorie (= Sparziel) für diesen Monat
  * - `completedGoals`        — In diesem Monat (per completedAt) als erledigt markierte Sparziele
  * - `completedGoalsSpent`   — Summe der dafür entnommenen Beträge (Euro)
  * - `projectedIncomeTotal`  — Hochrechnung inkl. noch nicht gebuchter Daueraufträge
  * - `projectedOutcomeTotal` — Hochrechnung Ausgaben inkl. Daueraufträge
  * - `projectedRemaining`    — Voraussichtlich verbleibendes Geld
- * - `outgoingByCategory`    — Ausgaben aufgeteilt nach Kategorien (inkl. Daueraufträge)
+ * - `outgoingByCategory`    — Ausgaben aufgeteilt nach Kategorien (inkl. geplanter Daueraufträge;
+ *                             ohne Kategorie = `uncategorized`). Summe = `projectedOutcomeTotal`
  * - `categoryBudgets`       — Budget vs. Ist pro Kategorie; effektives Budget = Budget-Plan
  *                             (MONTHLY/YEARLY), Vorrang vor einem Monats-Budget; auch bei spent 0
- * - `recurringTransactions` — Aktive Daueraufträge für diesen Monat (nicht geskippt)
+ * - `recurringTransactions` — GEPLANTE Daueraufträge: diesen Monat fällig, nicht übersprungen
+ *                             und für diesen Monat noch nicht gebucht
+ * - `recurringIncomeTotal`, `recurringOutcomeTotal`, `recurringPlannedSavings`
+ *                           — Summen der geplanten Daueraufträge (Euro, positive Beträge;
+ *                             Spar-Daueraufträge nur in `recurringPlannedSavings`)
+ * - `recurringDueIncomeTotal`, `recurringDueOutcomeTotal`
+ *                           — Summen ALLER diesen Monat fälligen, nicht übersprungenen
+ *                             Daueraufträge, ob schon gebucht oder nicht (Euro, positive
+ *                             Beträge, ohne Spar-Daueraufträge). Bleiben über den Monat
+ *                             konstant — Grundlage der Fixkostenquote
+ * - `recurringDueCount`     — Anzahl dieser fälligen Daueraufträge (inkl. Spar-Daueraufträge)
  * - `daily`                 — Tagesweise kumulierte Linien für das Chart (income, outcome, savings)
  *
- * Wichtig: Sparbudgets werden SEPARAT von normalen Ausgaben behandelt.
- * Eine Kategorie gilt als "Sparen" wenn ihr Name (lowercase) "savings" oder "sparen" enthält.
- * Sparbuchungen müssen einen negativen amountCents haben (Abgang vom Konto).
+ * Einordnung (classifyFlow): Buchungen in einer Spar-Kategorie — jede Kategorie des Haushalts,
+ * deren Name getrimmt und ohne Beachtung der Groß-/Kleinschreibung "savings" oder "sparen"
+ * lautet — sind Sparen, unabhängig vom Vorzeichen (Einzahlung negativ, Entnahme positiv).
+ * Alles andere ist nach Vorzeichen Einnahme (>= 0) oder Ausgabe (< 0).
  *
- * Bekannte Einschränkung: Nur das erste Konto des Nutzers wird ausgewertet.
- * Multi-Account-Aggregation ist eine geplante zukünftige Erweiterung.
+ * Ein Vorkommen eines Dauerauftrags gilt als gebucht, sobald eine Buchung mit dessen
+ * `recurringTransactionId` und der Periode des Monats existiert — auch wenn sie gelöscht oder
+ * in einen anderen Monat verschoben wurde (siehe lib/recurringPeriods.ts).
+ *
+ * 404, wenn der Haushalt kein Konto hat.
  */
-import { isRecurringDueInMonth } from "@doewe/shared";
+import {
+  addFlow,
+  classifyFlow,
+  daysInMonth,
+  emptyFlowTotals,
+  isRecurringDueInMonth,
+  monthKey,
+  zonedDate,
+  zonedMonth,
+  zonedMonthRange,
+  type FlowRow
+} from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic"; // Kein Build-Time-Prerendering — Daten sind nutzer- und zeitabhängig
@@ -36,104 +65,89 @@ import { getSessionUser } from "../../../../lib/auth";
 import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 import { catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
+import { loadBookedOccurrenceKeys, occurrenceKey } from "../../../../lib/recurringPeriods";
+import { loadSavingsCategoryIds } from "../../../../lib/savingsCategory";
 
-/** Gibt Monat (1-12) und Jahr des übergebenen Datums zurück. Standard: heute. */
-function getMonthYear(date = new Date()) {
-  return { month: date.getMonth() + 1, year: date.getFullYear() };
-}
+const UNCATEGORIZED = "uncategorized";
 
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // NOTE: Nur das erste Konto wird verwendet — Multi-Account ist eine bekannte zukünftige Erweiterung.
-  const account = await prisma.account.findFirst({ where: { householdId: user.householdId }, orderBy: { createdAt: "asc" } });
-  if (!account) {
+  const householdId = user.householdId;
+  const anyAccount = await prisma.account.findFirst({ where: { householdId }, select: { id: true } });
+  if (!anyAccount) {
     return NextResponse.json({ error: "No account found for user" }, { status: 404 });
   }
 
-  const accountId = account.id;
+  // Alle Konten des Haushalts — derselbe Umfang wie die Buchungsliste.
+  const inHousehold = { account: { householdId } };
   const now = new Date();
 
   // Selbstheilung: fällige, nie gebuchte Daueraufträge abgeschlossener Monate
   // nachbuchen, bevor gerechnet wird (siehe catchUpPastRecurringForHousehold).
-  await catchUpPastRecurringForHousehold(user.householdId, now);
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  await catchUpPastRecurringForHousehold(householdId, now);
 
-  // Gesamtkontostand: DB berechnet die Summe direkt — kein Transfer aller Datensätze nötig
+  // Laufender Monat im App-Kalender (Europe/Berlin), halboffen [start, end).
+  const { year, month } = zonedMonth(now);
+  const { start, end } = zonedMonthRange(year, month);
+
+  // Kontostand: alles bis zum Ende des laufenden Monats. DB berechnet die Summe direkt.
   const totalBalanceAgg = await prisma.transaction.aggregate({
-    where: { accountId },
+    where: { ...inHousehold, occurredAt: { lt: end } },
     _sum: { amountCents: true }
   });
-  const totalBalance = (totalBalanceAgg._sum.amountCents ?? 0) / 100;
+  const totalBalanceCents = totalBalanceAgg._sum.amountCents ?? 0;
 
-  // Carryover: Kontostand am Ende des Vormonats — gleiche Optimierung
+  // Übertrag: alles vor Beginn des laufenden Monats.
   const carryoverAgg = await prisma.transaction.aggregate({
-    where: { accountId, occurredAt: { lt: start } },
+    where: { ...inHousehold, occurredAt: { lt: start } },
     _sum: { amountCents: true }
   });
-  const carryoverFromLastMonth = (carryoverAgg._sum.amountCents ?? 0) / 100;
+  const carryoverCents = carryoverAgg._sum.amountCents ?? 0;
 
-  // Spar-Kategorie auflösen — case-insensitive, EN + DE
-  const SAVINGS_NAMES = ["savings", "sparen"];
-  const allUserCategories = await prisma.category.findMany({
-    where: { householdId: user.householdId },
-    select: { id: true, name: true }
-  });
-  const savingsCategory = allUserCategories.find((c) =>
-    SAVINGS_NAMES.includes(c.name.toLowerCase().trim())
-  );
-  const savingsCatId = savingsCategory?.id ?? null;
+  const savingsIds = await loadSavingsCategoryIds(householdId);
 
-  // Alle Transaktionen des aktuellen Monats
+  // Alle Buchungen des laufenden Monats
   const txs = await prisma.transaction.findMany({
-    where: {
-      accountId,
-      occurredAt: { gte: start, lt: end }
-    },
+    where: { ...inHousehold, occurredAt: { gte: start, lt: end } },
     select: { amountCents: true, categoryId: true, occurredAt: true }
   });
 
-  // Alle Monats-Aggregationen in Integer-Cents — Floating-Point-Drift wird so verhindert
-  let incomeTotalCents = 0;
-  let outcomeTotalCents = 0;
-  let monthlySavingsActualCents = 0;
-  const byCategoryCents: Record<string, number> = {};
+  // Tages-Chart: je Kalendertag (Berlin) in Cents sammeln, erst bei Ausgabe durch 100 teilen
+  const dayCount = daysInMonth(year, month);
+  const byDay = Array.from({ length: dayCount }, () => ({ inc: 0, out: 0, sav: 0 }));
+  const addToDay = (day: number, row: FlowRow) => {
+    const bucket = byDay[Math.min(Math.max(day, 1), dayCount) - 1];
+    const kind = classifyFlow(row, savingsIds);
+    if (kind === "savings") bucket.sav -= row.amountCents;
+    else if (kind === "income") bucket.inc += row.amountCents;
+    else bucket.out -= row.amountCents;
+  };
 
+  // Gebucht: alle Monats-Aggregationen in Integer-Cents
+  const booked = emptyFlowTotals();
+  const byCategoryCents: Record<string, number> = {};
   for (const t of txs) {
-    const amt = t.amountCents;
-    const isSavings = savingsCatId != null && t.categoryId === savingsCatId;
-    if (isSavings) {
-      // Sparbuchungen werden zuerst behandelt — unabhängig vom Vorzeichen.
-      // Einzahlung (negativ) erhöht das Sparen, Entnahme (positiv) verringert es.
-      // Eine Entnahme ist keine Einnahme, sondern eine Umbuchung.
-      monthlySavingsActualCents += -amt;
-    } else if (amt >= 0) {
-      incomeTotalCents += amt;
-    } else {
-      const abs = -amt;
-      outcomeTotalCents += abs;
-      const key = t.categoryId ?? "uncategorized";
-      byCategoryCents[key] = (byCategoryCents[key] ?? 0) + abs;
+    if (addFlow(booked, t, savingsIds) === "outcome") {
+      const key = t.categoryId ?? UNCATEGORIZED;
+      byCategoryCents[key] = (byCategoryCents[key] ?? 0) - t.amountCents;
     }
+    addToDay(zonedDate(t.occurredAt).day, t);
   }
 
   // Geplante Ersparnis (Budget ohne Kategorie) für den aktuellen Monat.
   // Abgeschlossene Ziele (completedAt gesetzt) zählen nicht mehr als geplant.
-  const { month, year } = getMonthYear(now);
   const plannedBudgetAgg = await prisma.budget.aggregate({
-    where: { accountId, categoryId: null, month, year, completedAt: null },
+    where: { ...inHousehold, categoryId: null, month, year, completedAt: null },
     _sum: { amountCents: true }
   });
   const plannedSavings = (plannedBudgetAgg._sum.amountCents ?? 0) / 100;
 
   // Sparziele, die in DIESEM Monat als erledigt markiert wurden (per completedAt,
   // also dem Zeitpunkt der Entnahme/des Abhakens — unabhängig vom Zielmonat).
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1);
   const completedGoalsRaw = await prisma.budget.findMany({
-    where: { accountId, categoryId: null, completedAt: { gte: monthStart, lt: monthEnd } },
+    where: { ...inHousehold, categoryId: null, completedAt: { gte: start, lt: end } },
     select: { title: true, amountCents: true, spentCents: true, completedAt: true },
     orderBy: { completedAt: "asc" }
   });
@@ -146,16 +160,11 @@ export async function GET() {
   const completedGoalsSpent = completedGoalsRaw.reduce((sum, g) => sum + (g.spentCents ?? 0), 0) / 100;
 
   // Kategoriebudgets für den aktuellen Monat
-  const categoryBudgetsRaw = await loadEffectiveCategoryBudgets({
-    householdId: user.householdId,
-    accountId,
-    year,
-    month
-  });
+  const categoryBudgetsRaw = await loadEffectiveCategoryBudgets({ householdId, year, month });
 
-  // Daueraufträge für den aktuellen Monat
+  // Daueraufträge, die diesen Monat fällig sind (Anker-Monat im App-Kalender)
   const recurringTransactions = await prisma.recurringTransaction.findMany({
-    where: { accountId },
+    where: inHousehold,
     select: {
       id: true,
       amountCents: true,
@@ -168,123 +177,68 @@ export async function GET() {
   });
 
   const recurringThisMonth = recurringTransactions.filter((rec) => {
-    const nextDate = new Date(rec.nextOccurrence);
+    const anchor = zonedMonth(rec.nextOccurrence);
     return isRecurringDueInMonth({
-      nextYear: nextDate.getFullYear(),
-      nextMonth: nextDate.getMonth() + 1,
+      nextYear: anchor.year,
+      nextMonth: anchor.month,
       intervalMonths: rec.intervalMonths,
       year,
       month
     });
   });
+  const recurringIds = recurringThisMonth.map((r) => r.id);
 
   const skips = await prisma.recurringTransactionSkip.findMany({
-    where: {
-      recurringId: { in: recurringThisMonth.map((r) => r.id) },
-      year,
-      month
-    },
+    where: { recurringId: { in: recurringIds }, year, month },
     select: { recurringId: true }
   });
   const skippedIds = new Set(skips.map((s) => s.recurringId));
 
-  // Bereits automatisch gebuchte Vorkommen (siehe recurringBooking.ts) dürfen
-  // hier nicht nochmal als "geplant" gezählt werden — sie stecken schon in
-  // incomeTotal/outcomeTotal/monthlySavingsActual über die echte Transaction.
-  const alreadyBooked = await prisma.transaction.findMany({
-    where: {
-      recurringTransactionId: { in: recurringThisMonth.map((r) => r.id) },
-      occurredAt: { gte: start, lt: end }
-    },
-    select: { recurringTransactionId: true }
-  });
-  const bookedIds = new Set(alreadyBooked.map((t) => t.recurringTransactionId));
+  // Fällig = diesen Monat fällig und nicht übersprungen, ob gebucht oder nicht.
+  const dueRecurring = recurringThisMonth.filter((r) => !skippedIds.has(r.id));
 
-  const activeRecurringThisMonth = recurringThisMonth.filter(
-    (r) => !skippedIds.has(r.id) && !bookedIds.has(r.id)
-  );
+  // Geplant = fällig und für diesen Monat noch nicht gebucht. Ein gebuchtes
+  // Vorkommen steckt schon in den gebuchten Summen (oder wurde vom Nutzer
+  // gelöscht/verschoben) und darf nicht nochmal als "geplant" zählen — erkannt
+  // über (recurringTransactionId, Periode), nicht über den Monat von occurredAt.
+  const bookedKeys = await loadBookedOccurrenceKeys(recurringIds);
+  const period = monthKey({ year, month });
+  const plannedRecurring = dueRecurring.filter((r) => !bookedKeys.has(occurrenceKey(r.id, period)));
 
-  // Dauerauftrag-Summen — ebenfalls in Cents
-  // Sparbuchungs-Daueraufträge werden analog zu echten Sparbuchungen separat gezählt,
-  // damit projectedRemaining konsistent mit remaining ist (beide schließen Sparen aus Ausgaben aus).
-  let recurringIncomeTotalCents = 0;
-  let recurringOutcomeTotalCents = 0;
-  let recurringPlannedSavingsCents = 0;
-  const recurringByCategoryCents: Record<string, number> = {};
+  // Fixkosten-Basis: alle fälligen Daueraufträge. Spar-Daueraufträge sind
+  // weder Einnahme noch Ausgabe und zählen in den beiden Summen nicht mit.
+  const due = emptyFlowTotals();
+  for (const rec of dueRecurring) addFlow(due, rec, savingsIds);
 
-  for (const rec of activeRecurringThisMonth) {
-    const amt = rec.amountCents;
-    const isSavings = savingsCatId != null && rec.categoryId === savingsCatId;
-    if (isSavings) {
-      recurringPlannedSavingsCents += -amt;
-    } else if (amt >= 0) {
-      recurringIncomeTotalCents += amt;
-    } else {
-      const abs = -amt;
-      recurringOutcomeTotalCents += abs;
-      if (rec.categoryId) {
-        recurringByCategoryCents[rec.categoryId] = (recurringByCategoryCents[rec.categoryId] || 0) + abs;
-      }
+  // Geplante Daueraufträge — Sparen separat, damit projectedRemaining
+  // konsistent mit remaining ist (beide schließen Sparen aus Ausgaben aus).
+  const planned = emptyFlowTotals();
+  for (const rec of plannedRecurring) {
+    if (addFlow(planned, rec, savingsIds) === "outcome") {
+      const key = rec.categoryId ?? UNCATEGORIZED;
+      byCategoryCents[key] = (byCategoryCents[key] ?? 0) - rec.amountCents;
     }
-  }
-
-  const remainingCents = incomeTotalCents - outcomeTotalCents - monthlySavingsActualCents;
-
-  // Tages-Chart: kumulierte Werte in Cents aufaddieren, erst bei Ausgabe durch 100 teilen
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const byDay = Array.from({ length: daysInMonth }, () => ({ inc: 0, out: 0, sav: 0 }));
-
-  for (const t of txs) {
-    const day = t.occurredAt.getDate();
-    const idx = day - 1;
-    const amt = t.amountCents;
-    const isSavings = savingsCatId != null && t.categoryId === savingsCatId;
-    if (isSavings) {
-      byDay[idx].sav += -amt;
-    } else if (amt >= 0) {
-      byDay[idx].inc += amt;
-    } else {
-      byDay[idx].out += -amt;
-    }
-  }
-
-  for (const rec of activeRecurringThisMonth) {
-    const day = Math.min(rec.dayOfMonth || 1, daysInMonth);
-    const idx = day - 1;
-    const amt = rec.amountCents;
-    const isSavings = savingsCatId != null && rec.categoryId === savingsCatId;
-    if (isSavings) {
-      byDay[idx].sav += -amt;
-    } else if (amt >= 0) {
-      byDay[idx].inc += amt;
-    } else {
-      byDay[idx].out += -amt;
-    }
+    addToDay(rec.dayOfMonth || 1, rec);
   }
 
   // Baseline-Sparstand (netto vor diesem Monat) — Einzahlungen (negativ) und
   // Entnahmen (positiv) werden verrechnet, damit die kumulative Sparlinie stimmt.
-  // DB-Aggregation statt findMany + Loop.
   let baselineSavingsCents = 0;
-  if (savingsCatId) {
+  if (savingsIds.size > 0) {
     const prevSavingsAgg = await prisma.transaction.aggregate({
-      where: {
-        accountId,
-        categoryId: savingsCatId,
-        occurredAt: { lt: start }
-      },
+      where: { ...inHousehold, categoryId: { in: [...savingsIds] }, occurredAt: { lt: start } },
       _sum: { amountCents: true }
     });
     baselineSavingsCents = -(prevSavingsAgg._sum.amountCents ?? 0);
   }
 
-  const incomeDaily: number[] = new Array(daysInMonth).fill(0);
-  const outcomeDaily: number[] = new Array(daysInMonth).fill(0);
-  const savingsDaily: number[] = new Array(daysInMonth).fill(0);
+  const incomeDaily: number[] = new Array(dayCount).fill(0);
+  const outcomeDaily: number[] = new Array(dayCount).fill(0);
+  const savingsDaily: number[] = new Array(dayCount).fill(0);
   let incRun = 0;
   let outRun = 0;
   let savRun = baselineSavingsCents;
-  for (let i = 0; i < daysInMonth; i++) {
+  for (let i = 0; i < dayCount; i++) {
     incRun += byDay[i].inc;
     outRun += byDay[i].out;
     savRun += byDay[i].sav;
@@ -295,23 +249,18 @@ export async function GET() {
     savingsDaily[i] = adjustedSavings / 100;
   }
 
-  const projectedIncomeTotalCents = incomeTotalCents + recurringIncomeTotalCents;
-  const projectedOutcomeTotalCents = outcomeTotalCents + recurringOutcomeTotalCents;
-  const projectedSavingsTotalCents = monthlySavingsActualCents + recurringPlannedSavingsCents;
+  const projectedIncomeTotalCents = booked.incomeCents + planned.incomeCents;
+  const projectedOutcomeTotalCents = booked.outcomeCents + planned.outcomeCents;
+  const projectedSavingsTotalCents = booked.savingsCents + planned.savingsCents;
   const projectedRemainingCents = projectedIncomeTotalCents - projectedOutcomeTotalCents - projectedSavingsTotalCents;
-
-  // Daueraufträge in Kategorie-Aufteilung einrechnen (beide in Cents)
-  for (const [catId, amountCents] of Object.entries(recurringByCategoryCents)) {
-    byCategoryCents[catId] = (byCategoryCents[catId] || 0) + amountCents;
-  }
 
   // Kategorienamen auflösen für alle Kategorien mit Ausgaben oder Budget
   const updatedCatIds = Array.from(new Set([
-    ...Object.keys(byCategoryCents).filter((id) => id !== "uncategorized"),
+    ...Object.keys(byCategoryCents).filter((id) => id !== UNCATEGORIZED),
     ...Object.keys(categoryBudgetsRaw)
   ]));
   const updatedCategories = await prisma.category.findMany({
-    where: { id: { in: updatedCatIds }, householdId: user.householdId },
+    where: { id: { in: updatedCatIds }, householdId },
     select: { id: true, name: true }
   });
   const updatedNameMap: Record<string, string> = {};
@@ -320,7 +269,7 @@ export async function GET() {
   // Erst hier — am Ende — von Cents in Euro konvertieren
   const finalOutgoingByCategory = Object.entries(byCategoryCents).map(([id, amountCents]) => ({
     id,
-    name: id === "uncategorized" ? "Uncategorized" : updatedNameMap[id] ?? id,
+    name: id === UNCATEGORIZED ? "Uncategorized" : updatedNameMap[id] ?? id,
     amount: amountCents / 100
   }));
 
@@ -336,13 +285,14 @@ export async function GET() {
   });
 
   return NextResponse.json({
-    totalBalance,
-    carryoverFromLastMonth,
-    incomeTotal: incomeTotalCents / 100,
-    outcomeTotal: outcomeTotalCents / 100,
-    outcomeTotalExclSavings: outcomeTotalCents / 100,
-    monthlySavingsActual: monthlySavingsActualCents / 100,
-    remaining: remainingCents / 100,
+    totalBalance: totalBalanceCents / 100,
+    carryoverFromLastMonth: carryoverCents / 100,
+    incomeTotal: booked.incomeCents / 100,
+    outcomeTotal: booked.outcomeCents / 100,
+    outcomeTotalExclSavings: booked.outcomeCents / 100,
+    monthlySavingsActual: booked.savingsCents / 100,
+    // income − outcome − savings of the booked rows
+    remaining: booked.netCents / 100,
     plannedSavings,
     completedGoals,
     completedGoalsSpent,
@@ -351,19 +301,22 @@ export async function GET() {
     projectedRemaining: projectedRemainingCents / 100,
     outgoingByCategory: finalOutgoingByCategory,
     categoryBudgets,
-    recurringTransactions: activeRecurringThisMonth.map((r) => ({
+    recurringTransactions: plannedRecurring.map((r) => ({
       id: r.id,
       description: r.description,
       amountCents: r.amountCents,
       categoryId: r.categoryId,
       dayOfMonth: r.dayOfMonth
     })),
-    recurringIncomeTotal: recurringIncomeTotalCents / 100,
-    recurringOutcomeTotal: recurringOutcomeTotalCents / 100,
-    recurringPlannedSavings: recurringPlannedSavingsCents / 100,
+    recurringIncomeTotal: planned.incomeCents / 100,
+    recurringOutcomeTotal: planned.outcomeCents / 100,
+    recurringPlannedSavings: planned.savingsCents / 100,
+    recurringDueIncomeTotal: due.incomeCents / 100,
+    recurringDueOutcomeTotal: due.outcomeCents / 100,
+    recurringDueCount: dueRecurring.length,
     projectedSavingsTotal: projectedSavingsTotalCents / 100,
     daily: {
-      labels: Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`),
+      labels: Array.from({ length: dayCount }, (_, i) => `${i + 1}`),
       income: incomeDaily,
       outcome: outcomeDaily,
       savings: savingsDaily

@@ -18,21 +18,21 @@
  *   | 409 "Budget plan already exists for category". Ein soft-gelöschter Plan derselben
  *   Kategorie wird wiederbelebt (gleiche id).
  */
-import { planMonthlyCents, smoothedAvailablePerMonth, type BudgetPeriod } from "@doewe/shared";
+import {
+  isSavingsCategoryName,
+  planMonthlyCents,
+  smoothedAvailablePerMonth,
+  type BudgetPeriod
+} from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 import { loadRecurringYearMatrix } from "../../../lib/recurringYear";
-import { SAVINGS_CATEGORY_NAMES } from "../saving-plan/savings";
 
 import { CreateBudgetPlanSchema, ListQuerySchema, toPlanDto } from "./schema";
 
 export const dynamic = "force-dynamic";
-
-function isSavingsName(name: string): boolean {
-  return SAVINGS_CATEGORY_NAMES.includes(name.toLowerCase().trim());
-}
 
 function asPeriod(value: string): BudgetPeriod {
   return value === "YEARLY" ? "YEARLY" : "MONTHLY";
@@ -68,7 +68,7 @@ export async function GET(req: Request) {
   }));
   const planIdByCategory = new Map(planRows.map((row) => [row.categoryId, row.id]));
   const budgetableCategories = categories
-    .filter((c) => !isSavingsName(c.name))
+    .filter((c) => !isSavingsCategoryName(c.name))
     .map((c) => ({ id: c.id, name: c.name, planId: planIdByCategory.get(c.id) ?? null }));
 
   return NextResponse.json({ year, availablePerMonthCents, plans, budgetableCategories });
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
     select: { id: true, name: true, isIncome: true }
   });
   if (!category) return NextResponse.json({ error: "Category not found" }, { status: 404 });
-  if (category.isIncome || isSavingsName(category.name)) {
+  if (category.isIncome || isSavingsCategoryName(category.name)) {
     return NextResponse.json({ error: "Category not budgetable" }, { status: 400 });
   }
 

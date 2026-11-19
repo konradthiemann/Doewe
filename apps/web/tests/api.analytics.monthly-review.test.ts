@@ -27,8 +27,9 @@ let budgetOnlyId: string;
 let salaryId: string;
 let savingsId: string;
 
-// Fixed past month: March 2025 (local time, as the route uses local boundaries)
-const day = (d: number, h = 12) => new Date(2025, 2, d, h, 0, 0);
+// Fixed past month: March 2025. Fixed UTC instants around noon — the same calendar day in
+// Europe/Berlin (the route's calendar) whatever time zone the test process runs in.
+const day = (d: number, h = 12) => new Date(Date.UTC(2025, 2, d, h, 0, 0));
 
 async function fetchReview(): Promise<ReviewResponse> {
   const { GET } = await import("../app/api/analytics/monthly-review/route");
@@ -86,10 +87,10 @@ beforeAll(async () => {
       t(-2000, "food tie late", day(20), foodId),
       t(-2000, "food tie early", day(5), foodId),
       // Soft-deleted expense must not appear and not count
-      t(-9999, "food deleted", day(7), foodId, { deletedAt: new Date(2025, 2, 8) }),
+      t(-9999, "food deleted", day(7), foodId, { deletedAt: day(8) }),
       // Outside month
-      t(-7777, "food february", new Date(2025, 1, 27, 12), foodId),
-      t(-7777, "food april", new Date(2025, 3, 1, 12), foodId),
+      t(-7777, "food february", new Date("2025-02-27T12:00:00.000Z"), foodId),
+      t(-7777, "food april", new Date("2025-04-01T12:00:00.000Z"), foodId),
       // Hobby
       t(-3000, "hobby one", day(12), hobbyId),
       // Uncategorized

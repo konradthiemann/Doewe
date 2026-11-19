@@ -59,13 +59,17 @@ beforeAll(async () => {
 
   await prisma.recurringTransaction.deleteMany({ where: { accountId } });
   const common = { accountId, frequency: "MONTHLY", dayOfMonth: 1 };
-  const jan = new Date(YEAR, 0, 1);
+  // Anchors the way a dev machine in Berlin stored them so far: local midnight,
+  // which is still the last day of the previous month (and, for January, of
+  // the previous year) in UTC. They must read back as their Berlin month.
+  const jan = new Date("2036-12-31T23:00:00.000Z"); // 1 Jan 2037, 00:00 in Berlin
+  const feb = new Date("2037-01-31T23:00:00.000Z"); // 1 Feb 2037, 00:00 in Berlin
   await prisma.recurringTransaction.createMany({
     data: [
       { ...common, id: "rec_yearly_salary", description: "Gehalt", amountCents: 300000, intervalMonths: 1, nextOccurrence: jan, categoryId: income.id },
       { ...common, id: "rec_yearly_rent", description: "Miete", amountCents: -80000, intervalMonths: 1, nextOccurrence: jan },
       { ...common, id: "rec_yearly_etf", description: "ETF", amountCents: -20000, intervalMonths: 1, nextOccurrence: jan, categoryId: savings.id },
-      { ...common, id: "rec_yearly_ins", description: "Versicherung", amountCents: -30000, intervalMonths: 3, nextOccurrence: new Date(YEAR, 1, 1), categoryId: insurance.id },
+      { ...common, id: "rec_yearly_ins", description: "Versicherung", amountCents: -30000, intervalMonths: 3, nextOccurrence: feb, categoryId: insurance.id },
       { ...common, id: "rec_yearly_deleted", description: "Geloescht", amountCents: -1000, intervalMonths: 1, nextOccurrence: jan, deletedAt: new Date() }
     ]
   });
@@ -168,9 +172,15 @@ describe("GET /api/recurring-transactions/yearly", () => {
     }
   });
 
-  it("defaults to the current year without a year parameter", async () => {
-    const data = await getMatrix("");
-    expect(data.year).toBe(new Date().getFullYear());
+  it("defaults to the current year in Berlin without a year parameter", async () => {
+    // 1 Jan 2027, 00:30 in Berlin — still 2026 in UTC.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-31T23:30:00.000Z") });
+    try {
+      const data = await getMatrix("");
+      expect(data.year).toBe(2027);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects invalid years with 400", async () => {
