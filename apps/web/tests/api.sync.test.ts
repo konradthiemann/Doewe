@@ -207,6 +207,75 @@ describe("/api/sync/push — Zwei-Wege-Sync", () => {
     const [second] = await push([{ mutationId: createId(), entity: "transaction", op: "delete", id }]);
     expect(second.status).toBe("duplicate");
   });
+
+  // occurredAt is read like in POST /api/transactions (parseOccurredAt): fixed
+  // instants, so the result is the same in any process time zone.
+  describe("occurredAt", () => {
+    const createOp = (id: string, occurredAt: unknown, description = "Datum") => ({
+      mutationId: createId(),
+      entity: "transaction",
+      op: "create",
+      id,
+      patch: { accountId: testAccountId, amountCents: -100, description, occurredAt }
+    });
+
+    it("create: an unreadable date fails only its own operation, the batch goes on", async () => {
+      const bad = createId();
+      const worse = createId();
+      const good = createId();
+      const results = await push([
+        createOp(bad, "not a date"),
+        createOp(worse, "2029-02-31"),
+        createOp(good, "2029-07-01T08:30:00.000Z")
+      ]);
+
+      expect(results.map((r) => r.status)).toEqual(["conflict", "conflict", "applied"]);
+      expect(results[0].conflicts).toEqual([]);
+      expect(results[0].row).toBeUndefined();
+      expect(await prisma.transaction.count({ where: { id: { in: [bad, worse] } } })).toBe(0);
+      expect((await prisma.transaction.findUniqueOrThrow({ where: { id: good } })).occurredAt.toISOString()).toBe(
+        "2029-07-01T08:30:00.000Z"
+      );
+    });
+
+    it("create: a bare calendar day is noon in Berlin, a time without zone is Berlin time", async () => {
+      const day = createId();
+      const local = createId();
+      const results = await push([createOp(day, "2029-07-01"), createOp(local, "2029-01-15T08:30:00")]);
+      expect(results.map((r) => r.status)).toEqual(["applied", "applied"]);
+
+      const stored = async (id: string) =>
+        (await prisma.transaction.findUniqueOrThrow({ where: { id } })).occurredAt.toISOString();
+      // 12:00 CEST
+      expect(await stored(day)).toBe("2029-07-01T10:00:00.000Z");
+      // 08:30 CET
+      expect(await stored(local)).toBe("2029-01-15T07:30:00.000Z");
+    });
+
+    it("update: an unreadable date is answered with conflict and changes nothing", async () => {
+      const id = createId();
+      await push([createOp(id, "2029-07-01T08:30:00.000Z", "Vorher")]);
+
+      const results = await push([
+        {
+          mutationId: createId(),
+          entity: "transaction",
+          op: "update",
+          id,
+          patch: { description: "Nachher", occurredAt: "gestern" }
+        },
+        { mutationId: createId(), entity: "transaction", op: "update", id, patch: { occurredAt: "2029-08-02" } }
+      ]);
+      expect(results[0].status).toBe("conflict");
+      expect(results[0].conflicts).toEqual([]);
+      expect(results[1].status).toBe("applied");
+
+      const row = await prisma.transaction.findUniqueOrThrow({ where: { id } });
+      // the first operation wrote nothing at all, the second moved the date
+      expect(row.description).toBe("Vorher");
+      expect(row.occurredAt.toISOString()).toBe("2029-08-02T10:00:00.000Z");
+    });
+  });
 });
 
 describe("/api/sync/pull — Haushalts-Snapshot", () => {

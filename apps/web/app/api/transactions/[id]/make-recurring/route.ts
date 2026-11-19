@@ -8,16 +8,21 @@
  * Ursprungsmonat nicht erneut automatisch gebucht. Die Buchung selbst gilt als das Vorkommen
  * ihres Berliner Monats (`recurringPeriod`), auch wenn sie später verschoben oder gelöscht wird.
  *
+ * `bookFromPeriod` wird auf den laufenden Berliner Monat gesetzt: die Serie läuft ab jetzt
+ * weiter. Aus einer älteren Buchung entsteht so kein Nachbuchen der Monate zwischen Buchung
+ * und heute — die könnten längst von Hand erfasst sein.
+ *
  * Haushaltsbezogen (kein Demo-Account-Sonderweg nötig): die Buchung wird über ihr Konto im Haushalt
  * des Nutzers gesucht. Soft-gelöschte Buchungen filtert die Extension in lib/prisma.ts heraus.
  *
  * POST Body: { intervalMonths (1-24), dayOfMonth? (1-31) }
  * Antworten: 201 RecurringTransaction | 400 | 401 | 404 | 409 (bereits verknüpft)
  */
-import { addMonthsClamped, monthKey, zonedDate, zonedTimeToUtc } from "@doewe/shared";
+import { addMonthsClamped, monthKey, zonedDate, zonedMonth, zonedTimeToUtc } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../../lib/auth";
+import { freezePastMonths } from "../../../../../lib/categoryBudgets";
 import { prisma } from "../../../../../lib/prisma";
 
 import { MakeRecurringInput } from "./schema";
@@ -55,6 +60,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
   const nextOccurrence = zonedTimeToUtc({ ...next, hour: 12 });
 
+  // Freeze the budgets of past months first: a YEARLY plan is distributed by
+  // the standing orders, so changing one would otherwise change old months.
+  await freezePastMonths(user.householdId);
+
   try {
     const recurring = await prisma.$transaction(async (tx) => {
       const created = await tx.recurringTransaction.create({
@@ -66,7 +75,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           frequency: "MONTHLY",
           intervalMonths,
           dayOfMonth: dayOfMonth ?? booking.day,
-          nextOccurrence
+          nextOccurrence,
+          // The series continues from now: months between the booking and
+          // today are not back-booked.
+          bookFromPeriod: monthKey(zonedMonth(new Date()))
         }
       });
       // Guard against a concurrent request linking the booking first: roll back if we lost the race.

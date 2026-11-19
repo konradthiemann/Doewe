@@ -6,22 +6,47 @@
  *
  * Der Anker `nextOccurrence` wird nur angefasst, wenn `startDate` oder `dayOfMonth` im Body
  * steht, und immer als 12:00 Uhr Berliner Zeit des gemeinten Kalendertags gespeichert:
- * - `startDate` (yyyy-mm-dd, hat Vorrang) setzt die Serie neu auf: dieses Datum ist die
- *   erste Buchung.
+ * - `startDate` (yyyy-mm-dd, hat Vorrang) setzt die Serie neu auf: dieses Datum ist der
+ *   Anker. Anders als beim Anlegen wird er nicht in den Folgemonat geschoben, wenn
+ *   `dayOfMonth` vor dem Tag des Startdatums liegt — das Bearbeiten-Formular schickt den
+ *   gespeicherten Anker mit, und der darf einen anderen Tag haben als `dayOfMonth`.
  * - `dayOfMonth` allein ändert nur den Tag: der Anker-Monat bleibt, der Tag wird auf die
  *   Länge dieses Monats begrenzt. Die Serie wird dadurch NICHT neu aufgesetzt — bei einem
  *   Intervall über 1 bleiben die fälligen Monate dieselben, und kein früherer Monat fällt
  *   aus der Jahresübersicht.
  * Bereits gebuchte Vorkommen bleiben in beiden Fällen unberührt.
  *
- * PATCH Body: { accountId?, categoryId? (null erlaubt), amountCents?, description?, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd) }
+ * Kein ungefragtes Nachbuchen: Ändert die Anfrage den Rhythmus — ein `startDate`, das vom
+ * gespeicherten Anker-Tag abweicht, oder ein `intervalMonths`, das vom gespeicherten Wert
+ * abweicht —, wird `bookFromPeriod` neu bestimmt wie beim Anlegen: liegt der Anker in einem
+ * Monat vor dem laufenden Berliner Monat, wird ab dem laufenden Monat gebucht (die Monate
+ * davor nicht). `backfill: true` hebt die Untergrenze immer auf — auch ohne Änderung am
+ * Rhythmus: Die vergangenen Monate seit dem Anker werden dann nachgebucht. Eine Anfrage ohne
+ * `backfill: true`, die den Rhythmus nicht ändert, lässt `bookFromPeriod` unverändert.
+ *
+ * Ein geändertes `startDate` darf höchstens 10 Jahre vor oder nach heute liegen (400 sonst).
+ * Der unverändert mitgeschickte Anker eines älteren Dauerauftrags wird nicht geprüft.
+ *
+ * PATCH Body: { accountId?, categoryId? (null erlaubt), amountCents?, description?, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd), backfill? (boolean) }
  */
-import { occurrenceDate, parseDayKey, zonedMonth, zonedTimeToUtc, type CalendarDate } from "@doewe/shared";
+import {
+  RECURRING_START_MAX_YEARS,
+  bookFromPeriodFor,
+  calendarDaysBetween,
+  isWithinYearsOf,
+  occurrenceDate,
+  parseDayKey,
+  zonedDate,
+  zonedMonth,
+  zonedTimeToUtc,
+  type CalendarDate
+} from "@doewe/shared";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { freezePastMonths } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 
 const UpdateInput = z.object({
@@ -35,7 +60,8 @@ const UpdateInput = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .refine((value) => parseDayKey(value) !== null, "Ungültiges Datum")
-    .optional()
+    .optional(),
+  backfill: z.boolean().optional()
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -56,6 +82,28 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   const data = parsed.data;
+  const now = new Date();
+
+  // The schedule changes when the start date moves away from the stored anchor
+  // day or the interval differs. The edit form resends both unchanged on every
+  // save; that must neither re-validate an old anchor nor move the lower bound.
+  const startDay = data.startDate ? parseDayKey(data.startDate) : null;
+  const startChanged =
+    startDay !== null && calendarDaysBetween(zonedDate(existing.nextOccurrence), startDay) !== 0;
+  const intervalChanged = data.intervalMonths !== undefined && data.intervalMonths !== existing.intervalMonths;
+
+  if (startDay && startChanged && !isWithinYearsOf(startDay, zonedDate(now))) {
+    return NextResponse.json(
+      {
+        error: {
+          formErrors: [],
+          fieldErrors: { startDate: [`Start date must be within ${RECURRING_START_MAX_YEARS} years of today`] }
+        }
+      },
+      { status: 400 }
+    );
+  }
+
   if (data.accountId) {
     const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId: user.householdId } });
     if (!account) {
@@ -73,7 +121,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // nextOccurrence neu bestimmen: ein explizites startDate setzt die Serie neu auf. Ein
   // geändertes dayOfMonth allein verschiebt nur den Tag im bestehenden Anker-Monat — die
   // Fälligkeit rechnet ohnehin nur mit dem Anker-MONAT, so bleibt die Phase der Serie.
-  const startDay = data.startDate ? parseDayKey(data.startDate) : null;
   const resolvedDayOfMonth = data.dayOfMonth ?? startDay?.day;
   let firstDay: CalendarDate | undefined;
   if (startDay) {
@@ -84,6 +131,18 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
   const nextOccurrence = firstDay ? zonedTimeToUtc({ ...firstDay, hour: 12 }) : undefined;
 
+  // A changed schedule must not back-book unasked: with an anchor before the
+  // current month the series is booked from the current month on, unless the
+  // user asked for the months in between. undefined = leave the bound alone.
+  // An explicit `backfill: true` always lifts the bound: it is the user asking
+  // for the past months, whether or not the schedule changes in this request.
+  let bookFromPeriod: string | null | undefined;
+  if (data.backfill === true) {
+    bookFromPeriod = null;
+  } else if (startChanged || intervalChanged) {
+    bookFromPeriod = bookFromPeriodFor(zonedMonth(nextOccurrence ?? existing.nextOccurrence), zonedMonth(now), false);
+  }
+
   const updateData = {
     accountId: data.accountId,
     // undefined = unchanged, null = remove the category
@@ -92,9 +151,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     description: data.description,
     intervalMonths: data.intervalMonths,
     dayOfMonth: resolvedDayOfMonth,
-    nextOccurrence
+    nextOccurrence,
+    bookFromPeriod
   } as Prisma.RecurringTransactionUncheckedUpdateInput;
 
+  // Freeze the budgets of past months first: a YEARLY plan is distributed by
+  // the standing orders, so changing one would otherwise change old months.
+  await freezePastMonths(user.householdId);
   const updated = await prisma.recurringTransaction.update({
     where: { id: params.id },
     data: updateData
@@ -115,6 +178,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   }
 
   // Soft-Delete (Phase 3b): Tombstone statt Hard-Delete für die Sync-Propagation.
+  // Freeze the budgets of past months first: a YEARLY plan is distributed by
+  // the standing orders, so changing one would otherwise change old months.
+  await freezePastMonths(user.householdId);
   await prisma.recurringTransaction.update({ where: { id: params.id }, data: { deletedAt: new Date() } });
   return new NextResponse(null, { status: 204 });
 }

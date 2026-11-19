@@ -5,17 +5,25 @@
  * ausgenommen — siehe cron/send-reminders, cron/notify-monthly-review für das
  * gleiche Muster). Bucht für jeden Dauerauftrag jeden fälligen, noch nicht
  * gebuchten und nicht geskippten Monat als echte Transaction — inklusive
- * bisher verpasster Monate in der Vergangenheit (einmaliges Nachbuchen läuft
- * über denselben Code-Pfad wie der laufende Tagesbetrieb).
+ * bisher verpasster Monate in der Vergangenheit (Nachbuchen läuft über
+ * denselben Code-Pfad wie der laufende Tagesbetrieb). Monate vor
+ * `RecurringTransaction.bookFromPeriod` werden nicht gebucht.
  *
  * Fällig ist ein Vorkommen, sobald der Kalendertag des Laufs in Europe/Berlin
  * den Fälligkeitstag erreicht hat — unabhängig von der Zeitzone des Servers.
  * Ein Monat gilt als gebucht, sobald eine Buchung des Dauerauftrags für diese
  * Periode existiert (`recurringPeriod`), auch eine verschobene oder gelöschte.
  *
- * `?dryRun=true` schreibt nichts, sondern listet nur, was gebucht würde —
- * vor dem ersten Rollout auf echten Daten Pflicht (siehe recurringBooking.ts,
- * bekannte Grenze bei bereits von Hand gebuchten Monaten).
+ * Von Hand erfasste Zahlungen werden nicht erkannt und nicht verknüpft: Der Lauf bucht
+ * jedes offene Vorkommen. Ob eine von Hand angelegte Buchung für ein Vorkommen steht,
+ * entscheidet der Nutzer — das Dashboard schlägt sie vor (`recurringSuggestions` in
+ * GET /api/analytics/summary), POST /api/recurring-transactions/[id]/link-booking
+ * verknüpft sie auf Bestätigung.
+ *
+ * Antwort: { ok, dryRun, booked, occurrences } — `booked` zählt die Einträge von
+ * `occurrences`.
+ *
+ * `?dryRun=true` schreibt nichts, sondern listet nur, was gebucht würde.
  */
 import { NextResponse } from "next/server";
 

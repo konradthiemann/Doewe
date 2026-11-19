@@ -1,4 +1,4 @@
-import webpush from "web-push";
+import webpush, { type PushSubscription as WebPushSubscription } from "web-push";
 
 import { env } from "../env";
 
@@ -40,9 +40,42 @@ function ensureVapidDetails(): void {
 }
 
 /**
+ * Longest wait for one push service, in milliseconds. Budget alerts are awaited
+ * by the booking routes, so a hanging endpoint would otherwise hold the
+ * response open after the booking is committed.
+ */
+export const PUSH_SEND_TIMEOUT_MS = 5_000;
+
+class PushTimeoutError extends Error {
+  constructor() {
+    super(`Push send timed out after ${PUSH_SEND_TIMEOUT_MS} ms`);
+  }
+}
+
+/**
+ * One send with a hard deadline. web-push's own `timeout` only covers an idle
+ * socket and destroys it; the race also ends a response that trickles in.
+ * A timeout rejects without a status code, so the caller treats it like any
+ * other failure and keeps the subscription.
+ */
+async function sendWithTimeout(subscription: WebPushSubscription, body: string): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new PushTimeoutError()), PUSH_SEND_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([webpush.sendNotification(subscription, body, { timeout: PUSH_SEND_TIMEOUT_MS }), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Sendet eine Push-Nachricht an ALLE registrierten Geräte eines Nutzers und
  * gibt die Anzahl erfolgreicher Zustellungen zurück. Abgelaufene Subscriptions
- * (HTTP 404/410) werden dabei aufgeräumt.
+ * (HTTP 404/410) werden dabei aufgeräumt. Jeder Versand wartet höchstens
+ * PUSH_SEND_TIMEOUT_MS; eine Zeitüberschreitung zählt als Fehlschlag, das Abo
+ * bleibt bestehen.
  */
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<number> {
   const subs = await prisma.pushSubscription.findMany({ where: { userId } });
@@ -60,10 +93,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   const results = await Promise.all(
     subs.map(async (sub) => {
       try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          body
-        );
+        await sendWithTimeout({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, body);
         return true;
       } catch (error) {
         const statusCode = (error as { statusCode?: number }).statusCode;

@@ -27,13 +27,21 @@ const CATEGORIES = [
   { id: "cat-savings", name: " Sparen " }
 ];
 
-const tx = (id: string, description: string, occurredAt: string, amountCents: number, categoryId: string | null) => ({
+const tx = (
+  id: string,
+  description: string,
+  occurredAt: string,
+  amountCents: number,
+  categoryId: string | null,
+  recurringTransactionId: string | null = null
+) => ({
   id,
   accountId: "acc-1",
   description,
   occurredAt,
   amountCents,
-  categoryId
+  categoryId,
+  recurringTransactionId
 });
 
 const TRANSACTIONS = [
@@ -41,7 +49,8 @@ const TRANSACTIONS = [
   tx("t-sep", "Letzter September", "2026-09-30T21:30:00.000Z", -777, "cat-food"),
   // 1 Oct 2026, 00:30 in Berlin — still 30 Sep in UTC.
   tx("t-oct-first", "Erster Oktober", "2026-09-30T22:30:00.000Z", -1000, "cat-food"),
-  tx("t-salary", "Gehalt Oktober", "2026-10-15T10:00:00.000Z", 300000, "cat-salary"),
+  // Booked for a standing order (automatically, or a manual payment recognised as its booking).
+  tx("t-salary", "Gehalt Oktober", "2026-10-15T10:00:00.000Z", 300000, "cat-salary", "rec-salary"),
   tx("t-deposit", "Sparrate", "2026-10-20T10:00:00.000Z", -20000, "cat-savings"),
   tx("t-withdrawal", "Entnahme", "2026-10-25T11:00:00.000Z", 5000, "cat-savings"),
   // 31 Oct 2026, 23:30 in Berlin — the last selected day has to count in full.
@@ -49,6 +58,33 @@ const TRANSACTIONS = [
   // 1 Nov 2026, 00:30 in Berlin — still 31 Oct in UTC.
   tx("t-nov", "Erster November", "2026-10-31T23:30:00.000Z", -9999, null)
 ];
+
+/** A standing order due every month: 950,00 € rent, first booked in January 2026. */
+const RECURRING = [
+  {
+    id: "rec-rent",
+    accountId: "acc-1",
+    amountCents: -95000,
+    description: "Miete",
+    categoryId: "cat-food",
+    frequency: "MONTHLY",
+    intervalMonths: 1,
+    dayOfMonth: 1,
+    nextOccurrence: "2026-01-01T11:00:00.000Z"
+  },
+  {
+    id: "rec-salary",
+    accountId: "acc-1",
+    amountCents: 300000,
+    description: "Gehalt",
+    categoryId: "cat-salary",
+    frequency: "MONTHLY",
+    intervalMonths: 1,
+    dayOfMonth: 15,
+    nextOccurrence: "2026-01-15T11:00:00.000Z"
+  }
+];
+let recurringResponse: unknown[] = [];
 
 const fetchMock = vi.fn();
 
@@ -94,10 +130,12 @@ async function loaded(visibleDescription = "Gehalt Oktober") {
 }
 
 beforeEach(() => {
+  recurringResponse = [];
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.startsWith("/api/recurring-transactions")) return jsonResponse([]);
+    if (url.startsWith("/api/recurring-transactions/skips")) return jsonResponse([]);
+    if (url.startsWith("/api/recurring-transactions")) return jsonResponse(recurringResponse);
     if (url.startsWith("/api/transactions")) return jsonResponse(TRANSACTIONS);
     if (url.startsWith("/api/categories")) return jsonResponse(CATEGORIES);
     if (url.startsWith("/api/accounts")) return jsonResponse([{ id: "acc-1", name: "Hauptkonto" }]);
@@ -139,10 +177,10 @@ describe("transaction list: totals of a month", () => {
     await loaded();
 
     const bar = totalsBar();
-    expect(bar).toContain("+3000.00 €"); // salary only — the savings withdrawal is not income
-    expect(bar).toContain("-35.00 €"); // 10.00 + 25.00 — the savings deposit is not outcome
-    expect(bar).toContain("Gespart: 150.00 €"); // 200.00 deposited − 50.00 withdrawn
-    expect(bar).toContain("Netto: +2815.00 €"); // 3000 − 35 − 150 = plain sum of all amounts
+    expect(bar).toContain("+3.000,00 €"); // salary only — the savings withdrawal is not income
+    expect(bar).toContain("-35,00 €"); // 10.00 + 25.00 — the savings deposit is not outcome
+    expect(bar).toContain("Gespart: 150,00 €"); // 200.00 deposited − 50.00 withdrawn
+    expect(bar).toContain("Netto: +2.815,00 €"); // 3000 − 35 − 150 = plain sum of all amounts
   });
 
   it("type outcome: only expenses, no savings deposits", async () => {
@@ -151,7 +189,7 @@ describe("transaction list: totals of a month", () => {
 
     expect(listedDescriptions().sort()).toEqual(["Erster Oktober", "Letzter Oktober"]);
     const bar = totalsBar();
-    expect(bar).toContain("-35.00 €");
+    expect(bar).toContain("-35,00 €");
     expect(bar).not.toContain("Gespart");
     expect(bar).not.toContain("Netto");
   });
@@ -161,7 +199,7 @@ describe("transaction list: totals of a month", () => {
     await loaded();
 
     expect(listedDescriptions()).toEqual(["Gehalt Oktober"]);
-    expect(totalsBar()).toContain("+3000.00 €");
+    expect(totalsBar()).toContain("+3.000,00 €");
     expect(totalsBar()).not.toContain("Gespart");
   });
 
@@ -171,7 +209,7 @@ describe("transaction list: totals of a month", () => {
     await waitFor(() => expect(listedDescriptions().sort()).toEqual(["Entnahme", "Sparrate"]));
 
     const bar = totalsBar();
-    expect(bar).toContain("Gespart: 150.00 €");
+    expect(bar).toContain("Gespart: 150,00 €");
     expect(bar).not.toContain("Netto");
     expect(screen.getByRole("button", { name: "Sparen" })).toBeInTheDocument();
   });
@@ -203,7 +241,7 @@ describe("transaction list: month picker", () => {
     expect(listedDescriptions()).toHaveLength(5);
     expect(screen.getByLabelText("Von")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Bis")).toHaveValue("2026-10-31");
-    expect(totalsBar()).toContain("-35.00 €");
+    expect(totalsBar()).toContain("-35,00 €");
 
     await user.selectOptions(screen.getByLabelText("Monat"), "");
     await screen.findByText("Erster November");
@@ -244,5 +282,74 @@ describe("transaction list: search", () => {
     await user.clear(search);
     await user.type(search, "acc");
     await waitFor(() => expect(listedDescriptions()).toEqual([]));
+  });
+});
+
+describe("transaction list: amounts in the UI's number format", () => {
+  const row = (description: string) => screen.getByText(description).closest("li") as HTMLElement;
+
+  it("prints the rows like every other screen: 3.000,00 € instead of 3000.00 €", async () => {
+    setup();
+    await loaded();
+
+    expect(within(row("Gehalt Oktober")).getByText("3.000,00 €")).toBeInTheDocument();
+    expect(within(row("Erster November")).getByText("-99,99 €")).toBeInTheDocument();
+    expect(within(row("Sparrate")).getByText("-200,00 €")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\d\.\d{2} €/);
+  });
+
+  it("prints the standing-order sums in the same format", async () => {
+    recurringResponse = RECURRING;
+    const user = userEvent.setup();
+    setup();
+    await loaded();
+
+    // "This month": rent −950,00 + salary +3.000,00, whatever the current month is.
+    const summary = (await screen.findByText("Wiederkehrende Transaktionen (diesen Monat)")).closest("summary")!;
+    expect(summary).toHaveTextContent("2.050,00 €");
+    expect(
+      within(summary).getByRole("button", { name: "Erklärung: Daueraufträge in diesem Monat" })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Wiederkehrend" }));
+    const panel = document.getElementById("tab-panel-recurring")!;
+    expect(within(panel).getByText("-950,00 €")).toBeInTheDocument();
+    expect(within(panel).getByText("3.000,00 €")).toBeInTheDocument();
+    expect(within(panel).getByText("2.050,00 €")).toBeInTheDocument();
+    expect(panel.textContent).not.toMatch(/\d\.\d{2} €/);
+  });
+});
+
+describe("transaction list: bookings of a standing order", () => {
+  const row = (description: string) => screen.getByText(description).closest("li") as HTMLElement;
+
+  it("marks a booking that belongs to a standing order, and only that", async () => {
+    setup();
+    await loaded();
+
+    const marked = within(row("Gehalt Oktober"));
+    expect(marked.getByText("Dauerauftrag")).toBeInTheDocument();
+    // Screen readers get the full wording.
+    expect(marked.getByText("Buchung eines Dauerauftrags")).toBeInTheDocument();
+    expect(marked.getByTitle("Buchung eines Dauerauftrags")).toBeInTheDocument();
+
+    expect(within(row("Sparrate")).queryByText("Dauerauftrag")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Dauerauftrag")).toHaveLength(1);
+  });
+});
+
+describe("transaction list: explanations", () => {
+  it("explains the totals above the list", async () => {
+    setup();
+    await loaded();
+    expect(screen.getByRole("button", { name: "Erklärung: Summen über der Liste" })).toBeInTheDocument();
+  });
+
+  it("explains standing orders on the recurring tab", async () => {
+    const user = userEvent.setup();
+    setup();
+    await loaded();
+    await user.click(screen.getByRole("tab", { name: "Wiederkehrend" }));
+    expect(screen.getByRole("button", { name: "Erklärung: So funktionieren Daueraufträge" })).toBeInTheDocument();
   });
 });

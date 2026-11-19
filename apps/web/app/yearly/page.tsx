@@ -7,6 +7,7 @@ import { Suspense, useCallback, useMemo } from "react";
 
 import PageContainer from "../../components/PageContainer";
 import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
+import { InfoTip } from "../../components/ui/InfoTip";
 import { CategoryYearTable } from "../../components/yearly/CategoryYearTable";
 import { RecurringYearTable } from "../../components/yearly/RecurringYearTable";
 import { useApiQuery } from "../../lib/api/useApiQuery";
@@ -71,7 +72,10 @@ function YearlyPage() {
       <PageContainer className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-ink">{t("yearly.title")}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="min-w-0 text-xl font-semibold text-ink">{t("yearly.title")}</h1>
+              <InfoTip topic="yearly.tables" />
+            </div>
             <p className="text-sm text-ink-muted">{t("yearly.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">

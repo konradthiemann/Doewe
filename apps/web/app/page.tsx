@@ -16,12 +16,15 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Bar } from "react-chartjs-2";
 
+import { SavingsOverviewCard } from "../components/dashboard/SavingsOverviewCard";
+import { UpcomingRecurringList, type RecurringSuggestion } from "../components/dashboard/UpcomingRecurring";
 import OnboardingWizard from "../components/OnboardingWizard";
 import PageContainer from "../components/PageContainer";
 import { CategoryBreakdown } from "../components/review/CategoryBreakdown";
+import { InfoTip } from "../components/ui/InfoTip";
 import { Skeleton } from "../components/ui/Skeleton";
 import { useApiQuery } from "../lib/api/useApiQuery";
-import { formatBookingDayMonth, formatMonth } from "../lib/bookingDate";
+import { formatMonth } from "../lib/bookingDate";
 import { toBreakdownRows, type DashboardCategoryBudget } from "../lib/budgetRows";
 import { fixedCostRatioPercent, nextGoalDeadline, recurringDueFigures, sortByDueDay } from "../lib/dashboardFigures";
 import { useI18n } from "../lib/i18n";
@@ -68,6 +71,9 @@ type SummaryData = {
   projectedOutcomeTotal?: number;
   projectedSavingsTotal?: number;
   projectedRemaining?: number;
+  // Hand-entered bookings that may be a planned standing order's payment;
+  // the user confirms them. Optional: older payloads (offline cache) lack it.
+  recurringSuggestions?: RecurringSuggestion[];
 };
 
 type QuarterlyData = {
@@ -143,8 +149,9 @@ export default function HomePage() {
     return () => mediaQuery.removeEventListener("change", update);
   }, []);
   const outgoingLabels = useMemo(
-    () => summary.outgoingByCategory.map((c) => c.name),
-    [summary.outgoingByCategory]
+    // Bookings without a category arrive as id "uncategorized" with an English name.
+    () => summary.outgoingByCategory.map((c) => (c.id === "uncategorized" ? t("review.uncategorized") : c.name)),
+    [summary.outgoingByCategory, t]
   );
   const outgoingValues = useMemo(
     () => summary.outgoingByCategory.map((c) => c.amount),
@@ -193,11 +200,6 @@ export default function HomePage() {
   const recurringDue = recurringDueFigures(summary);
   // Fixed-cost ratio: recurring expenses as share of projected income (proxy for financial obligation load).
   const fixedCostRatio = fixedCostRatioPercent(recurringDue.outcomeTotal, projectedIncome);
-
-  // Saving-plan recommendation: suggested monthly savings vs. actual.
-  const suggestedMonthly = savingPlan ? savingPlan.totals.suggestedMonthlyCents / 100 : 0;
-  const savingShortfall = Math.max(0, suggestedMonthly - totalSavingsTransfer);
-  const savingOnTrack = suggestedMonthly > 0 ? totalSavingsTransfer >= suggestedMonthly : totalSavingsTransfer > 0;
 
   // Category budgets: budgets set at category level vs. actual spent (incl. recurring).
   const categoryBudgets = summary.categoryBudgets || [];
@@ -256,14 +258,7 @@ export default function HomePage() {
     ]
   };
 
-  // Planned vs Actual savings cards
-  const plannedSavings = summary.plannedSavings;
-  const actualSavings = summary.monthlySavingsActual || 0;
-  const plannedColor = "#4e6fa3"; // savings
-  const actualColor = "#2e7d54"; // income
-  const savingsProgress = plannedSavings > 0 ? Math.max(0, Math.min(100, percentOf(actualSavings, plannedSavings))) : 0;
-
-  // Saving goals completed this month (by completion/withdrawal date)
+  // Saving goals completed this month (by completion date)
   const completedGoals = summary.completedGoals || [];
   const completedGoalsSpent = summary.completedGoalsSpent || 0;
 
@@ -309,26 +304,6 @@ export default function HomePage() {
   // Leerer Account (Erstnutzung): Hero zeigt Willkommens-Einstieg statt 0-Werten
   const showWelcome = !loading && !hasIncomeData && projectedSpent === 0 && recurringTransactions.length === 0;
 
-  const renderRecurringItem = (rec: { id: string; description: string; amountCents: number; dayOfMonth: number | null }) => (
-    <li key={rec.id} className="flex items-center justify-between rounded-field border border-line bg-surface-2 p-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-ink truncate">
-          {rec.description}
-        </p>
-        {rec.dayOfMonth && (
-          <p className="text-xs text-ink-muted">
-            {t("dashboard.recurringDay", { day: rec.dayOfMonth })}
-          </p>
-        )}
-      </div>
-      <span className={`text-sm font-semibold tabular-nums ml-3 ${
-        rec.amountCents < 0 ? "text-expense" : "text-income"
-      }`}>
-        {formatCurrency(rec.amountCents / 100)}
-      </span>
-    </li>
-  );
-
   return (
     <main id="maincontent" className="py-6 md:py-8">
       <PageContainer className="space-y-6">
@@ -366,9 +341,12 @@ export default function HomePage() {
             </div>
           ) : (
             <>
-              <h2 id="hero-left" className="text-sm font-medium text-ink-muted">
-                {t("dashboard.heroTitle")}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 id="hero-left" className="min-w-0 text-sm font-medium text-ink-muted">
+                  {t("dashboard.heroTitle")}
+                </h2>
+                <InfoTip topic="dashboard.available" />
+              </div>
               <p className={`mt-1 text-amount-hero font-bold tabular-nums ${projectedLeft >= 0 ? "text-income" : "text-expense"}`}>
                 {formatCurrency(projectedLeft)}
               </p>
@@ -447,24 +425,36 @@ export default function HomePage() {
         ) : (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="min-w-0 rounded-card border border-line bg-surface p-3 shadow-card">
-              <p className="text-xs text-ink-muted">{t("dashboard.spent")}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 text-xs text-ink-muted">{t("dashboard.spent")}</p>
+                <InfoTip topic="dashboard.spent" />
+              </div>
               <p className="mt-0.5 text-amount font-semibold tabular-nums text-expense">{formatCurrency(projectedExpenses)}</p>
               <p className="text-[11px] text-ink-faint">{t("dashboard.spentOfBudget", { percent: expensesPercent })}</p>
             </div>
             <div className="min-w-0 rounded-card border border-line bg-surface p-3 shadow-card">
-              <p className="text-xs text-ink-muted">{t("dashboard.saved")}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 text-xs text-ink-muted">{t("dashboard.saved")}</p>
+                <InfoTip topic="dashboard.saved" />
+              </div>
               <p className="mt-0.5 text-amount font-semibold tabular-nums text-savings">{formatCurrency(totalSavingsTransfer)}</p>
               <p className="text-[11px] text-ink-faint">{t("dashboard.savingsRate")}: {savingsRate}%</p>
             </div>
             <div className="min-w-0 rounded-card border border-line bg-surface p-3 shadow-card">
-              <p className="text-xs text-ink-muted">{t("dashboard.totalBalance")}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 text-xs text-ink-muted">{t("dashboard.totalBalance")}</p>
+                <InfoTip topic="dashboard.balance" />
+              </div>
               <p className={`mt-0.5 text-amount font-semibold tabular-nums ${summary.totalBalance >= 0 ? "text-income" : "text-expense"}`}>
                 {formatCurrency(summary.totalBalance)}
               </p>
               <p className="text-[11px] text-ink-faint">{t("dashboard.totalBalanceHint")}</p>
             </div>
             <div className="min-w-0 rounded-card border border-line bg-surface p-3 shadow-card">
-              <p className="text-xs text-ink-muted">{t("dashboard.fixedCostRatio")}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 text-xs text-ink-muted">{t("dashboard.fixedCostRatio")}</p>
+                <InfoTip topic="dashboard.fixedCosts" />
+              </div>
               <p className={`mt-0.5 text-amount font-semibold tabular-nums ${fixedCostRatio >= 70 ? "text-danger" : fixedCostRatio >= 50 ? "text-warning" : "text-ink"}`}>
                 {fixedCostRatio}%
               </p>
@@ -477,9 +467,12 @@ export default function HomePage() {
       {/* Category Budgets — nach oben gezogen: wichtigste Info für tägliche Haushaltsplanung */}
       <section aria-labelledby="category-budgets">
         <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h2 id="category-budgets" className="text-lg font-medium mb-1">
-            {t("dashboard.categoryBudgetsTitle")}
-          </h2>
+          <div className="mb-1 flex items-center gap-2">
+            <h2 id="category-budgets" className="min-w-0 text-lg font-medium">
+              {t("dashboard.categoryBudgetsTitle")}
+            </h2>
+            <InfoTip topic="dashboard.categoryBudgets" />
+          </div>
           <p className="text-xs text-ink-muted mb-4">{t("dashboard.categoryBudgetsSubtitle")}</p>
           {loading ? (
             <div className="grid gap-2 lg:grid-cols-2">
@@ -508,9 +501,12 @@ export default function HomePage() {
       {/* Ausgaben nach Kategorie (Doughnut) */}
       <section aria-labelledby="outgoing-chart">
         <div className="rounded-card border border-line p-4 bg-surface shadow-card">
-          <h2 id="outgoing-chart" className="text-lg font-medium mb-3">
-            {t("dashboard.outgoingsByCategory")}
-          </h2>
+          <div className="mb-3 flex items-center gap-2">
+            <h2 id="outgoing-chart" className="min-w-0 text-lg font-medium">
+              {t("dashboard.outgoingsByCategory")}
+            </h2>
+            <InfoTip topic="dashboard.byCategory" />
+          </div>
           {loading ? (
             <div className="mx-auto w-full max-w-md space-y-3">
               <Skeleton className="mx-auto h-44 w-44 rounded-full" />
@@ -531,9 +527,12 @@ export default function HomePage() {
       {/* Recurring Transactions Section — "Steht noch an" sichtbar, Gesamtliste einklappbar */}
       <section aria-labelledby="recurring-overview">
         <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h2 id="recurring-overview" className="text-lg font-medium mb-1">
-            {t("dashboard.recurringOverview")}
-          </h2>
+          <div className="mb-1 flex items-center gap-2">
+            <h2 id="recurring-overview" className="min-w-0 text-lg font-medium">
+              {t("dashboard.recurringOverview")}
+            </h2>
+            <InfoTip topic="dashboard.upcoming" />
+          </div>
           <p className="text-xs text-ink-muted mb-3">
             {t("dashboard.recurringSubtitle")}
           </p>
@@ -548,9 +547,11 @@ export default function HomePage() {
                 {t("dashboard.upcomingTitle")}
               </p>
               {upcomingRecurring.length > 0 ? (
-                <ul className="mt-2 space-y-2">
-                  {upcomingRecurring.map(renderRecurringItem)}
-                </ul>
+                <UpcomingRecurringList
+                  items={upcomingRecurring}
+                  suggestions={summary.recurringSuggestions}
+                  formatCurrency={formatCurrency}
+                />
               ) : (
                 <p className="mt-2 text-sm text-ink-muted">{t("dashboard.upcomingNone")}</p>
               )}
@@ -573,9 +574,7 @@ export default function HomePage() {
                       </p>
                     </div>
                   </div>
-                  <ul className="space-y-2">
-                    {recurringTransactions.map(renderRecurringItem)}
-                  </ul>
+                  <p className="text-xs text-ink-muted">{t("dashboard.recurringDueHint")}</p>
                 </div>
               </details>
             </>
@@ -585,110 +584,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section aria-labelledby="savings-overview">
-        <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <h2 id="savings-overview" className="text-lg font-medium mb-4">
-            {t("dashboard.savingsOverview")}
-          </h2>
-          {/* Amounts carry cents ("1.234,56 €"): three columns only where each is wide
-              enough — the card is half-width from lg on, so stack there until 2xl. */}
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
-            <div>
-              <p className="text-sm text-ink-muted">{t("dashboard.plannedSavings")}</p>
-              <p className="text-amount-lg font-semibold tabular-nums" style={{ color: plannedColor }}>{formatCurrency(plannedSavings)}</p>
-              <p className="text-xs text-ink-muted">{t("dashboard.targetForMonth")}</p>
-            </div>
-            <div>
-              <p className="text-sm text-ink-muted">{t("dashboard.actualSaved")}</p>
-              <p className="text-amount-lg font-semibold tabular-nums" style={{ color: actualSavings >= 0 ? actualColor : "#8a6116" }}>{formatCurrency(actualSavings)}</p>
-              <p className="text-xs text-ink-muted">
-                {actualSavings >= 0
-                  ? t("dashboard.percentOfTarget", { percent: savingsProgress })
-                  : t("dashboard.savingsNetWithdrawn")}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-ink-muted">{t("dashboard.recommendedSavings")}</p>
-              <p className={`text-amount-lg font-semibold tabular-nums ${savingOnTrack ? "text-income" : "text-warning"}`}>
-                {formatCurrency(suggestedMonthly)}
-              </p>
-              <p className="text-xs text-ink-muted">{t("dashboard.recommendedSavingsHint")}</p>
-            </div>
-          </div>
-          <div className="mt-5">
-            <p className="text-xs font-medium text-ink-muted">{t("dashboard.progress")}</p>
-            <div className="mt-2 h-2 w-full rounded bg-surface-2" aria-hidden="true">
-              <div
-                className="h-2 rounded"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={savingsProgress}
-                aria-label={t("dashboard.savingsProgressLabel")}
-                style={{ width: `${savingsProgress}%`, backgroundColor: actualColor }}
-              />
-            </div>
-          </div>
-          {savingPlan && suggestedMonthly > 0 && (
-            <div className={`mt-4 rounded-field border px-3 py-2 text-xs ${savingOnTrack
-              ? "border-success/30 bg-success-soft text-success"
-              : "border-warning/30 bg-warning-soft text-warning"
-            }`}>
-              <p className="font-medium">
-                {savingOnTrack
-                  ? t("dashboard.savingOnTrack")
-                  : t("dashboard.savingShortfall", { shortfall: formatCurrency(savingShortfall) })}
-              </p>
-              {savingPlan.nextDeadline && (
-                <p className="mt-0.5 text-[11px] opacity-80">
-                  {t("dashboard.savingNextDeadline", {
-                    date: formatMonth(savingPlan.nextDeadline, dateLocale)
-                  })}
-                </p>
-              )}
-            </div>
-          )}
-          {completedGoals.length > 0 && (
-            <div className="mt-5 border-t border-line pt-4">
-              <p className="text-sm font-medium text-ink">
-                {t("dashboard.completedGoalsTitle")}
-              </p>
-              <ul className="mt-2 space-y-2">
-                {completedGoals.map((goal, idx) => {
-                  const diff = goal.spent - goal.target;
-                  return (
-                    <li key={idx} className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-ink-muted">{goal.title}</p>
-                        <p className="text-xs text-ink-muted">
-                          {formatBookingDayMonth(goal.completedAt, dateLocale, { month: "long" })}
-                          {" · "}
-                          {t("dashboard.completedGoalTarget", { amount: formatCurrency(goal.target) })}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold tabular-nums text-savings">
-                          {formatCurrency(goal.spent)}
-                        </p>
-                        {diff !== 0 && (
-                          <p className={`text-xs ${diff > 0 ? "text-warning" : "text-income"}`}>
-                            {diff > 0
-                              ? t("dashboard.completedGoalOver", { amount: formatCurrency(diff) })
-                              : t("dashboard.completedGoalUnder", { amount: formatCurrency(-diff) })}
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="mt-2 text-xs text-ink-muted">
-                {t("dashboard.completedGoalsTotal", { amount: formatCurrency(completedGoalsSpent) })}
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
+      <SavingsOverviewCard
+        savedThisMonth={totalSavingsTransfer}
+        netWithdrawn={savingsWithdrawn}
+        plan={savingPlan ? savingPlan.totals : null}
+        nextDeadline={savingPlan?.nextDeadline ?? null}
+        completedGoals={completedGoals}
+        completedGoalsSpent={completedGoalsSpent}
+        formatCurrency={formatCurrency}
+        dateLocale={dateLocale}
+      />
       </div>
 
       {/* Quarterly Overview Section — eingeklappt: die Tiefe lebt auf /review */}
@@ -768,9 +673,12 @@ export default function HomePage() {
               {/* MoM deltas (F): current month vs. previous month */}
               {momDeltas && (
                 <div className="mb-4 grid gap-2 sm:grid-cols-3" aria-label={t("dashboard.momDelta")}>
-                  <p className="col-span-full text-[11px] font-medium uppercase tracking-wide text-ink-muted">
-                    {t("dashboard.momDelta")}
-                  </p>
+                  <div className="col-span-full flex items-center gap-2">
+                    <p className="min-w-0 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                      {t("dashboard.momDelta")}
+                    </p>
+                    <InfoTip topic="dashboard.comparison" />
+                  </div>
                   {([
                     ["quarterlyIncome", momDeltas.income, "emerald"],
                     ["quarterlyOutcome", momDeltas.outcome, "red"],

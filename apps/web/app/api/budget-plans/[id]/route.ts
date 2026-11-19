@@ -7,10 +7,14 @@
  *
  * PATCH Body: { period?: "MONTHLY" | "YEARLY", amountCents?: 1..1_000_000_000 } (mind. ein Feld)
  *   200 Plan-DTO | 400 Validierung | 404
+ *
+ * Vor dem Schreiben werden alle abgeschlossenen Monate ohne Snapshot eingefroren
+ * (freezePastMonths): Ändern und Löschen wirken nur auf den laufenden und künftige Monate.
  */
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { freezePastMonths } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 import { toPlanDto, UpdateBudgetPlanSchema } from "../schema";
 
@@ -33,6 +37,8 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Months that are over keep the amount they had before the edit.
+  await freezePastMonths(user.householdId);
   const plan = await prisma.categoryBudgetPlan.update({ where: { id: existing.id }, data: parsed.data });
   return NextResponse.json(toPlanDto(plan));
 }
@@ -47,6 +53,8 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Months that are over keep the plan they had.
+  await freezePastMonths(user.householdId);
   await prisma.categoryBudgetPlan.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
   return new NextResponse(null, { status: 204 });
 }

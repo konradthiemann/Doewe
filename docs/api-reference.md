@@ -316,7 +316,7 @@ or
 |---|---|---|
 | `name` | string | Optional; new name (unique per user) |
 | `isTaxRelevant` | boolean | Optional. `true` marks the category as tax-relevant **and retroactively earmarks all existing transactions of the category** (`taxRelevant: true`); new transactions inherit the flag by default. `false` unmarks only the category — transaction flags are kept |
-| `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted. Takes precedence over the other fields |
+| `mergeIntoCategoryId` | string | Optional; target category. All transactions, recurring transactions, and budgets of this category are reassigned to the target, then this category is deleted. The frozen budgets of completed months move along: months not frozen yet are frozen first, then in every snapshot the source's amount is added to the target's (see [Budget Plans](#budget-plans)). Takes precedence over the other fields |
 
 **Success response — `200 OK`:** The updated category (rename) or the merge target category (merge).
 
@@ -334,7 +334,7 @@ or
 
 ### `DELETE /api/categories/[id]`
 
-Delete a category. A **fallback category is mandatory**: all transactions, recurring transactions, and budgets of the deleted category are reassigned to it. The protected savings category cannot be deleted.
+Delete a category. A **fallback category is mandatory**: all transactions, recurring transactions, and budgets of the deleted category are reassigned to it, and its frozen budgets of completed months are added to the fallback's, as in a merge. The protected savings category cannot be deleted.
 
 **Auth required:** Yes
 
@@ -582,6 +582,8 @@ Turns an existing booking into a recurring transaction (`MONTHLY`). Creates a `R
 
 The anchor `nextOccurrence` = booking day (calendar day in Europe/Berlin) + `intervalMonths` (day = `dayOfMonth`, clamped to the target month's length, e.g. 31 Jan + 1 month → 28/29 Feb), stored as 12:00 Europe/Berlin of that day. The origin month is therefore not booked again by the auto-booking run. The booking itself becomes the occurrence of its own Berlin month: it gets `recurringPeriod` = that month, so moving it into the next month later does not hide that month's own occurrence. Create and link happen in one database transaction.
 
+The new template gets `bookFromPeriod` = the current Europe/Berlin month: the series continues from now. Turning a two-month-old booking into a recurring transaction therefore books nothing for the month in between; the current month is booked once its day has come.
+
 **Success response — `201 Created`:** the new recurring transaction object.
 
 **Error responses:**
@@ -773,7 +775,9 @@ A recurring transaction is a template. Its due occurrences are **booked automati
 
 - **Anchor:** `nextOccurrence` is the anchor of the series, **not** "the next" occurrence, and is not advanced after a booking. Scheduling reads only its month (in Europe/Berlin): the template is due in the anchor month and every `intervalMonths` months after it. The day of the booking is `dayOfMonth`, clamped to the length of the month. The anchor is always stored as 12:00 Europe/Berlin of the intended calendar day.
 - **Occurrence identity:** an occurrence is `(recurringTransactionId, recurringPeriod)`, where `recurringPeriod` (`"YYYY-MM"`) is the month it was booked for. A month counts as booked as soon as such a booking exists — also when it was later moved into another month or deleted.
-- **Known limitations:** a payment entered by hand is not recognised as an occurrence (it has no `recurringTransactionId`), so a hand-entered payment plus a template books it twice; an anchor in the past back-books every due month since then; back-booked months use the template's current amount.
+- **No unasked back-booking:** `bookFromPeriod` (`"YYYY-MM"` or `null`) is the first month that may be booked automatically; occurrences before it are never booked. It is set to the current Europe/Berlin month when a template is created with a first occurrence in an earlier month, when a `PATCH` changes the schedule of a template anchored in the past, and by `make-recurring` — unless the request carries `backfill: true`. `null` means no lower bound (every template created before the field existed). The yearly matrix and the CSV show the schedule and ignore it.
+- **Hand-entered payments — suggest, then confirm:** nothing is ever linked automatically; the booking run books every open occurrence, whatever the user entered by hand (no rule can tell "paid early" from "paid additionally", and a silently missing booking is worse than a visible duplicate the user can delete). A booking that looks like an open occurrence is a **look-alike**: same account, not deleted, not linked to any recurring transaction, exactly the same `amountCents`, the same category (for a template without category: no category and the same description, ignoring case and surrounding whitespace), and dated at most 7 calendar days (Europe/Berlin) before or after the due day. `GET /api/analytics/summary` returns the best look-alike per open occurrence of the current month in `recurringSuggestions` (closest to the due day, then the oldest; each booking suggested for one occurrence only) and writes nothing for it. The user confirms with `POST /api/recurring-transactions/[id]/link-booking`, which sets `recurringTransactionId` and `recurringPeriod` on that booking and changes nothing else; from then on the occurrence counts as booked.
+- **Known limitations:** until it is confirmed, a hand-entered payment for an occurrence is there twice (and once the due day is reached, the run books the occurrence next to it); payments outside the look-alike rule are never suggested; a confirmed link cannot be removed through the API; back-booked months use the template's current amount.
 
 ### `GET /api/recurring-transactions`
 
@@ -796,6 +800,7 @@ List all recurring transactions of the household, ordered by `nextOccurrence` as
     "intervalMonths": 1,
     "dayOfMonth": 1,
     "nextOccurrence": "2026-05-01T10:00:00.000Z",
+    "bookFromPeriod": null,
     "createdAt": "2026-01-01T00:00:00.000Z"
   }
 ]
@@ -818,7 +823,9 @@ Create a new recurring transaction template. `frequency` is set server-side to `
 How the anchor `nextOccurrence` is set:
 
 - **Without `startDate`:** from `dayOfMonth` and today's calendar day in Europe/Berlin. The series starts this month only if the day (clamped to the month's length) is still ahead, i.e. **strictly after today**; if it is today or already past, it starts next month. A due day that is today counts as passed so that someone who entered today's payment by hand and then creates the template does not get it booked a second time. Example on 30 November: `dayOfMonth` 30 and 31 both clamp to today and both start in December.
-- **With `startDate`** (`yyyy-mm-dd`): the anchor is that date — e.g. a subscription whose first charge is a few months out. `dayOfMonth` defaults to the day of `startDate`; if a different `dayOfMonth` is sent as well, the series starts in the month of `startDate` and books on `dayOfMonth`. A `startDate` in the past back-books every due month since then on the next run.
+- **With `startDate`** (`yyyy-mm-dd`): that date is the first booking — e.g. a subscription whose first charge is a few months out. `dayOfMonth` defaults to the day of `startDate`. `startDate` and `dayOfMonth` are independent fields and the booking day is `dayOfMonth`: if it (clamped to the length of the start month) is the start day or later, the series starts in the month of `startDate` and the anchor is `startDate`; if it lies **before** the start day, the series starts in the following month and the anchor is `dayOfMonth` of that month (start 20 November, day 5 → first booking and anchor 5 December). Nothing is ever booked before the date entered as the first booking.
+
+**Past start dates:** if the first occurrence lies in a month before the current Europe/Berlin month, the template gets `bookFromPeriod` = the current month and the months before it are **not** booked. Send `backfill: true` to have every due month since the start booked on the next run (`bookFromPeriod` stays `null`). A first occurrence earlier in the current month is not "the past": it is booked on the next run.
 
 **Auth required:** Yes
 
@@ -831,7 +838,8 @@ How the anchor `nextOccurrence` is set:
   "description": "Miete",
   "intervalMonths": 1,
   "dayOfMonth": 1,
-  "startDate": "2026-10-01"
+  "startDate": "2026-10-01",
+  "backfill": false
 }
 ```
 
@@ -843,15 +851,16 @@ How the anchor `nextOccurrence` is set:
 | `description` | string | Required; non-empty |
 | `intervalMonths` | integer | Optional; 1–24, defaults to `1` (e.g., `3` = quarterly) |
 | `dayOfMonth` | integer | Optional; 1–31. Defaults to the day of `startDate` if given, else `1` |
-| `startDate` | string | Optional; `yyyy-mm-dd`, must be a real calendar day. When set, becomes the anchor; otherwise the anchor is derived from `dayOfMonth` (see above) |
+| `startDate` | string | Optional; `yyyy-mm-dd`, must be a real calendar day at most 10 years before or after today in Europe/Berlin (the same day 10 years away is still accepted). When set, it is the first booking; otherwise the anchor is derived from `dayOfMonth` (see above) |
+| `backfill` | boolean | Optional, default `false`. `true` = also book the months between a past start and now |
 
-**Success response — `201 Created`:** Full recurring transaction object (with computed `nextOccurrence` and `frequency: "MONTHLY"`).
+**Success response — `201 Created`:** Full recurring transaction object (with computed `nextOccurrence`, `bookFromPeriod` and `frequency: "MONTHLY"`).
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
-| `400` | Validation failed |
+| `400` | Validation failed — also a `startDate` more than 10 years away: `{ "error": { "formErrors": [], "fieldErrors": { "startDate": ["Start date must be within 10 years of today"] } } }` |
 | `401` | Not authenticated |
 | `404` | Account or category not found / not in the household |
 
@@ -861,10 +870,12 @@ How the anchor `nextOccurrence` is set:
 
 Update a recurring transaction template. Partial update — send only changed fields. Accepts the same fields as the create endpoint. The anchor `nextOccurrence` is only touched when `startDate` or `dayOfMonth` is in the body:
 
-- `startDate` (`yyyy-mm-dd`, takes precedence) re-anchors the series to that date.
+- `startDate` (`yyyy-mm-dd`, takes precedence) re-anchors the series to that date. Unlike on create, the anchor is not moved into the following month when `dayOfMonth` lies before the start day: the edit form resends the stored anchor with every save, and a stored anchor may have another day than `dayOfMonth`.
 - `dayOfMonth` alone only moves the day: the anchor **month is kept** and the day is clamped to the length of that month. The series is not re-anchored — with an interval above 1 the due months stay the same, and no earlier month drops out of the yearly view or the CSV.
 
 Occurrences that are already booked are left untouched in both cases. `categoryId: null` removes the category; omitting the field leaves it unchanged.
+
+**Schedule changes and `backfill`:** a request changes the schedule when its `startDate` differs from the Europe/Berlin calendar day of the stored anchor or its `intervalMonths` differs from the stored value. Only then is `bookFromPeriod` set again, as on create: with the (new) anchor in a month before the current one it becomes the current month — shortening the interval from 3 to 1 does not book the months in between — and with `backfill: true`, or an anchor in the current month or later, it becomes `null`. An explicit `backfill: true` always lifts the bound (`null`), also without a schedule change: the months since the anchor are then booked on the next run. Otherwise a request that resends the stored start date and interval leaves `bookFromPeriod` as it is. The 10-year limit on `startDate` is likewise checked only for a changed start date, so an old template anchored further back can still be edited.
 
 **Auth required:** Yes
 
@@ -874,9 +885,49 @@ Occurrences that are already booked are left untouched in both cases. `categoryI
 
 | Status | Reason |
 |---|---|
-| `400` | Validation failed |
+| `400` | Validation failed — also a changed `startDate` more than 10 years away (same body as on create) |
 | `401` | Not authenticated |
 | `404` | Template, account or category not found / not in the household |
+
+---
+
+### `POST /api/recurring-transactions/[id]/link-booking`
+
+Confirms a suggestion: links a booking the user entered by hand as the occurrence of one month of this recurring transaction (`[id]`). Suggestions come from `recurringSuggestions` in `GET /api/analytics/summary`; this endpoint is the only way such a link is made.
+
+Under the template's advisory lock (the same one the booking run takes) and a row lock on the booking, everything is checked again:
+
+- the template and the booking exist in the caller's household (template not deleted) — else `404`;
+- `period` is a month in which the template is due (anchor month + multiples of `intervalMonths`), not before `bookFromPeriod`, not skipped and not yet booked (a deleted booking of the template for that period counts as booked) — else `409`;
+- the booking is still a look-alike for the occurrence of that period: same account, exactly the same `amountCents`, same category (template without category: no category and the same description, ignoring case and surrounding whitespace), not deleted, not linked to any recurring transaction, and dated at most 7 calendar days (Europe/Berlin) before or after that period's due day — else `409`.
+
+Then `recurringTransactionId` and `recurringPeriod` are set on the booking — nothing else changes (amount, date, description, category, tax flag and receipts stay as entered). From then on the occurrence is booked: the dashboard no longer plans it and the booking run does not book it. Of two concurrent confirmations for the same occurrence, one wins and the other gets `409`.
+
+**Auth required:** Yes
+
+**Request body:**
+```json
+{ "transactionId": "txn_42", "period": "2026-11" }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `transactionId` | string | Required; non-empty |
+| `period` | string | Required; `YYYY-MM` (month `01`–`12`), the month of the occurrence — it may differ from the booking's own month (the rent paid on 28 November for the occurrence of 1 December) |
+
+**Success response — `200 OK`:**
+```json
+{ "id": "txn_42", "recurringTransactionId": "rec_01", "recurringPeriod": "2026-11" }
+```
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Body is not JSON or fails validation |
+| `401` | Not authenticated |
+| `404` | Template or booking not found / not in the household |
+| `409` | `{ "error": "…" }` — the booking is no longer a look-alike (other account, amount, category or description, deleted, already linked, more than 7 days from the due day), or the occurrence is already booked, skipped, before `bookFromPeriod` or not a due month |
 
 ---
 
@@ -967,9 +1018,11 @@ Format: separator `;`, decimal comma, CRLF line breaks. Columns: `Beschreibung`,
 
 ### `POST /api/cron/materialize-recurring`
 
-Books every due, not yet booked and not skipped occurrence of every recurring transaction as a real transaction — including months missed in the past (one code path for the daily run and for back-booking). Called daily by a Railway cron. The public demo account is excluded.
+Books every due, not yet booked and not skipped occurrence of every recurring transaction as a real transaction — including months missed in the past (one code path for the daily run and for back-booking), but never a month before the template's `bookFromPeriod`. Called daily by a Railway cron. The public demo account is excluded.
 
 An occurrence is due once the calendar day of the run **in Europe/Berlin** has reached its due day (`dayOfMonth`, clamped to the length of the month). The booking is dated 12:00 Europe/Berlin of the due day, carries `recurringTransactionId` and `recurringPeriod`, copies account, category, amount and description from the template (the template's **current** amount, also for past months) and inherits the tax flag of its category. A month counts as booked as soon as a booking of the template for that period exists — also a moved or deleted one — so a second run on the same day books nothing twice.
+
+Bookings the user entered by hand are not looked at: the run never links one to an occurrence, even if it looks like it (see "Hand-entered payments" above). Linking happens only on confirmation through `POST /api/recurring-transactions/[id]/link-booking`.
 
 **Auth required:** No session. `Authorization: Bearer <CRON_SECRET>`; without a configured `CRON_SECRET` the endpoint always answers `401`.
 
@@ -977,21 +1030,22 @@ An occurrence is due once the calendar day of the run **in Europe/Berlin** has r
 
 | Param | Type | Description |
 |---|---|---|
-| `dryRun` | `"true"` | Optional. Writes nothing and only lists what would be booked. Check it against the existing bookings before the first real run on real data: payments already entered by hand are not recognised and would be booked a second time |
+| `dryRun` | `"true"` | Optional. Writes nothing and only lists what would be booked |
 
 **Success response — `200 OK`:**
 ```json
 {
   "ok": true,
   "dryRun": false,
-  "booked": 1,
+  "booked": 2,
   "occurrences": [
-    { "recurringId": "rec_01", "accountId": "acc_01", "transactionId": "txn_31", "year": 2026, "month": 5, "amountCents": -85000, "description": "Miete" }
+    { "recurringId": "rec_01", "accountId": "acc_01", "transactionId": "txn_31", "year": 2026, "month": 5, "amountCents": -85000, "description": "Miete" },
+    { "recurringId": "rec_02", "accountId": "acc_01", "transactionId": "txn_32", "year": 2026, "month": 5, "amountCents": -4999, "description": "Fitnessstudio" }
   ]
 }
 ```
 
-`transactionId` is `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
+`booked` is the number of entries in `occurrences`. `transactionId` is the created booking, `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
 
 The analytics endpoints (`summary`, `quarterly`, `monthly-review`, `category-year`) run the same booking for the caller's household, limited to **completed** months, before they calculate — so a cron outage cannot silently distort review and carryover. The current month is left to the cron and shows up as "planned" on the dashboard until then.
 
@@ -1101,7 +1155,12 @@ Remove a skip (un-skip a month). Uses `deleteMany` — the response is `204` whe
 
 `/api/budgets` manages **legacy per-month** category budgets (`Budget` rows with a category). The app's `/budgets` page works with [Budget Plans](#budget-plans) instead; a per-month budget only applies to categories without a plan. "Spent" per category is the same figure everywhere (dashboard, review, yearly table, budget alert): the bookings of the category classified as outcome in the Europe/Berlin month, across all accounts of the household — a refund does not reduce it.
 
-**Known limitation — budget alerts:** the push budget alert (80 % / 100 %, checked after `POST /api/transactions`) reads only a per-month `Budget` row for the booking's category, month and year on the booking's account. **Budget plans never trigger an alert.** Its "spent" figure is the dashboard's: booked outcome of the category plus recurring occurrences still planned for the month.
+**Budget alerts:** a push notification is sent when a category reaches 80 % or 100 % of its budget in the current Europe/Berlin month. A booking in any other month — an old booking corrected later, or one dated into the past or future — triggers nothing: no push, no log entry, and the budgets are not loaded. The budget is the one the dashboard shows — the category's [budget plan](#budget-plans), otherwise the household's per-month rows added up — and "spent" is the dashboard's figure too: booked outcome of the category plus recurring occurrences still planned for the month.
+
+- **Checked after** `POST /api/transactions`, `PATCH /api/transactions/[id]` (for the category and month the booking is in after the edit, if that is the current month), each booked group of `POST /api/transactions/batch`, and the purchase booked by `POST /api/saving-plan/[id]/complete`. Sync and automatically booked recurring transactions do not trigger the check.
+- **Sent to** every member of the household who has `notifyBudgetAlerts` on (see [Push & Notifications](#push--notifications)), each in their own `locale` — not only to the person who booked. Suspended and deleted users get nothing.
+- **Once per threshold:** a threshold is announced once per household, category and month, whoever books and on whichever account. Only the highest threshold reached is announced; lower ones count as announced. Thresholds announced before this keying was introduced stay announced.
+- A push failure never fails the request that triggered it. Each send to a push service waits at most 5 seconds; a timeout counts as a failed send and keeps the subscription (only `404`/`410` remove it).
 
 ### `GET /api/budgets`
 
@@ -1137,7 +1196,7 @@ List **all** budget rows of the household — including saving goals (`categoryI
 
 ### `POST /api/budgets`
 
-Create a new category budget for a month. (Saving goals are created via `POST /api/saving-plan` instead.)
+Create a new category budget for a month. (Saving goals are created via `POST /api/saving-plan` instead.) With a `categoryId`, the completed months that have no snapshot yet are frozen first (see [Budget Plans](#budget-plans)), so a row for a month that is over does not change that month's frozen budget.
 
 **Auth required:** Yes
 
@@ -1179,7 +1238,13 @@ There is **no `title` field** in the schema — the DB default `""` is used.
 
 Standing per-category budgets (`MONTHLY` or `YEARLY`); the plan takes precedence over a per-month budget from `/api/budgets`, which only applies to categories without a plan (legacy rows are read for all accounts of the household and summed per category and month). All endpoints require auth (`401`) and are household-scoped. Calculation: `docs/calculations/06-budgets.md`.
 
-Plans have no start date and apply to every month, also closed ones. The monthly shares of a `YEARLY` plan are derived on every read from the **current** recurring templates of that year, so they move — for closed months too — when a template is added, edited, deleted or skipped; the yearly sum stays the same.
+**Completed months are frozen.** Plans have no start date and no history, and the monthly shares of a `YEARLY` plan are derived from the recurring templates of that year. So that the budget of a month that is over does not change afterwards, the analytics endpoints (`summary`, `monthly-review`, `category-year`) and the budget alert read a stored snapshot for every month before the current Europe/Berlin month. A month's snapshot is written the first time the month is read after it ended — and when the current month is read, for the month just before it, so a month freezes as soon as it is over and anyone opens the app. A month that was never read freezes with the plans and templates as they are at that first read; "no budgets" is frozen as well. The current and future months are computed on every read.
+
+**Frozen before every change.** Before anything changes what budgets are computed from — creating, editing or deleting a budget plan, creating a per-month budget with a category, merging a category or deleting it with a fallback, and creating, editing or deleting a recurring transaction (also via make-recurring) — every completed month without a snapshot is frozen with the figures as they are before the change: from the Europe/Berlin month of the household's earliest non-deleted booking through the month before the current one. Months that already have a snapshot keep it. So a plan edit never reaches the month that just ended, even if nobody opened the app since, and months from before snapshots existed keep their budgets. When all months are frozen this costs one query; otherwise the missing months are computed once per year. Concurrent calls are safe (`ON CONFLICT DO NOTHING`).
+
+After a plan or template was edited during a year, the twelve monthly values shown for a `YEARLY` plan therefore need not add up to the yearly amount. A category deleted later is left out of a frozen month; a merged category's amount is added to the target's.
+
+`GET /api/budget-plans` itself (the preview below) always shows the distribution computed from the current plans and templates.
 
 ### `GET /api/budget-plans?year=YYYY`
 
@@ -1266,10 +1331,10 @@ List the saving goals of the household plus the computed plan totals. Saving goa
 (Example read in August 2026 with no savings booked yet that month: `ceil((300000 − 85000) / 10 months) = 21500`.)
 
 - `goals` contains active goals **with** a target date (`month`/`year` set); `undatedGoals` contains active goals **without** one (idea backlog, same fields); `completedGoals` contains closed goals.
-- `transactionSpentCents` is the absolute sum of the **not deleted** transactions linked to the goal via `savingGoalId`.
-- `totals.rawAvailableCents` is the raw savings balance: the negated sum of all bookings in all savings categories of the household (deposits are stored negative, withdrawals positive). `availableCents = max(rawAvailableCents − withdrawnForCompletedCents, 0)` is the pool for the remaining active goals; `withdrawnForCompletedCents` is the sum of `spentCents` of all completed goals.
+- `transactionSpentCents` is what was spent on the goal: the outcome of the **not deleted** transactions linked to it via `savingGoalId` minus the refunds linked to it, never below `0`. Linked bookings in a savings category (deposits, withdrawals) do not count.
+- `totals.rawAvailableCents` is the savings pool: the negated sum of all bookings in all savings categories of the household (deposits are stored negative, withdrawals positive). Completing a goal takes its money out with a real withdrawal booking, so for most households `availableCents` equals `rawAvailableCents`. `withdrawnForCompletedCents` is a legacy figure: the amount still held back by goals that were completed before withdrawals were booked (`reservedCents`, set once by the migration; `0` for everyone else). `availableCents = max(rawAvailableCents − withdrawnForCompletedCents, 0)`.
 - `totalTargetCents` and `suggestedMonthlyCents` consider only active **dated** goals — undated goals are excluded from the forward-looking plan.
-- `suggestedMonthlyCents` is the amount to set aside in each remaining month, the current one included. It is measured against the pool **as it stood at the start of the current Europe/Berlin month** (`availableCents` minus this month's net deposits), so the rate does not drop as soon as the user saves. See `docs/calculations/07-sparziele.md`.
+- `suggestedMonthlyCents` is the amount to set aside in each remaining month, the current one included. It is measured against what was **covered at the start of the current Europe/Berlin month**: `max(availableCents − this month's gross deposits, 0)`. Deposits are counted without subtracting this month's withdrawals — a withdrawal (including the one booked when a goal is completed) stays taken out of the pool — so the rate neither drops as soon as the user saves nor when another goal is completed that month. In a month with only withdrawals the pool counts as it is. See `docs/calculations/07-sparziele.md`.
 
 **Error responses:**
 
@@ -1319,7 +1384,7 @@ Create a new saving goal. Target date and amount are optional — a goal without
 
 ### `GET /api/saving-plan/[id]`
 
-Get a single saving goal by ID. Only `Budget` rows without a category are goals; the ID of a category budget yields `404` (also for `PATCH`, `DELETE` and the `complete` routes).
+Get a single saving goal by ID. Only `Budget` rows without a category are goals; the ID of a category budget yields `404`, and so does a deleted goal (also for `PATCH`, `DELETE` and the `complete` routes).
 
 **Auth required:** Yes
 
@@ -1331,7 +1396,7 @@ Get a single saving goal by ID. Only `Budget` rows without a category are goals;
 |---|---|
 | `401` | Not authenticated |
 | `403` | Goal belongs to another household (`"Forbidden"`) |
-| `404` | Goal does not exist, or the row is a category budget |
+| `404` | Goal does not exist or was deleted, or the row is a category budget |
 
 ---
 
@@ -1367,13 +1432,13 @@ Update a saving goal. Partial update with **null-clearing semantics**: omitting 
 | `400` | Validation failed |
 | `401` | Not authenticated |
 | `403` | Goal belongs to another household (`"Forbidden"`) |
-| `404` | Goal does not exist, or the row is a category budget |
+| `404` | Goal does not exist or was deleted, or the row is a category budget |
 
 ---
 
 ### `DELETE /api/saving-plan/[id]`
 
-Delete a saving goal. This is a **soft delete** (`deletedAt`); linked transactions are not deleted and keep their `savingGoalId`.
+Delete a saving goal. This is a **soft delete** (`deletedAt`); linked transactions are not deleted and keep their `savingGoalId`. The withdrawal booked when a goal was completed stays as well — the money did leave the pool. To get it back into the pool, reopen the goal before deleting it or delete the withdrawal in the transaction list. (A goal completed before withdrawals were booked stops holding back its `reservedCents` once it is deleted.)
 
 **Auth required:** Yes
 
@@ -1385,61 +1450,85 @@ Delete a saving goal. This is a **soft delete** (`deletedAt`); linked transactio
 |---|---|
 | `401` | Not authenticated |
 | `403` | Goal belongs to another household (`"Forbidden"`) |
-| `404` | Goal does not exist, or the row is a category budget |
+| `404` | Goal does not exist or was deleted, or the row is a category budget |
 
 ---
 
 ### `POST /api/saving-plan/[id]/complete`
 
-Mark a saving goal as completed. Sets `completedAt` to the instant of the request and stores the withdrawn amount as `spentCents`.
+Complete a saving goal. Sets `completedAt` to the instant of the request, stores what the goal cost as `spentCents`, and takes the money out of the savings pool with a real booking — the pool always equals the sum of the savings bookings. Goal update and bookings happen in one database transaction.
 
 **Auth required:** Yes (any member of the goal's household)
 
 **Request body:**
 ```json
 {
-  "spentCents": 115000
+  "spentCents": 115000,
+  "withdraw": true,
+  "expense": { "categoryId": "cat_09" }
 }
 ```
 
 | Field | Type | Constraints |
 |---|---|---|
-| `spentCents` | integer | Required; `>= 0`, within `int4`. Amount actually withdrawn from the savings pool on completion. Not capped by the pool |
+| `spentCents` | integer | Required; `>= 0`, within `int4`. What the goal cost in the end |
+| `withdraw` | boolean | Optional, default `true`. `true`: book a withdrawal of `min(spentCents, pool available right now)` — a **positive** transaction in the household's savings category (the oldest, if several), dated now, on the goal's account, described `Sparziel: <title>`. Nothing is booked if that amount is `0`. The booking is not linked to the goal via `savingGoalId`; its ID is kept in the goal's `withdrawalTransactionId`. `false`: the money was already taken out (e.g. via `POST /api/saving-plan/withdraw`), nothing is booked |
+| `expense` | object or null | Optional. When given and `spentCents > 0`, the purchase is booked as well: a **negative** transaction of `spentCents`, described with the goal's title, linked to the goal (`savingGoalId`), dated now. Afterwards the budget alert of its category is checked (see [Budgets](#budgets)) |
+| `expense.categoryId` | string or null | Required inside `expense`; must belong to the household and must not be a savings category. `null` books the purchase without a category. The transaction inherits `isTaxRelevant` of the category |
+| `expense.accountId` | string | Optional; must belong to the household. Defaults to the goal's account |
 
-**Success response — `200 OK`:**
+**Success response — `200 OK`:** the updated goal (`Budget` row) plus `withdrawnCents` and `expenseTransactionId`:
 ```json
 {
   "id": "bud_05",
+  "accountId": "acc_01",
+  "categoryId": null,
+  "title": "Urlaub 2027",
+  "month": 6,
+  "year": 2027,
+  "amountCents": 120000,
   "completedAt": "2026-03-20T10:00:00.000Z",
-  "spentCents": 115000
+  "spentCents": 115000,
+  "withdrawalTransactionId": "txn_77",
+  "reservedCents": null,
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-03-20T10:00:00.000Z",
+  "deletedAt": null,
+  "withdrawnCents": 115000,
+  "expenseTransactionId": "txn_78"
 }
 ```
 
-**Known limitation:** Completing a goal does **not** create a transaction. `spentCents` is a snapshot reserved out of the computed savings pool that funds the remaining active goals; the raw savings balance and the real account balance are unchanged. Consequences: once a goal was completed, `availableCents` can no longer be derived from the savings bookings alone; withdrawing the money via `POST /api/saving-plan/withdraw` **and** completing the goal with the same amount subtracts it twice; reopening a goal releases its reservation. See `docs/calculations/07-sparziele.md`.
+`withdrawnCents` is the amount actually taken out of the pool (less than `spentCents` if the pool held less, `0` with `withdraw: false`); `withdrawalTransactionId` is `null` when nothing was withdrawn. `expenseTransactionId` is `null` when no purchase was booked. `reservedCents` is never set by a completion.
+
+Deposit (negative), withdrawal (positive) and purchase (negative) together lower the account balance by the purchase amount once. If the purchase was already booked by hand, complete without `expense`.
 
 **Error responses:**
 
 | Status | Reason |
 |---|---|
-| `400` | Validation failed (`spentCents` missing, negative or beyond `int4`) |
+| `400` | Validation failed (`spentCents` missing, negative or beyond `int4`; malformed `withdraw` or `expense`; a body that is not JSON), or `expense.categoryId` is a savings category |
 | `401` | Not authenticated |
 | `403` | Goal belongs to another household |
-| `404` | Goal not found, or the row is a category budget |
+| `404` | Goal not found or deleted, or the row is a category budget; `expense.categoryId` or `expense.accountId` not found / not in the household |
+| `409` | The goal is already completed (`"Goal already completed"`) — also for a second completion sent at the same moment; nothing is booked |
 
 ---
 
 ### `DELETE /api/saving-plan/[id]/complete`
 
-Reopen a completed saving goal. Resets `completedAt = null` and `spentCents = null`, returning the goal to the active plan and releasing its reservation in the savings pool.
+Reopen a completed saving goal. Clears `completedAt`, `spentCents`, `withdrawalTransactionId` and `reservedCents`, returning the goal to the active plan. If a withdrawal was booked on completion, it is soft-deleted, so the money is back in the pool; for a goal completed before withdrawals were booked, clearing `reservedCents` releases the amount it held back. A purchase booked through `expense` is left alone — it is an ordinary transaction that can be deleted in the list.
 
 **Auth required:** Yes (any member of the goal's household)
 
-**Success response — `200 OK`:**
+**Success response — `200 OK`:** the updated goal (`Budget` row, same fields as above without `withdrawnCents` and `expenseTransactionId`):
 ```json
 {
   "id": "bud_05",
   "completedAt": null,
-  "spentCents": null
+  "spentCents": null,
+  "withdrawalTransactionId": null,
+  "reservedCents": null
 }
 ```
 
@@ -1449,13 +1538,13 @@ Reopen a completed saving goal. Resets `completedAt = null` and `spentCents = nu
 |---|---|
 | `401` | Not authenticated |
 | `403` | Goal belongs to another household |
-| `404` | Goal not found, or the row is a category budget |
+| `404` | Goal not found or deleted, or the row is a category budget |
 
 ---
 
 ### `POST /api/saving-plan/withdraw`
 
-Withdraw money from the savings pool back into everyday spending. Creates a **positive** transaction in a savings category of the household (money returns from the pool to the account), dated at the instant of the request; analytics treat it as a reduction of net savings, not as income. If the household has several savings categories, the booking goes to the oldest one. The cap is the household's pool — all savings categories, all accounts, minus what completed goals reserved (`totals.availableCents` of `GET /api/saving-plan`).
+Withdraw money from the savings pool back into everyday spending. Creates a **positive** transaction in a savings category of the household (money returns from the pool to the account), dated at the instant of the request; analytics treat it as a reduction of net savings, not as income. If the household has several savings categories, the booking goes to the oldest one. The cap is the household's pool — all savings categories, all accounts, minus what goals completed before withdrawals were booked still hold back (`totals.availableCents` of `GET /api/saving-plan`). Cap check and booking run in one database transaction under the household's pool lock, so two withdrawals sent at the same moment cannot both use the same money: if several together exceed the pool, only as many go through as fit, the others get `409`.
 
 **Auth required:** Yes
 
@@ -1497,7 +1586,7 @@ Withdraw money from the savings pool back into everyday spending. Creates a **po
 
 Current-month financial summary for the dashboard — what is booked, plus the recurring occurrences still **planned** for the month as a projection. **No query parameters** — the route always evaluates the current calendar month in Europe/Berlin, across **all accounts of the household**. Full field-by-field description: `docs/calculations/04-analytics-summary.md`.
 
-Before calculating, the route books due, never-booked recurring occurrences of **completed** months for the household (see `POST /api/cron/materialize-recurring`) — this `GET` can write.
+Before calculating, the route books due, never-booked recurring occurrences of **completed** months for the household (see `POST /api/cron/materialize-recurring`) — this `GET` can write. It never links a hand-entered booking to a recurring transaction; look-alikes are only returned as `recurringSuggestions`.
 
 **Auth required:** Yes
 
@@ -1537,6 +1626,17 @@ Before calculating, the route books due, never-booked recurring occurrences of *
   "recurringDueOutcomeTotal": 910,
   "recurringDueCount": 2,
   "projectedSavingsTotal": 500,
+  "recurringSuggestions": [
+    {
+      "recurringId": "rec_02",
+      "period": "2026-05",
+      "dueDay": "2026-05-20",
+      "transactionId": "txn_40",
+      "transactionDescription": "Strom Mai",
+      "transactionOccurredAt": "2026-05-18T10:00:00.000Z",
+      "amountCents": -6000
+    }
+  ],
   "daily": {
     "labels": ["1", "2", "3"],
     "income": [3200, 3200, 3200],
@@ -1546,7 +1646,7 @@ Before calculating, the route books due, never-booked recurring occurrences of *
 }
 ```
 
-(In this example the rent template was already booked on the 1st and the electricity template is due on the 20th.)
+(In this example the rent template was already booked on the 1st and the electricity template is due on the 20th; the bookings of the example are not all listed, `recurringSuggestions` only shows the shape.)
 
 Notable semantics:
 
@@ -1558,6 +1658,7 @@ Notable semantics:
 - `outgoingByCategory` is an array: booked outcome plus planned recurring outcome per category; bookings and planned templates without a category go to `id: "uncategorized"`. Its amounts add up to `projectedOutcomeTotal`. Savings and income (including refunds) are not part of it.
 - `categoryBudgets`: one entry per category with an effective budget (budget plan first; a per-month budget only for categories without a plan), also when `spent` is 0. `spent` is the same figure as in `outgoingByCategory` (booked plus planned). `diff` = `spent − budget` (positive = over budget).
 - `plannedSavings` is the sum of the target amounts of all active saving goals whose target month is the current month; `completedGoals` are the goals whose `completedAt` falls into the current month.
+- **Suggestions:** `recurringSuggestions` lists, for every occurrence that is due this month, not booked, not skipped and not before `bookFromPeriod` (also before its due day), the hand-entered booking that looks like it (see "Hand-entered payments" under Recurring Transactions), at most one occurrence per booking; empty array when there are none. `period` is `YYYY-MM`, `dueDay` `yyyy-mm-dd` (both Europe/Berlin), `transactionOccurredAt` an ISO instant, `amountCents` in cents. Computing them writes nothing. Until the user confirms (`POST /api/recurring-transactions/[id]/link-booking`), the figures are unchanged: the booking counts as booked and the occurrence as planned, so the projection holds the amount twice.
 - `daily` holds cumulative running totals per calendar day. It is still returned, but **no UI consumes it**.
 
 **Error responses:**
@@ -1824,7 +1925,7 @@ Two-way offline sync (Phase 3b). Write-path v1 covers **transactions** only (the
 
 ### `POST /api/sync/push`
 
-Applies a FIFO batch of local transaction mutations.
+Applies a FIFO batch of local transaction mutations. `occurredAt` is read like in `POST /api/transactions` (a bare calendar day means 12:00 Europe/Berlin); an operation with an unreadable date is answered with `status: "conflict"` for that operation only.
 
 **Body:** `{ "ops": PushOp[] }` (1–100 ops), where each op is:
 ```json

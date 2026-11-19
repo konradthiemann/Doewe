@@ -45,7 +45,15 @@ flowchart TD
 **Schreibender GET:** Der erste Schritt bucht fällige, nie gebuchte Vorkommen abgeschlossener Monate
 nach, bevor gerechnet wird (siehe
 [03-wiederkehrende-transaktionen.md](./03-wiederkehrende-transaktionen.md), „Selbstheilung beim
-Lesen"). Der laufende Monat wird hier nicht gebucht.
+Lesen"). Der laufende Monat wird hier nicht gebucht. Sonst schreibt die Route nichts.
+
+**Von Hand erfasste Zahlungen:** Sieht eine von Hand erfasste Buchung aus wie ein offenes Vorkommen
+des laufenden Monats (gleiches Konto, gleicher Betrag, gleiche Kategorie, bis zu 7 Tage um den
+Fälligkeitstag — siehe dort „Vorschlag und Bestätigung"), steht sie in `recurringSuggestions`. Die
+Route verknüpft sie nicht; das tut erst der Nutzer mit
+`POST /api/recurring-transactions/[id]/link-booking`. Bis dahin zählt die Buchung als gebucht und das
+Vorkommen als geplant — die Hochrechnung enthält den Betrag zweimal, und der Vorschlag weist darauf
+hin. Nach der Bestätigung ist das Vorkommen gebucht und fällt aus „geplant".
 
 ## Alle Kennzahlen im Detail
 
@@ -211,12 +219,17 @@ nicht Teil des Abgleichs in Grundregeln §6.
   recurringDueIncomeTotal: number,
   recurringDueOutcomeTotal: number,
   recurringDueCount: number,
+  recurringSuggestions: {            // von Hand erfasste Zahlungen, die ein geplantes Vorkommen sein könnten
+    recurringId, period /* JJJJ-MM */, dueDay /* jjjj-mm-tt */,
+    transactionId, transactionDescription, transactionOccurredAt /* ISO */, amountCents
+  }[],
   projectedSavingsTotal: number,     // monthlySavingsActual + recurringPlannedSavings
   daily: { labels, income, outcome, savings }
 }
 ```
 
-Alle Geldfelder sind Euro, außer `recurringTransactions[].amountCents`.
+Alle Geldfelder sind Euro, außer `recurringTransactions[].amountCents` und
+`recurringSuggestions[].amountCents` (Cents).
 
 ## Simulationsbeispiel
 

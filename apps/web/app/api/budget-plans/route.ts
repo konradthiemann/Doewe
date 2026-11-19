@@ -17,6 +17,9 @@
  *   201 Plan-DTO | 400 (Validierung / "Category not budgetable") | 404 "Category not found"
  *   | 409 "Budget plan already exists for category". Ein soft-gelöschter Plan derselben
  *   Kategorie wird wiederbelebt (gleiche id).
+ *
+ * Vor dem Schreiben werden alle abgeschlossenen Monate ohne Snapshot eingefroren
+ * (freezePastMonths): ein neuer Plan wirkt nur auf den laufenden und künftige Monate.
  */
 import {
   isSavingsCategoryName,
@@ -27,6 +30,7 @@ import {
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../lib/auth";
+import { freezePastMonths } from "../../../lib/categoryBudgets";
 import { prisma } from "../../../lib/prisma";
 import { loadRecurringYearMatrix } from "../../../lib/recurringYear";
 
@@ -99,6 +103,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Budget plan already exists for category" }, { status: 409 });
   }
 
+  // Months that are over keep the budgets they had without this plan.
+  await freezePastMonths(user.householdId);
   const plan = existing
     ? await prisma.categoryBudgetPlan.update({
         where: { id: existing.id },

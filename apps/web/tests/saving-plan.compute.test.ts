@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeSavingPlanTotals, type SavingPlanGoal } from "../app/api/saving-plan/compute";
+import { computeSavingPlanTotals, linkedSpentCents, type SavingPlanGoal } from "../app/api/saving-plan/compute";
 
 // Reference instant: 15 Jan 2026, 13:00 in Berlin → current month = January 2026.
 // Fixed UTC instants (not `new Date(y, m, d)`), so the suite reads the same
@@ -11,34 +11,43 @@ function activeGoal(amountCents: number, monthsAhead: number): SavingPlanGoal {
   return {
     amountCents,
     completedAt: null,
-    spentCents: null,
+    reservedCents: null,
     month: 1 + monthsAhead,
     year: 2026
   };
 }
 
-function completedGoal(amountCents: number, spentCents: number): SavingPlanGoal {
+/**
+ * A goal completed before withdrawals were booked: the migration copied what it
+ * had withdrawn on paper into `reservedCents`.
+ */
+function legacyCompletedGoal(amountCents: number, reservedCents: number): SavingPlanGoal {
   return {
     amountCents,
     completedAt: new Date("2026-01-10T12:00:00.000Z"),
-    spentCents,
+    reservedCents,
     month: 1,
     year: 2026
   };
+}
+
+/** A goal completed since: its money left the pool as a booking, nothing is held back. */
+function completedGoal(amountCents: number): SavingPlanGoal {
+  return { ...legacyCompletedGoal(amountCents, 0), reservedCents: null };
 }
 
 function undatedGoal(amountCents: number | null): SavingPlanGoal {
   return {
     amountCents,
     completedAt: null,
-    spentCents: null,
+    reservedCents: null,
     month: null,
     year: null
   };
 }
 
 function datedGoal(amountCents: number, month: number, year: number): SavingPlanGoal {
-  return { amountCents, completedAt: null, spentCents: null, month, year };
+  return { amountCents, completedAt: null, reservedCents: null, month, year };
 }
 
 describe("computeSavingPlanTotals", () => {
@@ -52,8 +61,21 @@ describe("computeSavingPlanTotals", () => {
     expect(totals.suggestedMonthlyCents).toBe(40000);
   });
 
-  it("excludes completed goals from the planned total and reserves their withdrawal", () => {
-    const goals = [activeGoal(120000, 3), completedGoal(300000, 200000)];
+  it("takes nothing out of the pool for a completed goal: its withdrawal is a booking", () => {
+    // 2,000 € are in the pool after the goal's withdrawal was booked.
+    const goals = [activeGoal(120000, 3), completedGoal(300000)];
+    const totals = computeSavingPlanTotals(goals, 200000, NOW);
+
+    // completed goal's 300000 must NOT be in the planned total
+    expect(totals.totalTargetCents).toBe(120000);
+    expect(totals.rawAvailableCents).toBe(200000);
+    expect(totals.withdrawnForCompletedCents).toBe(0);
+    expect(totals.availableCents).toBe(200000);
+    expect(totals.suggestedMonthlyCents).toBe(0);
+  });
+
+  it("excludes completed goals from the planned total and holds back a legacy reservation", () => {
+    const goals = [activeGoal(120000, 3), legacyCompletedGoal(300000, 200000)];
     const totals = computeSavingPlanTotals(goals, 200000, NOW);
 
     // completed goal's 300000 must NOT be in the planned total
@@ -64,8 +86,15 @@ describe("computeSavingPlanTotals", () => {
     expect(totals.suggestedMonthlyCents).toBe(40000);
   });
 
-  it("floors available at 0 when an overspend exceeds the savings balance", () => {
-    const totals = computeSavingPlanTotals([completedGoal(300000, 500000)], 400000, NOW);
+  it("ignores reservedCents on a goal that is not completed", () => {
+    const totals = computeSavingPlanTotals([{ ...activeGoal(120000, 3), reservedCents: 50000 }], 100000, NOW);
+
+    expect(totals.withdrawnForCompletedCents).toBe(0);
+    expect(totals.availableCents).toBe(100000);
+  });
+
+  it("floors available at 0 when a legacy reservation exceeds the savings balance", () => {
+    const totals = computeSavingPlanTotals([legacyCompletedGoal(300000, 500000)], 400000, NOW);
 
     expect(totals.rawAvailableCents).toBe(400000);
     expect(totals.withdrawnForCompletedCents).toBe(500000);
@@ -76,7 +105,7 @@ describe("computeSavingPlanTotals", () => {
   });
 
   it("uses the adjusted available pool to lower the suggested monthly rate", () => {
-    const goals = [activeGoal(120000, 3), completedGoal(50000, 50000)];
+    const goals = [activeGoal(120000, 3), legacyCompletedGoal(50000, 50000)];
     const totals = computeSavingPlanTotals(goals, 110000, NOW);
 
     expect(totals.availableCents).toBe(60000); // 110000 - 50000 reserved
@@ -143,16 +172,32 @@ describe("computeSavingPlanTotals — rate against the pool at the start of the 
     expect(totals.suggestedMonthlyCents).toBe(45000);
   });
 
-  it("does not ignore a net withdrawal this month", () => {
-    // 500 € saved before November, 200 € withdrawn in November → pool 300 €.
-    // The withdrawn money is gone: (1200 − 300) / 2 = 450, not (1200 − 500) / 2.
-    const totals = computeSavingPlanTotals(goals, 30000, NOVEMBER, -20000);
+  it("uses the pool as it is in a month with only a withdrawal", () => {
+    // 500 € saved before November, 200 € withdrawn in November → pool 300 €,
+    // nothing deposited this month. The withdrawn money is gone:
+    // (1200 − 300) / 2 = 450, not (1200 − 500) / 2.
+    const totals = computeSavingPlanTotals(goals, 30000, NOVEMBER, 0);
     expect(totals.suggestedMonthlyCents).toBe(45000);
   });
 
+  it("does not lower the rate when a goal is completed in the month of a deposit", () => {
+    // Pool 500 € on 1 Nov (it belonged to goal A), 300 € deposited in November,
+    // A completed for 500 € (a booked withdrawal) → pool 300 €. Goal B: 1,200 €
+    // due February 2027, three months open. Covered at the start of November:
+    // 300 − 300 = 0, so 1200 / 3 = 400 — the withdrawal does not cancel the deposit.
+    const withB = [datedGoal(120000, 2, 2027), { ...datedGoal(50000, 11, 2026), completedAt: NOVEMBER }];
+    const totals = computeSavingPlanTotals(withB, 30000, NOVEMBER, 30000);
+    expect(totals.availableCents).toBe(30000);
+    expect(totals.suggestedMonthlyCents).toBe(40000);
+  });
+
+  it("treats a negative deposit figure as no deposit", () => {
+    expect(computeSavingPlanTotals(goals, 30000, NOVEMBER, -20000).suggestedMonthlyCents).toBe(45000);
+  });
+
   it("never treats more than the available pool as deposited this month", () => {
-    // 400 € deposited this month, then a goal completed with 300 € → 100 € available.
-    const withCompleted = [...goals, { ...datedGoal(30000, 11, 2026), completedAt: NOVEMBER, spentCents: 30000 }];
+    // 400 € deposited this month, 300 € held back by a legacy goal → 100 € available.
+    const withCompleted = [...goals, { ...datedGoal(30000, 11, 2026), completedAt: NOVEMBER, reservedCents: 30000 }];
     const totals = computeSavingPlanTotals(withCompleted, 40000, NOVEMBER, 40000);
 
     expect(totals.availableCents).toBe(10000);
@@ -179,5 +224,27 @@ describe("computeSavingPlanTotals — rate against the pool at the start of the 
     // itself, the year has already turned → at least one month.
     const newYearBerlin = new Date("2026-12-31T23:30:00.000Z");
     expect(computeSavingPlanTotals(goals, 0, newYearBerlin).suggestedMonthlyCents).toBe(120000);
+  });
+});
+
+describe("linkedSpentCents — what was spent on a goal", () => {
+  const SAVINGS = new Set(["cat-savings"]);
+  const row = (amountCents: number, categoryId: string | null = "cat-travel") => ({ amountCents, categoryId });
+
+  it("adds up the linked expenses, with or without a category", () => {
+    expect(linkedSpentCents([row(-20000), row(-5000, null)], SAVINGS)).toBe(25000);
+  });
+
+  it("subtracts a linked refund instead of adding it", () => {
+    expect(linkedSpentCents([row(-20000), row(5000)], SAVINGS)).toBe(15000);
+  });
+
+  it("is never negative", () => {
+    expect(linkedSpentCents([row(-5000), row(20000)], SAVINGS)).toBe(0);
+    expect(linkedSpentCents([], SAVINGS)).toBe(0);
+  });
+
+  it("does not count bookings in a savings category, deposit or withdrawal", () => {
+    expect(linkedSpentCents([row(-20000), row(-10000, "cat-savings"), row(7000, "cat-savings")], SAVINGS)).toBe(20000);
   });
 });

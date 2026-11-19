@@ -67,6 +67,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  // Budgets of completed months are frozen on first read (BudgetMonthSnapshot);
+  // each case sets up its own budgets for March 2025, so it starts unfrozen.
+  await prisma.budgetMonthSnapshot.deleteMany({ where: { householdId } });
   await prisma.categoryBudgetPlan.deleteMany({ where: { householdId } });
   await prisma.budget.deleteMany({ where: { accountId: ACCOUNT_ID } });
   await prisma.transaction.deleteMany({ where: { accountId: ACCOUNT_ID } });

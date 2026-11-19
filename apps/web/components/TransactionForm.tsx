@@ -15,6 +15,12 @@ import { appConfig } from "../lib/config";
 import { dateInputToISO, toDateInputValue } from "../lib/dateInput";
 import { useI18n } from "../lib/i18n";
 import { queueOfflineTransaction, type OfflineTransactionPayload } from "../lib/offline/queueOfflineTransaction";
+import {
+  backfillMonthCount,
+  dayOfStartDate,
+  isStartDateInRange,
+  moveStartDateToDay
+} from "../lib/recurringStart";
 import { transactionFormSchema, type TransactionFormValues } from "../lib/schemas/forms";
 
 import AttachmentManager, { uploadAttachment } from "./AttachmentManager";
@@ -22,6 +28,7 @@ import { MakeRecurringSection } from "./MakeRecurringSection";
 import SearchableSelect from "./SearchableSelect";
 import { Button } from "./ui/Button";
 import { FormActions } from "./ui/FormActions";
+import { InfoTip } from "./ui/InfoTip";
 
 const isReceiptScannerEnabled = process.env.NEXT_PUBLIC_RECEIPT_SCANNER_ENABLED === "1";
 
@@ -88,12 +95,12 @@ export default function TransactionForm({
   const [intervalMonths, setIntervalMonths] = useState(1);
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [startDate, setStartDate] = useState("");
+  const [backfill, setBackfill] = useState(false);
   const [recurringError, setRecurringError] = useState<string | null>(null);
   const [isSavingGoal, setIsSavingGoal] = useState(false);
   const [selectedSavingGoalId, setSelectedSavingGoalId] = useState("");
   const [taxRelevant, setTaxRelevant] = useState(transaction?.taxRelevant ?? false);
   const [taxTouched, setTaxTouched] = useState(false);
-  const [taxHintOpen, setTaxHintOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [attachmentUploadError, setAttachmentUploadError] = useState<string | null>(null);
   const initialCategoryIdRef = useRef(transaction?.categoryId ?? null);
@@ -122,6 +129,30 @@ export default function TransactionForm({
   });
 
   const categoryId = watch("categoryId");
+
+  // Standing order (create): "today" and the current month are the app's
+  // calendar (Europe/Berlin).
+  const today = useMemo(() => zonedDate(new Date()), []);
+  // The server rejects a start date more than 10 years from today.
+  const startDateOutOfRange = startDate !== "" && !isStartDateInRange(startDate, today);
+  // Past months are only booked on request; the question only arises for a
+  // start date in a month before the current one.
+  const backfillCount = startDate && !startDateOutOfRange ? backfillMonthCount(startDate, intervalMonths, today) : 0;
+  const showBackfill = backfillCount > 0;
+
+  // Day of month and start date must not contradict each other: the start date
+  // is the first booking, so the day follows it — and a day chosen afterwards
+  // moves the start date to that day within its month.
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+    setBackfill(false);
+    const day = dayOfStartDate(value);
+    if (day !== null) setDayOfMonth(day);
+  };
+  const handleDayOfMonthChange = (day: number) => {
+    setDayOfMonth(day);
+    if (startDate) setStartDate(moveStartDateToDay(startDate, day));
+  };
 
   // Defaults im Create-Mode setzen, sobald Referenzdaten aus dem Query-Cache da sind.
   useEffect(() => {
@@ -236,6 +267,11 @@ export default function TransactionForm({
       return;
     }
 
+    if (isRecurring && startDateOutOfRange) {
+      // The message is shown at the start-date field.
+      return;
+    }
+
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
     let uploadWarning: string | null = null;
     let queuedOffline = false;
@@ -264,6 +300,7 @@ export default function TransactionForm({
           intervalMonths,
           dayOfMonth,
           startDate: startDate || undefined,
+          ...(showBackfill ? { backfill } : {}),
         });
       } else {
         // Offline-Erfassen (Phase 3a): stabile Client-ID (cuid2) + Idempotency-Key.
@@ -367,6 +404,7 @@ export default function TransactionForm({
     intervalMonths: number;
     dayOfMonth: number;
     startDate?: string | undefined;
+    backfill?: boolean;
   }) {
     const res = await fetch("/api/recurring-transactions", {
       method: "POST",
@@ -606,9 +644,12 @@ export default function TransactionForm({
         )}
 
         <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="tx-category">
-            {t("transactionForm.categoryLabel")}
-          </label>
+          <div className="mb-1 flex items-center gap-2">
+            <label className="block text-sm font-medium" htmlFor="tx-category">
+              {t("transactionForm.categoryLabel")}
+            </label>
+            <InfoTip topic="form.booking" />
+          </div>
           <SearchableSelect
             id="tx-category"
             name="categoryId"
@@ -744,30 +785,22 @@ export default function TransactionForm({
         {!isRecurring && (
           <div className="space-y-3">
             <div className="rounded-field bg-warning-soft px-3 py-2 text-sm text-ink shadow-card">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">
-                    {t("transactionForm.taxToggleTitle")}
-                    <button
-                      type="button"
-                      onClick={() => setTaxHintOpen((open) => !open)}
-                      aria-expanded={taxHintOpen}
-                      aria-controls="tx-tax-hint"
-                      aria-label={t("transactionForm.taxHintToggle")}
-                      className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-warning text-xs font-semibold text-warning hover:bg-warning-soft focus:outline-none focus-visible:ring focus-visible:ring-warning"
-                    >
-                      i
-                    </button>
-                  </p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="min-w-0 font-medium">{t("transactionForm.taxToggleTitle")}</p>
+                    <InfoTip topic="form.tax" />
+                  </div>
                   <p className="text-xs text-ink-muted">
                     {t("transactionForm.taxToggleDescription")}
                   </p>
                 </div>
-                <label className="relative inline-flex cursor-pointer items-center">
+                <label className="relative inline-flex shrink-0 cursor-pointer items-center">
                   <input
                     type="checkbox"
                     className="sr-only peer"
                     checked={taxRelevant}
+                    aria-label={t("transactionForm.taxToggleTitle")}
                     onChange={(event) => {
                       setTaxRelevant(event.target.checked);
                       setTaxTouched(true);
@@ -778,11 +811,6 @@ export default function TransactionForm({
                   <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-transform peer-checked:translate-x-5" />
                 </label>
               </div>
-              {taxHintOpen && (
-                <p id="tx-tax-hint" className="mt-2 text-xs text-ink-muted">
-                  {t("transactionForm.taxHint")}
-                </p>
-              )}
             </div>
             {taxRelevant && (
               <AttachmentManager
@@ -797,18 +825,22 @@ export default function TransactionForm({
 
         {mode === "create" && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-field bg-brand-soft px-3 py-2 text-sm text-ink shadow-card">
-              <div>
-                <p className="font-medium">{t("transactionForm.recurringToggleTitle")}</p>
+            <div className="flex items-center justify-between gap-3 rounded-field bg-brand-soft px-3 py-2 text-sm text-ink shadow-card">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 font-medium">{t("transactionForm.recurringToggleTitle")}</p>
+                  <InfoTip topic="recurring.basics" />
+                </div>
                 <p className="text-xs text-ink-muted">
                   {t("transactionForm.recurringToggleDescription")}
                 </p>
               </div>
-              <label className="relative inline-flex cursor-pointer items-center">
+              <label className="relative inline-flex shrink-0 cursor-pointer items-center">
                 <input
                   type="checkbox"
                   className="sr-only peer"
                   checked={isRecurring}
+                  aria-label={t("transactionForm.recurringToggleTitle")}
                   onChange={(event) => setIsRecurring(event.target.checked)}
                   aria-checked={isRecurring}
                 />
@@ -828,6 +860,7 @@ export default function TransactionForm({
                   type="checkbox"
                   className="sr-only peer"
                   checked={isSavingGoal}
+                  aria-label={t("transactionForm.savingGoalToggleTitle")}
                   onChange={(event) => {
                     setIsSavingGoal(event.target.checked);
                     if (!event.target.checked) setSelectedSavingGoalId("");
@@ -892,7 +925,7 @@ export default function TransactionForm({
                     min={1}
                     max={31}
                     value={dayOfMonth}
-                    onChange={(event) => setDayOfMonth(Number(event.target.value))}
+                    onChange={(event) => handleDayOfMonthChange(Number(event.target.value))}
                     className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
                     aria-required="true"
                     aria-invalid={!!recurringError}
@@ -902,19 +935,47 @@ export default function TransactionForm({
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium" htmlFor="tx-start-date">
-                    {t("transactionForm.startDateLabel")}
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label className="block text-sm font-medium" htmlFor="tx-start-date">
+                      {t("transactionForm.startDateLabel")}
+                    </label>
+                    <InfoTip topic="recurring.startDate" />
+                  </div>
                   <input
                     id="tx-start-date"
                     type="date"
                     value={startDate}
-                    onChange={(event) => setStartDate(event.target.value)}
+                    onChange={(event) => handleStartDateChange(event.target.value)}
+                    aria-invalid={startDateOutOfRange}
+                    aria-describedby={startDateOutOfRange ? "tx-start-date-error" : undefined}
                     className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
                   />
                   <p className="text-xs text-ink-muted">
                     {t("transactionForm.startDateHelper")}
                   </p>
+                  {startDateOutOfRange && (
+                    <p id="tx-start-date-error" role="alert" className="text-xs text-danger">
+                      {t("recurringForm.errorStartDateRange")}
+                    </p>
+                  )}
+                  {showBackfill && (
+                    <div className="rounded-field border border-line bg-surface-2 p-3">
+                      <label className="flex items-start gap-2 text-sm font-medium text-ink">
+                        <input
+                          type="checkbox"
+                          checked={backfill}
+                          onChange={(event) => setBackfill(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-line-strong text-brand focus-visible:ring-brand"
+                        />
+                        <span className="min-w-0">{t("recurringForm.backfillLabel")}</span>
+                      </label>
+                      <p className="mt-1 text-xs text-ink-muted">
+                        {backfillCount === 1
+                          ? t("recurringForm.backfillHintOne")
+                          : t("recurringForm.backfillHintMany", { count: backfillCount })}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 {recurringError && (
                   <p id="tx-recurring-error" role="alert" className="text-sm text-danger">

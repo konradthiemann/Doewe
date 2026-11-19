@@ -5,10 +5,20 @@
  *
  * Authentifizierung: Pflicht (401). Fremder Haushalt: 403.
  * Ein Sparziel ist eine `Budget`-Zeile mit `categoryId = null`; ein
- * Kategorie-Budget ist hier kein Ziel und liefert 404.
+ * Kategorie-Budget ist hier kein Ziel und liefert 404. Ein gelöschtes Ziel
+ * (`deletedAt` gesetzt) ebenfalls: `findUnique` sieht gelöschte Zeilen, deshalb
+ * wird `deletedAt` hier ausdrücklich geprüft.
  *
  * PATCH Body: { title?, targetMonth?, targetYear?, amountCents? } — Monat und
  *   Jahr nur gemeinsam; `null` entfernt Termin bzw. Betrag.
+ *
+ * DELETE lässt alle Buchungen stehen. Das gilt auch für die Entnahme-Buchung
+ * eines abgeschlossenen Ziels (`withdrawalTransactionId`): Das Geld hat den
+ * Spartopf verlassen, der Topf bleibt also um diesen Betrag kleiner. Wer es
+ * zurück im Topf haben will, öffnet das Ziel vor dem Löschen wieder oder löscht
+ * die Entnahme in der Buchungsliste. Was ein vor den Entnahme-Buchungen
+ * abgeschlossenes Ziel zurückhält (`reservedCents`), wird dagegen mit dem
+ * Löschen frei, weil gelöschte Ziele nirgends mitzählen.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -62,7 +72,7 @@ export async function GET(
     }
   });
 
-  if (!goal || goal.categoryId !== null) {
+  if (!goal || goal.categoryId !== null || goal.deletedAt !== null) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 
@@ -99,7 +109,7 @@ export async function PATCH(
     include: { account: { select: { householdId: true } } }
   });
 
-  if (!goal || goal.categoryId !== null) {
+  if (!goal || goal.categoryId !== null || goal.deletedAt !== null) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 
@@ -163,7 +173,7 @@ export async function DELETE(
     include: { account: { select: { householdId: true } } }
   });
 
-  if (!goal || goal.categoryId !== null) {
+  if (!goal || goal.categoryId !== null || goal.deletedAt !== null) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 

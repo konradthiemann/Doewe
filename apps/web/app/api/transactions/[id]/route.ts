@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { checkBudgetAlerts } from "../../../../lib/budgetAlerts";
 import { prisma } from "../../../../lib/prisma";
 import { parseOccurredAt, TransactionInput } from "../schema";
 
@@ -53,6 +54,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         // nicht stillschweigend zurücksetzen (PATCH mit Voll-Body-Semantik).
         taxRelevant: data.taxRelevant ?? existing.taxRelevant
       }
+    });
+
+    // Budget alert, as after creating a booking: an edit can raise the spend of
+    // the category the booking is in now, in the month it is in now. Awaited
+    // (serverless handlers end before a detached send); errors are swallowed
+    // inside, the edit never fails on a push problem.
+    await checkBudgetAlerts({
+      householdId: user.householdId,
+      categoryId: updated.categoryId,
+      occurredAt: updated.occurredAt
     });
 
     return NextResponse.json(updated);

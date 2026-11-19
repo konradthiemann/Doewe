@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { freezePastMonths, mergeFrozenBudgets } from "../../../../lib/categoryBudgets";
 import { moveBudgetPlanToCategory } from "../../../../lib/categoryPlanMerge";
 import { prisma } from "../../../../lib/prisma";
 
@@ -63,11 +64,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     try {
+      // Months that are over keep the budgets they had: freeze the ones not
+      // frozen yet, then carry the source's frozen budgets over to the target,
+      // which takes the source's bookings of those months.
+      await freezePastMonths(user.householdId);
       await prisma.$transaction(async (tx) => {
         await tx.transaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategory.id } });
         await tx.recurringTransaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategory.id } });
         await tx.budget.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategory.id } });
         await moveBudgetPlanToCategory(tx, sourceCategory.id, targetCategory.id);
+        await mergeFrozenBudgets(tx, user.householdId, sourceCategory.id, targetCategory.id);
         await tx.category.delete({ where: { id: sourceCategory.id } });
       });
       return NextResponse.json(targetCategory);
@@ -163,11 +169,14 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
   }
 
   try {
+    // Same as a merge: the fallback takes the bookings, so it takes the frozen budgets too.
+    await freezePastMonths(user.householdId);
     await prisma.$transaction(async (tx) => {
       await tx.transaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategoryId } });
       await tx.recurringTransaction.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategoryId } });
       await tx.budget.updateMany({ where: { categoryId: sourceCategory.id }, data: { categoryId: targetCategoryId } });
       await moveBudgetPlanToCategory(tx, sourceCategory.id, targetCategoryId);
+      await mergeFrozenBudgets(tx, user.householdId, sourceCategory.id, targetCategoryId);
       await tx.category.delete({ where: { id: sourceCategory.id } });
     });
     return NextResponse.json({ success: true, fallbackCategoryId: targetCategoryId });

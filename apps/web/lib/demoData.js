@@ -172,7 +172,10 @@ async function ensureUserAndAccount(prisma) {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const user = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
-    update: { password: passwordHash, name: DEMO_NAME },
+    // The demo account must always work: if it was suspended or soft-deleted
+    // (e.g. through the admin API), signing in would still succeed but every
+    // request would be rejected as unauthenticated. Seeding revives it.
+    update: { password: passwordHash, name: DEMO_NAME, suspendedAt: null, deletedAt: null },
     create: { email: DEMO_EMAIL, name: DEMO_NAME, password: passwordHash }
   });
 
@@ -181,7 +184,7 @@ async function ensureUserAndAccount(prisma) {
   const householdId = `hh_${user.id}`;
   await prisma.household.upsert({
     where: { id: householdId },
-    update: {},
+    update: { deletedAt: null },
     create: { id: householdId, name: DEMO_NAME }
   });
   await prisma.householdMember.upsert({
@@ -192,7 +195,7 @@ async function ensureUserAndAccount(prisma) {
 
   const account = await prisma.account.upsert({
     where: { id: DEMO_ACCOUNT_ID },
-    update: { userId: user.id, householdId },
+    update: { userId: user.id, householdId, deletedAt: null },
     create: { id: DEMO_ACCOUNT_ID, name: "Demo Account", userId: user.id, householdId }
   });
 
@@ -217,7 +220,12 @@ async function clearAccountData(prisma, accountId) {
   await prisma.budget.deleteMany({ where: { accountId } });
   // Budget-Pläne hängen am Haushalt, nicht am Konto (Demo-Haushalt = Demo-Konto).
   const account = await prisma.account.findUnique({ where: { id: accountId }, select: { householdId: true } });
-  if (account) await prisma.categoryBudgetPlan.deleteMany({ where: { householdId: account.householdId } });
+  if (account) {
+    await prisma.categoryBudgetPlan.deleteMany({ where: { householdId: account.householdId } });
+    // Frozen budgets of past months belong to the data set that is being replaced.
+    await prisma.budgetMonthSnapshot.deleteMany({ where: { householdId: account.householdId } });
+    await prisma.budgetAlertLog.deleteMany({ where: { householdId: account.householdId } });
+  }
   // Recurring-Skips hängen per onDelete: Cascade an RecurringTransaction.
   await prisma.recurringTransaction.deleteMany({ where: { accountId } });
 }
@@ -444,7 +452,11 @@ function buildBudgets(accountId, categoryMap, now) {
       year,
       amountCents: spec.amountCents,
       completedAt: new Date(year, d.getMonth(), 20, 12, 0, 0),
-      spentCents: spec.spentCents
+      spentCents: spec.spentCents,
+      // The demo goals are completed without a withdrawal booking; the amount
+      // stays held back from the pool, as for goals completed before
+      // withdrawals were booked.
+      reservedCents: spec.spentCents
     });
   }
 

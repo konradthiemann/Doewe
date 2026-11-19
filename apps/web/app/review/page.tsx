@@ -10,6 +10,7 @@ import { CategoryBreakdown, type ReviewCategory, type ReviewCategoryTransaction 
 import TransactionForm from "../../components/TransactionForm";
 import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
 import { Dialog } from "../../components/ui/Dialog";
+import { InfoTip } from "../../components/ui/InfoTip";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { formatBookingDayMonth, formatMonth } from "../../lib/bookingDate";
@@ -314,7 +315,7 @@ function ReviewPage() {
                 >
                   {verdictConfig?.icon}
                 </span>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h2 id="review-verdict" className="text-base font-semibold text-ink">
                     {verdict ? t(verdictConfig!.titleKey) : ""}
                   </h2>
@@ -324,6 +325,7 @@ function ReviewPage() {
                       : ""}
                   </p>
                 </div>
+                <InfoTip topic="review.kpis" className="mt-1.5" />
               </div>
 
               {/* KPI grid: 2x2 below sm, 4 equal tiles from sm; values never wrap */}
@@ -372,11 +374,14 @@ function ReviewPage() {
 
               {/* Balance change footer */}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line pt-3 text-sm text-ink-muted">
-                <span className="whitespace-nowrap">
-                  {t("review.balanceAtStart")}:{" "}
-                  <span className="font-medium tabular-nums text-ink">
-                    {formatCurrency(data.balanceAtStartCents)}
+                <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                  <span>
+                    {t("review.balanceAtStart")}:{" "}
+                    <span className="font-medium tabular-nums text-ink">
+                      {formatCurrency(data.balanceAtStartCents)}
+                    </span>
                   </span>
+                  <InfoTip topic="review.balance" />
                 </span>
                 <span className="whitespace-nowrap">
                   {t("review.balanceAtEnd")}:{" "}
@@ -397,9 +402,12 @@ function ReviewPage() {
           {/* Category breakdown — the main part, full width */}
           <section aria-labelledby="review-categories">
             <div className="rounded-card border border-line bg-surface p-5">
-              <h2 id="review-categories" className="mb-4 text-lg font-medium">
-                {t("review.categoriesTitle")}
-              </h2>
+              <div className="mb-4 flex items-center gap-2">
+                <h2 id="review-categories" className="min-w-0 text-lg font-medium">
+                  {t("review.categoriesTitle")}
+                </h2>
+                <InfoTip topic="review.budgets" />
+              </div>
               {data.categories.length === 0 ? (
                 <p className="text-sm text-ink-muted">
                   {t("review.categoriesEmpty")}
@@ -577,7 +585,7 @@ function ReviewPage() {
                   ))}
                 </ul>
                 <p className="mt-3 text-sm text-ink-muted">
-                  {t("review.completedGoalsTotal", {
+                  {t("review.completedGoalsSpentTotal", {
                     amount: formatCurrency(data.completedGoalsSpentCents)
                   })}
                 </p>

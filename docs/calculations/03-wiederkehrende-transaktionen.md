@@ -6,9 +6,10 @@
 - `apps/web/app/api/recurring-transactions/skips/route.ts`
 - `apps/web/app/api/recurring-transactions/yearly/route.ts`, `export/route.ts`
 - `apps/web/app/api/transactions/[id]/make-recurring/route.ts` (Buchung → Dauerauftrag)
-- `packages/shared/src/recurringSchedule.ts` (Fälligkeit, Anker, Tag im Monat)
+- `apps/web/app/api/recurring-transactions/[id]/link-booking/route.ts` (Vorschlag bestätigen)
+- `packages/shared/src/recurringSchedule.ts` (Fälligkeit, Anker, Tag im Monat, Untergrenze, Regel für Vorschläge)
 - `packages/shared/src/recurringYear.ts`, `recurringExport.ts`, `apps/web/lib/recurringYear.ts` (Jahresmatrix, CSV)
-- `apps/web/lib/recurringBooking.ts` (automatisches Buchen)
+- `apps/web/lib/recurringBooking.ts` (automatisches Buchen, Vorschläge, Bestätigen)
 - `apps/web/lib/recurringPeriods.ts` (welche Vorkommen als gebucht gelten)
 - `apps/web/app/api/cron/materialize-recurring/route.ts` (täglicher Cron-Trigger)
 
@@ -25,6 +26,15 @@ Fällige Vorkommen werden **automatisch als echte `Transaction`-Zeile gebucht**,
 erreicht ist: täglich durch den Cron `materialize-recurring` und, für abgeschlossene Monate, beim
 Lesen der Auswertungen. Nur ein im laufenden Monat fälliges, noch nicht gebuchtes Vorkommen gilt als
 „geplant" und fließt in die Hochrechnung des Dashboards ein (siehe unten).
+
+Zwei Regeln schützen davor, dass dabei etwas doppelt in den Büchern landet:
+
+- **Kein ungefragtes Nachbuchen:** Ein Dauerauftrag, der in der Vergangenheit beginnt, wird erst ab
+  dem laufenden Monat gebucht — außer der Nutzer verlangt das Nachbuchen ausdrücklich (siehe
+  „Untergrenze").
+- **Von Hand erfasste Zahlung:** Sieht eine von Hand eingetragene Buchung aus wie ein offenes
+  Vorkommen, schlägt das Dashboard sie vor. Verknüpft wird sie erst, wenn der Nutzer bestätigt; dann
+  bucht der Dauerauftrag diesen Monat nicht mehr (siehe „Vorschlag und Bestätigung").
 
 ## Vorkommen: Dauerauftrag + Periode
 
@@ -51,7 +61,9 @@ Dashboard und in der Budget-Warnung.
 flowchart TD
     CRON["POST /api/cron/materialize-recurring\n(täglich, Authorization: Bearer CRON_SECRET)"] --> ALL["Alle nicht gelöschten RecurringTransaction-Zeilen\n(ohne den Demo-Account)"]
     ALL --> DUE["dueMonthsBetween(Anker-Monat, intervalMonths, bis zum heutigen Monat)\n→ jeder fällige Monat vom Anker bis jetzt"]
-    DUE --> DAY{"Fälligkeitstag erreicht?\n(dayOfMonth, auf die Monatslänge begrenzt,\nverglichen mit dem heutigen Berliner Kalendertag)"}
+    DUE --> FROM{"Monat vor bookFromPeriod?"}
+    FROM -->|ja| SKIP_FROM["Überspringen — wird nie automatisch gebucht"]
+    FROM -->|nein| DAY{"Fälligkeitstag erreicht?\n(dayOfMonth, auf die Monatslänge begrenzt,\nverglichen mit dem heutigen Berliner Kalendertag)"}
     DAY -->|nein| SKIP_FUTURE["Überspringen — noch nicht fällig"]
     DAY -->|ja| SKIPPED{"RecurringTransactionSkip\nfür diesen Monat?"}
     SKIPPED -->|ja| SKIP["Überspringen"]
@@ -70,13 +82,16 @@ flowchart TD
 - **Felder der Buchung:** Konto, Kategorie, Betrag und Beschreibung des Dauerauftrags;
   `taxRelevant` erbt die Steuer-Markierung der Kategorie (wie eine von Hand angelegte Buchung; eine
   gelöschte Kategorie gibt nichts weiter).
+- **Von Hand erfasste Buchungen** sieht der Lauf nicht an. Er bucht jedes offene Vorkommen, auch wenn
+  eine gleich aussehende Buchung schon da ist — verknüpft wird nur auf Bestätigung (siehe „Vorschlag
+  und Bestätigung").
 - **`?dryRun=true`** schreibt nichts und listet nur, was gebucht würde. Antwort in beiden Fällen:
-  `{ ok, dryRun, booked, occurrences }`.
+  `{ ok, dryRun, booked, occurrences }`; `booked` zählt die Einträge von `occurrences`.
 
 **Dieselbe Funktion holt den Tagesbetrieb und die Vergangenheit nach:** `dueMonthsBetween` listet
-jeden fälligen Monat vom Anker (`nextOccurrence`) bis heute. Ein Dauerauftrag, der seit Monaten nie
-gebucht wurde, bekommt beim ersten Lauf alle fehlenden Monate auf einmal nachgebucht — mit dem
-**aktuell hinterlegten Betrag** (kein historischer Betrags-Snapshot). Hat sich ein Betrag
+jeden fälligen Monat vom Anker (`nextOccurrence`) bis heute. Ein Dauerauftrag ohne Untergrenze, der
+seit Monaten nie gebucht wurde, bekommt beim ersten Lauf alle fehlenden Monate auf einmal nachgebucht
+— mit dem **aktuell hinterlegten Betrag** (kein historischer Betrags-Snapshot). Hat sich ein Betrag
 zwischenzeitlich geändert (z.B. Nebenkosten-Abschlag), werden vergangene Monate mit dem aktuellen
 Betrag befüllt; die betroffene Buchung muss dann von Hand korrigiert werden.
 
@@ -88,27 +103,136 @@ begrenzt). Diese GET-Anfragen können also schreiben. Der laufende Monat bleibt 
 erscheint bis dahin als „geplant". Hintergrund: Der Cron war in Produktion nie eingerichtet, dadurch
 fehlten ab Oktober 2026 alle Daueraufträge im Rückblick und im Übertrag, ohne dass es sichtbar wurde.
 
-**Nebenläufigkeit:** Cron und Selbstheilung (z.B. zwei Haushaltsmitglieder öffnen gleichzeitig das
-Dashboard) können parallel laufen. Gebuchte Vorkommen und Skips werden vorab gesammelt geladen; für
-jedes fehlende Vorkommen wird je Dauerauftrag ein transaktionsgebundener Advisory-Lock
-(`pg_advisory_xact_lock`) genommen und unter dem Lock dieselbe Vorkommens-Identität erneut geprüft,
-sodass jeder Monat höchstens einmal gebucht wird. Schlägt ein einzelnes Vorkommen fehl, wird es
-geloggt und der Lauf läuft für alle anderen weiter.
+**Nebenläufigkeit:** Cron, Selbstheilung und eine Bestätigung (z.B. zwei Haushaltsmitglieder öffnen
+gleichzeitig das Dashboard) können parallel laufen. Gebuchte Vorkommen und Skips werden vorab
+gesammelt geladen; für jedes fehlende Vorkommen wird je Dauerauftrag ein transaktionsgebundener
+Advisory-Lock (`pg_advisory_xact_lock`) genommen und unter dem Lock dieselbe Vorkommens-Identität
+erneut geprüft, sodass jeder Monat höchstens einmal gebucht oder verknüpft wird. Schlägt ein einzelnes
+Vorkommen fehl, wird es geloggt und der Lauf läuft für alle anderen weiter.
 
-**Doppelzählung vermieden:** Sobald ein Vorkommen gebucht ist, zählt es nicht mehr als „geplant" in
-`recurringIncomeTotal`/`recurringOutcomeTotal`/`recurringPlannedSavings` (siehe
+**Doppelzählung vermieden:** Sobald ein Vorkommen gebucht oder verknüpft ist, zählt es nicht mehr
+als „geplant" in `recurringIncomeTotal`/`recurringOutcomeTotal`/`recurringPlannedSavings` (siehe
 [04-analytics-summary.md](./04-analytics-summary.md)).
+
+### Untergrenze (`bookFromPeriod`): kein ungefragtes Nachbuchen
+
+`RecurringTransaction.bookFromPeriod` (`JJJJ-MM`, darf leer sein) ist der erste Monat, der automatisch
+gebucht werden darf. Vorkommen, deren Periode davor liegt, überspringt der Lauf für immer — auch
+`?dryRun=true` listet sie nicht. Leer heißt: keine Untergrenze. Das gilt für alle Daueraufträge, die
+vor Einführung der Spalte angelegt wurden; sie verhalten sich wie bisher.
+
+Gesetzt wird die Untergrenze an drei Stellen, jeweils auf den **laufenden Berliner Monat**
+(`bookFromPeriodFor` in `recurringSchedule.ts`):
+
+| Auslöser | Regel |
+|---|---|
+| Anlegen (`POST`) | Liegt die erste Buchung in einem Monat **vor** dem laufenden Monat: laufender Monat. Mit `backfill: true` oder bei erster Buchung im laufenden oder einem späteren Monat: leer. |
+| Bearbeiten (`PATCH`) | Nur wenn die Anfrage den Rhythmus ändert — `startDate` weicht vom gespeicherten Anker-Tag ab oder `intervalMonths` vom gespeicherten Wert: wie beim Anlegen, gemessen am (neuen) Anker-Monat. Ein ausdrückliches `backfill: true` hebt die Untergrenze immer auf, auch ohne Änderung am Rhythmus (die Monate seit dem Anker werden nachgebucht). Sonst bleibt der Wert unverändert. |
+| Dauerauftrag aus Buchung (`make-recurring`) | Immer der laufende Monat: die Serie läuft ab jetzt weiter. |
+
+Hintergrund: Ohne Untergrenze buchte ein Startdatum in der Vergangenheit für jeden Monat seit dem
+Start eine echte Buchung — ein Tippfehler wie 2016 statt 2026 rund 120 Stück —, und was der Nutzer für
+diese Monate von Hand erfasst hatte, stand danach doppelt da. Dasselbe passierte beim Verkürzen des
+Intervalls (aus quartalsweise wird monatlich: die Monate dazwischen) und bei „Dauerauftrag aus
+Buchung" auf einer älteren Buchung.
+
+**Beispiel am 19. November 2026**, Dauerauftrag mit Startdatum 25. November 2025, monatlich:
+
+| | `bookFromPeriod` | Gebucht wird |
+|---|---|---|
+| ohne `backfill` | `2026-11` | nichts für November 2025 bis Oktober 2026; der 25. November 2026, sobald er erreicht ist; danach jeden Monat |
+| mit `backfill: true` | leer | beim nächsten Lauf November 2025 bis Oktober 2026 (12 Buchungen, heutiger Betrag), dann wie oben |
+
+Der laufende Monat liegt nie vor der Untergrenze — sie wird immer auf den Monat gesetzt, in dem die
+Anfrage eintrifft, und die Zeit läuft nur vorwärts. Was das Dashboard für den laufenden Monat als
+„geplant" zeigt, wird deshalb auch gebucht; die Berechnung von „geplant" kennt die Untergrenze nicht
+und braucht sie nicht. Jahresmatrix und CSV zeigen den Plan aus der Vorlage und damit auch Monate vor
+der Untergrenze.
+
+### Vorschlag und Bestätigung: eine von Hand erfasste Zahlung als Vorkommen
+
+Wer die Miete am 2. von Hand einträgt und einen Dauerauftrag für den 3. hat, soll sie nicht zweimal
+in den Büchern haben. Ob eine von Hand erfasste Buchung aber **für** das Vorkommen steht oder
+**zusätzlich** gezahlt wurde, kann keine Regel entscheiden: 200 € extra in den Spartopf am 27.
+November sehen genauso aus wie die Sparrate vom 1. Dezember, ein zweites Taschengeld am 28. Oktober
+wie das vom 1. November. Würde die App selbst verknüpfen, fehlte in solchen Fällen eine Buchung — und
+niemand merkte es. Eine doppelte Buchung dagegen ist sichtbar und lässt sich löschen (das Löschen
+bleibt bestehen). Deshalb gilt: **Die App schlägt vor, der Nutzer bestätigt.** Automatisch verknüpft
+wird nie etwas, weder vom Buchungslauf noch beim Laden des Dashboards.
+
+**Welche Buchung vorgeschlagen wird** (`isAdoptionCandidate`, `pickAdoptionCandidate` in
+`recurringSchedule.ts`). Eine Buchung kommt in Frage, wenn **alles** zutrifft:
+
+- sie liegt auf demselben Konto wie der Dauerauftrag;
+- sie ist nicht gelöscht und mit **keinem** Dauerauftrag verknüpft (`recurringTransactionId` leer);
+- ihr `amountCents` ist exakt der Betrag des Dauerauftrags (mit Vorzeichen);
+- sie hat dieselbe Kategorie — hat der Dauerauftrag keine Kategorie: sie hat ebenfalls keine **und**
+  dieselbe Beschreibung, ohne Beachtung von Groß-/Kleinschreibung und Leerraum am Rand;
+- ihr Berliner Kalendertag liegt höchstens **7 Tage vor oder nach** dem Fälligkeitstag
+  (`ADOPTION_WINDOW_DAYS`). Das Fenster reicht über Monatsgrenzen: Die am 28. November überwiesene
+  Miete kann für das Vorkommen vom 1. Dezember stehen.
+
+Gibt es mehrere, wird die Buchung vorgeschlagen, die dem Fälligkeitstag am nächsten liegt; bei
+gleichem Abstand die älteste (früheres Datum, dann früher erfasst).
+
+**Vorschläge** (`loadRecurringSuggestions`): `GET /api/analytics/summary` liefert in
+`recurringSuggestions` für jedes Vorkommen des Haushalts, das im laufenden Monat fällig, weder gebucht
+noch übersprungen ist und nicht vor der Untergrenze liegt — auch wenn sein Tag noch nicht erreicht ist
+—, die passende Buchung, sofern es eine gibt. Jede Buchung wird für höchstens ein Vorkommen
+vorgeschlagen; die Vorkommen kommen in der Reihenfolge ihres Fälligkeitstags zum Zug. Das Berechnen der
+Vorschläge schreibt nichts.
+
+Bis der Nutzer bestätigt, bleiben die Zahlen, wie sie sind: Die von Hand erfasste Buchung zählt als
+gebucht, das Vorkommen als geplant. Die Hochrechnung enthält den Betrag in dieser Zeit also zweimal —
+gewollt; der Vorschlag ist der Hinweis darauf.
+
+**Bestätigen** (`POST /api/recurring-transactions/[id]/link-booking`, Body
+`{ transactionId, period }`): Unter demselben Advisory-Lock wie das Buchen und mit einer Zeilensperre
+auf der Buchung prüft der Endpunkt alles erneut — die Regel oben für das Vorkommen der Periode, dazu:
+die Periode ist ein fälliger Monat des Dauerauftrags, liegt nicht vor der Untergrenze und ist weder
+übersprungen noch schon gebucht. Dann werden auf der Buchung `recurringTransactionId` und
+`recurringPeriod` (die Periode des Vorkommens, nicht der Monat ihres Datums) gesetzt. Betrag, Datum,
+Beschreibung, Kategorie, Steuer-Markierung und Belege bleiben, wie der Nutzer sie erfasst hat.
+Angelegt wird nichts. Von da an ist das Vorkommen gebucht, mit allen Folgen aus „Vorkommen:
+Dauerauftrag + Periode": Das Dashboard plant es nicht mehr, der Lauf bucht es nicht — und wird die
+verknüpfte Buchung später gelöscht, bleibt der Monat gebucht.
+
+| Antwort | Wann |
+|---|---|
+| `200 { id, recurringTransactionId, recurringPeriod }` | verknüpft |
+| `400` | Body fehlt oder ist fehlerhaft (`period` nicht `JJJJ-MM`) |
+| `404` | Dauerauftrag oder Buchung gibt es im Haushalt nicht |
+| `409 { error }` | die Buchung passt nicht (mehr) — anderes Konto, anderer Betrag, andere Kategorie bzw. Beschreibung, gelöscht, schon verknüpft, mehr als 7 Tage entfernt — oder das Vorkommen ist schon gebucht, übersprungen, liegt vor der Untergrenze oder ist kein fälliger Monat |
+
+Zwei gleichzeitige Bestätigungen für dasselbe Vorkommen verknüpfen eine Buchung; die zweite bekommt
+`409`. Dieselbe Buchung für zwei Daueraufträge gleichzeitig: Die Zeilensperre lässt nur einen
+gewinnen.
+
+Wer den Vorschlag nicht bestätigt, sondern die eigene Buchung löscht, überlässt den Monat dem
+Dauerauftrag: Er bucht am Fälligkeitstag wie immer.
+
+**Beispiel**, Dauerauftrag „Miete" −950,00 €, Kategorie Wohnen, fällig am 15.:
+
+| Von Hand erfasst | Vorgeschlagen? |
+|---|---|
+| −950,00 €, Wohnen, 8. des Monats | ja (7 Tage vorher) |
+| −950,00 €, Wohnen, 7. des Monats | nein (8 Tage vorher) |
+| −949,99 €, Wohnen, 15. | nein (anderer Betrag) |
+| −950,00 €, Sonstiges, 15. | nein (andere Kategorie) |
+| −950,00 €, Wohnen, 15., anderes Konto | nein |
+
+Ohne Bestätigung wird am 15. in jedem Fall regulär gebucht.
 
 ### Bekannte Grenzen
 
-- **Von Hand erfasste Zahlung:** Eine Buchung, die von Hand angelegt wurde, hat keine
-  `recurringTransactionId` und wird nicht als Vorkommen eines Dauerauftrags erkannt. Wer eine Zahlung
-  von Hand bucht und zusätzlich einen Dauerauftrag dafür hat, bekommt sie doppelt. Abhilfe: den Monat
-  überspringen (Skip), bevor er gebucht ist, oder die doppelte Buchung löschen. Vor einem Nachbuchen
-  auf echten Daten zeigt `?dryRun=true`, was gebucht würde. Nur beim Anlegen ohne Startdatum am
-  Fälligkeitstag selbst ist der Fall abgefangen (siehe „Der Anker").
-- **Startdatum in der Vergangenheit:** Ein Anker in der Vergangenheit lässt jeden fälligen Monat seit
-  dem Anker nachbuchen — beim nächsten Cron-Lauf bzw. beim nächsten Öffnen einer Auswertung.
+- **Doppelt, bis der Nutzer handelt:** Eine von Hand erfasste Zahlung für ein Vorkommen steht doppelt
+  in den Büchern, solange der Vorschlag nicht bestätigt ist; erreicht der Lauf den Fälligkeitstag
+  vorher, bucht er, und die eigene Buchung bleibt daneben stehen. Vorgeschlagen wird nur im laufenden
+  Monat und nur, was die Regel oben erfüllt — weicht der Betrag ab (z.B. die Miete wurde erhöht, der
+  Dauerauftrag noch nicht angepasst), liegt die Zahlung mehr als 7 Tage entfernt oder ist der Monat
+  schon gebucht, gibt es keinen Vorschlag. Abhilfe: den Monat überspringen (Skip), bevor er gebucht
+  ist, oder die doppelte Buchung löschen.
+- **Keine Verknüpfung lösen:** Es gibt keinen Endpunkt, der eine bestätigte Verknüpfung wieder löst.
 - **Kein Betrags-Snapshot:** siehe oben — nachgebucht wird mit dem heutigen Betrag.
 - **Überspringen wirkt nur vor dem Buchen:** Ein Skip verhindert das Buchen eines Monats. Ist der
   Monat schon gebucht, entfernt ein Skip die Buchung nicht; dafür wird die Buchung gelöscht (sie
@@ -122,8 +246,10 @@ RecurringTransaction
 ├── frequency      — immer "MONTHLY" (wird serverseitig gesetzt)
 ├── intervalMonths — 1-24: Abstand in Monaten (1 = jeden Monat, 3 = quartalsweise)
 ├── dayOfMonth     — 1-31: Tag des Monats, an dem gebucht wird (auf die Monatslänge begrenzt)
-└── nextOccurrence — Anker der Serie (DateTime). Trotz des Namens NICHT "das nächste" Vorkommen
-                     und wird nach einer Buchung nicht weitergeschoben.
+├── nextOccurrence — Anker der Serie (DateTime). Trotz des Namens NICHT "das nächste" Vorkommen
+│                    und wird nach einer Buchung nicht weitergeschoben.
+└── bookFromPeriod — "JJJJ-MM" oder leer: erster Monat, der automatisch gebucht werden darf
+                     (siehe „Untergrenze"). Leer = keine Untergrenze.
 ```
 
 ## Der Anker (`nextOccurrence`)
@@ -135,11 +261,28 @@ gemeinten Kalendertags.
 
 ### Beim Anlegen (`POST /api/recurring-transactions`)
 
-- **Mit `startDate`** (`yyyy-mm-dd`): Der Anker ist dieses Datum. `dayOfMonth` ist der Tag des
-  Startdatums, sofern nicht zusätzlich ein eigenes `dayOfMonth` übergeben wird — dann beginnt die
-  Serie im Monat des Startdatums und bucht am übergebenen `dayOfMonth`. Ein Anker in der Zukunft wird
-  erst ab seinem Monat eingerechnet; einer in der Vergangenheit lässt nachbuchen (siehe „Bekannte
-  Grenzen").
+- **Mit `startDate`** (`yyyy-mm-dd`): Das Startdatum ist das Datum der ersten Buchung. `dayOfMonth`
+  ist der Tag des Startdatums, sofern nicht zusätzlich ein eigenes `dayOfMonth` übergeben wird.
+  `startDate` und `dayOfMonth` sind unabhängige Felder, gebucht wird am `dayOfMonth`
+  (`firstOccurrenceOnOrAfter`):
+  - Liegt `dayOfMonth` (auf die Länge des Startmonats begrenzt) **am oder nach** dem Tag des
+    Startdatums, beginnt die Serie im Monat des Startdatums; der Anker ist das Startdatum.
+  - Liegt er **davor**, beginnt die Serie im Folgemonat; der Anker ist der `dayOfMonth` des
+    Folgemonats. So wird nie vor dem Datum gebucht, das als erste Buchung eingegeben wurde.
+
+  | Startdatum | dayOfMonth | Erste Buchung | Anker |
+  |---|---|---|---|
+  | 20. November 2026 | 20 (Standard) | 20. November 2026 | 20. November 2026 |
+  | 20. November 2026 | 25 | 25. November 2026 | 20. November 2026 |
+  | 20. November 2026 | 5 | 5. Dezember 2026 | 5. Dezember 2026 |
+  | 31. Januar 2027 | 30 | 28. Februar 2027 | 28. Februar 2027 |
+  | 30. April 2027 | 31 | 30. April 2027 (April hat 30 Tage) | 30. April 2027 |
+
+  Ein Anker in der Zukunft wird erst ab seinem Monat eingerechnet. Liegt die erste Buchung in einem
+  Monat vor dem laufenden, wird nur mit `backfill: true` nachgebucht (siehe „Untergrenze").
+  `startDate` darf höchstens **10 Jahre** vor oder nach heute liegen (derselbe Tag vor bzw. in
+  10 Jahren ist noch erlaubt; `RECURRING_START_MAX_YEARS`), sonst `400` — das fängt Tippfehler wie
+  2016 statt 2026 ab.
 - **Ohne `startDate`:** `firstOccurrenceFrom(heute, dayOfMonth)` (Standard `dayOfMonth` = 1):
 
 ```mermaid
@@ -170,11 +313,26 @@ heute — beide Serien beginnen im Dezember (30. bzw. 31. Dezember).
 
 Der Anker wird nur angefasst, wenn `startDate` oder `dayOfMonth` im Body steht:
 
-- **`startDate`** (hat Vorrang) setzt die Serie neu auf: Anker = dieses Datum.
+- **`startDate`** (hat Vorrang) setzt die Serie neu auf: Anker = dieses Datum. Die Regel „nie vor
+  dem Startdatum buchen" aus dem Anlegen gilt hier **nicht**: Das Bearbeiten-Formular schickt den
+  gespeicherten Anker bei jedem Speichern mit, und bestehende Anker dürfen einen anderen Tag haben als
+  `dayOfMonth`.
 - **`dayOfMonth` allein** ändert nur den Tag: Der Anker-Monat bleibt, der Tag wird auf die Länge
   dieses Monats begrenzt. Die Serie behält ihren Rhythmus — bei einem Intervall über 1 bleiben die
   fälligen Monate dieselben, und kein früherer Monat fällt aus der Jahresübersicht oder dem CSV.
 - Bereits gebuchte Vorkommen bleiben in beiden Fällen unberührt.
+
+Ob die Anfrage den **Rhythmus ändert**, entscheidet der Vergleich mit dem gespeicherten Stand: ein
+`startDate`, das vom Berliner Kalendertag des gespeicherten Ankers abweicht, oder ein
+`intervalMonths`, das vom gespeicherten Wert abweicht. Nur dann
+
+- wird `bookFromPeriod` neu bestimmt (siehe „Untergrenze") — aus quartalsweise wird monatlich, ohne
+  dass die Monate dazwischen nachgebucht werden; `backfill: true` verlangt das Nachbuchen;
+- wird das neue `startDate` auf die 10-Jahres-Grenze geprüft (`400`).
+
+Ein unverändert mitgeschicktes Startdatum und Intervall — der Normalfall beim Speichern des
+Formulars — lässt `bookFromPeriod` unverändert und wird nicht geprüft; ein alter Anker, der mehr als
+10 Jahre zurückliegt, blockiert das Bearbeiten also nicht.
 
 `DELETE` löscht den Dauerauftrag weich (`deletedAt`). Bereits gebuchte Buchungen bleiben bestehen;
 künftige Vorkommen entfallen.
@@ -192,6 +350,10 @@ verknüpft sie (`recurringTransactionId`), beides in einer DB-Transaktion.
   `recurringPeriod` = dieser Monat. Wird sie später in den Folgemonat verschoben, bleibt dessen
   eigenes Vorkommen unberührt.
 - `dayOfMonth` des Dauerauftrags ist der übergebene Wert, sonst der Tag der Buchung.
+- `bookFromPeriod` ist der laufende Berliner Monat: Die Serie läuft ab jetzt weiter. Aus einer zwei
+  Monate alten Buchung entsteht so keine Buchung für den Monat dazwischen — der könnte längst von Hand
+  erfasst sein. Der laufende Monat wird gebucht, sobald sein Tag erreicht ist, außer eine von Hand
+  erfasste Zahlung wurde vorher als Vorkommen bestätigt (siehe „Vorschlag und Bestätigung").
 - Bereits verknüpfte Buchungen → `409`.
 
 ## Fälligkeit in einem Monat
@@ -229,6 +391,12 @@ flowchart TD
 | fällig (`dueRecurring`) | im laufenden Monat fällig und nicht übersprungen — ob gebucht oder nicht | `recurringDueIncomeTotal`, `recurringDueOutcomeTotal`, `recurringDueCount` |
 | geplant (`plannedRecurring`) | fällig **und** für die Periode des laufenden Monats noch nicht gebucht | `recurringTransactions`, `recurringIncomeTotal`, `recurringOutcomeTotal`, `recurringPlannedSavings`, Hochrechnungen |
 
+Bevor die Route diese Mengen bildet, bucht sie abgeschlossene Monate nach. Von Hand erfasste
+Zahlungen verknüpft sie nicht; sie liefert sie nur als Vorschläge (`recurringSuggestions`, siehe
+„Vorschlag und Bestätigung"). Ein bestätigtes Vorkommen ist gebucht: Es bleibt in „fällig" und fällt
+aus „geplant". Die Untergrenze `bookFromPeriod` spielt für beide Mengen
+keine Rolle, weil der laufende Monat nie vor ihr liegt.
+
 Einzelheiten in [04-analytics-summary.md](./04-analytics-summary.md).
 
 ## Skips — Einmaliges Überspringen
@@ -249,7 +417,7 @@ geplant und steht in Jahresmatrix und CSV mit 0.
 
 ## Jahresmatrix (`/yearly`)
 
-`buildRecurringYearMatrix(items, year)` (`@doewe/shared`, `recurringYear.ts`) erzeugt pro Dauerauftrag 12 Monatswerte in Cent (mit Vorzeichen wie gespeichert): Betrag in den Monaten, in denen `isRecurringDueInMonth` zutrifft, sonst 0; übersprungene Monate (Skips des Jahres) sind 0. Daueraufträge mit Anker nach dem Jahr bleiben als Nullzeile erhalten. Die Matrix zeigt den **Plan** aus den Vorlagen, nicht die tatsächlich gebuchten Vorkommen.
+`buildRecurringYearMatrix(items, year)` (`@doewe/shared`, `recurringYear.ts`) erzeugt pro Dauerauftrag 12 Monatswerte in Cent (mit Vorzeichen wie gespeichert): Betrag in den Monaten, in denen `isRecurringDueInMonth` zutrifft, sonst 0; übersprungene Monate (Skips des Jahres) sind 0. Daueraufträge mit Anker nach dem Jahr bleiben als Nullzeile erhalten. Die Matrix zeigt den **Plan** aus den Vorlagen, nicht die tatsächlich gebuchten Vorkommen — auch Monate vor der Untergrenze `bookFromPeriod`, die nie automatisch gebucht werden, stehen mit ihrem Betrag darin.
 
 - **Gruppen:** `classifyRecurringKind` — Spar-Kategorie → `savings`, sonst Betrag `>= 0` → `income`, `< 0` → `expense` (dieselbe Reihenfolge wie Grundregeln §2; die Spar-Kategorien kommen aus `loadSavingsCategoryIds`).
 - **Summen:** je Gruppe Monatssummen, Jahressumme und `monthlyAverageCents = round(Jahressumme / 12)`; `net` = vorzeichenbehaftete Summe aller Gruppen.
@@ -274,9 +442,10 @@ nach `Category.isIncome`.
 | Methode | Endpoint | Beschreibung |
 |---|---|---|
 | GET | `/api/recurring-transactions` | Alle Daueraufträge des Haushalts (nach Anker sortiert) |
-| POST | `/api/recurring-transactions` | Neuen Dauerauftrag anlegen |
+| POST | `/api/recurring-transactions` | Neuen Dauerauftrag anlegen (`backfill` für das Nachbuchen der Vergangenheit) |
 | POST | `/api/transactions/[id]/make-recurring` | Dauerauftrag aus bestehender Buchung anlegen + verknüpfen |
 | PATCH | `/api/recurring-transactions/[id]` | Dauerauftrag bearbeiten |
+| POST | `/api/recurring-transactions/[id]/link-booking` | Vorschlag bestätigen: von Hand erfasste Buchung als Vorkommen verknüpfen |
 | DELETE | `/api/recurring-transactions/[id]` | Dauerauftrag löschen (Soft-Delete) |
 | GET | `/api/recurring-transactions/skips?year=&month=` | Skips für einen Monat |
 | POST | `/api/recurring-transactions/skips` | Skip hinzufügen (upsert) |

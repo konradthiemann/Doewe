@@ -36,8 +36,10 @@ coverage/
 __pycache__/
 *.py[cod]
 
-# Claude Code local preview launch config (machine-local, not shared)
-.claude/launch.json
+# Claude Code: personal tooling stays local (settings, hooks, agents, worktrees).
+# Project conventions live in AGENTS.md, which CLAUDE.md imports.
+.claude/
+CLAUDE.local.md
 
 # Serwist/Service-Worker build output (apps/web)
 apps/web/public/sw*

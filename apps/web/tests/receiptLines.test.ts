@@ -64,15 +64,15 @@ describe("groupBookableLines / bookedTotalCents", () => {
     expect(bookedTotalCents(groups)).toBe(0);
   });
 
-  it("totals what the batch endpoint books: one expense of the absolute amount per group", () => {
+  it("totals what the batch endpoint books: the signed sum of the groups, i.e. the receipt total", () => {
     // A deposit refund makes the first group smaller; a group of only negative
-    // lines is still booked as an expense of its absolute amount.
+    // lines is booked as a small income and reduces the total.
     const groups = groupBookableLines(
       [line("Wasser", "food", 499), line("Pfand zurück", "food", -100), line("Rabatt", "gifts", -50)],
       categories
     );
     expect(groups.map((g) => g.totalCents)).toEqual([399, -50]);
-    expect(bookedTotalCents(groups)).toBe(449);
+    expect(bookedTotalCents(groups)).toBe(349);
   });
 });
 

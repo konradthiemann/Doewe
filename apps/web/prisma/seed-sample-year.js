@@ -238,7 +238,10 @@ async function deleteSampleHousehold(prisma, userId, householdId) {
   const accountIds = accounts.map((a) => a.id);
   const budgets = await prisma.budget.findMany({ where: { accountId: { in: accountIds } }, select: { id: true } });
 
-  await prisma.budgetAlertLog.deleteMany({ where: { budgetId: { in: budgets.map((b) => b.id) } } });
+  await prisma.budgetAlertLog.deleteMany({
+    where: { OR: [{ householdId }, { budgetId: { in: budgets.map((b) => b.id) } }] }
+  });
+  await prisma.budgetMonthSnapshot.deleteMany({ where: { householdId } });
   await prisma.transaction.deleteMany({ where: { accountId: { in: accountIds } } });
   await prisma.budget.deleteMany({ where: { accountId: { in: accountIds } } });
   await prisma.recurringTransaction.deleteMany({ where: { accountId: { in: accountIds } } }); // skips cascade

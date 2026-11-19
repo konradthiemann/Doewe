@@ -8,6 +8,7 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 
 import { BUDGET_EDITOR_COLS, BudgetPlanEditor } from "../../components/budgets/BudgetPlanEditor";
 import PageContainer from "../../components/PageContainer";
+import { InfoTip } from "../../components/ui/InfoTip";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { formatMonth } from "../../lib/bookingDate";
@@ -162,7 +163,10 @@ function BudgetsPage() {
       <PageContainer className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-ink">{t("budgets.title")}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="min-w-0 text-xl font-semibold text-ink">{t("budgets.title")}</h1>
+              <InfoTip topic="budgets.howItWorks" />
+            </div>
             <p className="text-sm text-ink-muted">{t("budgets.subtitle")}</p>
             <p className="mt-1 text-sm text-ink-muted">{t("budgets.explain")}</p>
           </div>

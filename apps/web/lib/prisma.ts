@@ -69,3 +69,13 @@ export const prisma = globalForPrisma.prisma ?? (createPrismaClient() as unknown
 if (env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
+
+/**
+ * Options for interactive transactions that take an advisory lock (savings
+ * pool, one standing order). Concurrent requests queue behind the lock while
+ * each holds a pooled connection, so the default wait of 2 s for a connection
+ * can run out under a burst — on a small pool (CI, a modest database plan) a
+ * handful of simultaneous requests is enough — and the request would fail with
+ * a 500 instead of waiting its turn.
+ */
+export const LOCKED_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 20_000 } as const;

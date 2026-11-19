@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../lib/i18n";
 
 import { Button } from "./ui/Button";
+import { InfoTip } from "./ui/InfoTip";
 import { useToast } from "./ui/Toast";
 
 /**
@@ -184,7 +185,10 @@ export default function HouseholdCard() {
 
   return (
     <div className={cardClass}>
-      <h2 className="text-lg font-medium">{t("household.title")}</h2>
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 text-lg font-medium">{t("household.title")}</h2>
+        <InfoTip topic="household.shared" />
+      </div>
       <p className="text-sm text-ink-muted">{t("household.description")}</p>
 
       <div className="mt-4 space-y-6">

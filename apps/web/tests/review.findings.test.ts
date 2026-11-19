@@ -21,8 +21,10 @@ let foodId: string;
 let sparenId: string;
 
 async function clean() {
-  const budgets = await prisma.budget.findMany({ where: { accountId: { in: ACCOUNTS } }, select: { id: true } });
-  await prisma.budgetAlertLog.deleteMany({ where: { budgetId: { in: budgets.map((b) => b.id) } } });
+  // The alert log is keyed by household and category; completed months keep a
+  // snapshot of their budgets (the clock is pinned, October 2031 is over).
+  await prisma.budgetAlertLog.deleteMany({ where: { householdId } });
+  await prisma.budgetMonthSnapshot.deleteMany({ where: { householdId } });
   await prisma.transaction.deleteMany({ where: { accountId: { in: ACCOUNTS } } });
   await prisma.recurringTransaction.deleteMany({ where: { accountId: { in: ACCOUNTS } } });
   await prisma.budget.deleteMany({ where: { accountId: { in: ACCOUNTS } } });
@@ -82,16 +84,19 @@ async function summary() {
   };
 }
 
-async function alertThresholds(budgetId: string): Promise<number[]> {
+async function alertThresholds(): Promise<number[]> {
   const { checkBudgetAlerts } = await import("../lib/budgetAlerts");
-  await checkBudgetAlerts({ accountId: ACCOUNT_A, userId: TEST_USER_ID, categoryId: foodId, occurredAt: nov(10) });
-  const rows = await prisma.budgetAlertLog.findMany({ where: { budgetId }, orderBy: { threshold: "asc" } });
+  await checkBudgetAlerts({ householdId, categoryId: foodId, occurredAt: nov(10) });
+  const rows = await prisma.budgetAlertLog.findMany({
+    where: { householdId, categoryId: foodId },
+    orderBy: { threshold: "asc" }
+  });
   return rows.map((r) => r.threshold);
 }
 
 describe("budget alert vs dashboard budget", () => {
   it("does not warn at 50 % of the budget the dashboard shows (plan 500, stale legacy row 300, spent 250)", async () => {
-    const legacy = await prisma.budget.create({
+    await prisma.budget.create({
       data: { accountId: ACCOUNT_A, categoryId: foodId, month: 11, year: 2031, amountCents: 30_000 }
     });
     await prisma.categoryBudgetPlan.create({
@@ -104,11 +109,17 @@ describe("budget alert vs dashboard budget", () => {
     const dash = (await summary()).categoryBudgets.find((b) => b.categoryId === foodId);
     expect(dash).toMatchObject({ budget: 500, spent: 250 }); // dashboard: 50 %
 
-    expect(await alertThresholds(legacy.id)).toEqual([]); // alert: 250 / 300 = 83 %
+    expect(await alertThresholds()).toEqual([]); // against the stale row it would be 250 / 300 = 83 %
+
+    // The same plan does alert once 80 % of the 500 are reached.
+    await prisma.transaction.create({
+      data: { accountId: ACCOUNT_B, categoryId: foodId, amountCents: -15_000, description: "food", occurredAt: nov(11) }
+    });
+    expect(await alertThresholds()).toEqual([80]);
   });
 
   it("does not warn at 42 % of the household budget (legacy rows 300 + 300 on two accounts, spent 250)", async () => {
-    const onA = await prisma.budget.create({
+    await prisma.budget.create({
       data: { accountId: ACCOUNT_A, categoryId: foodId, month: 11, year: 2031, amountCents: 30_000 }
     });
     await prisma.budget.create({
@@ -121,7 +132,14 @@ describe("budget alert vs dashboard budget", () => {
     const dash = (await summary()).categoryBudgets.find((b) => b.categoryId === foodId);
     expect(dash).toMatchObject({ budget: 600, spent: 250 }); // dashboard: 42 %
 
-    expect(await alertThresholds(onA.id)).toEqual([]); // alert: 250 / 300 = 83 %
+    expect(await alertThresholds()).toEqual([]); // against one row it would be 250 / 300 = 83 %
+
+    // One log for the household: 80 % of the 600 is announced once, whichever account books.
+    await prisma.transaction.create({
+      data: { accountId: ACCOUNT_A, categoryId: foodId, amountCents: -23_000, description: "food", occurredAt: nov(11) }
+    });
+    expect(await alertThresholds()).toEqual([80]);
+    expect(await alertThresholds()).toEqual([80]);
   });
 });
 
@@ -190,7 +208,7 @@ describe("nested counts and tombstones (Grundregeln §3)", () => {
 
 describe("budget alert", () => {
   it("fires at 80 % of the household budget, for the Berlin month of the booking", async () => {
-    const legacy = await prisma.budget.create({
+    await prisma.budget.create({
       data: { accountId: ACCOUNT_A, categoryId: foodId, month: 11, year: 2031, amountCents: 30_000 }
     });
     // 1 Nov 2031, 00:30 in Berlin — still 31 October in UTC.
@@ -200,10 +218,10 @@ describe("budget alert", () => {
     });
 
     const { checkBudgetAlerts } = await import("../lib/budgetAlerts");
-    await checkBudgetAlerts({ accountId: ACCOUNT_A, userId: TEST_USER_ID, categoryId: foodId, occurredAt });
+    await checkBudgetAlerts({ householdId, categoryId: foodId, occurredAt });
 
-    const rows = await prisma.budgetAlertLog.findMany({ where: { budgetId: legacy.id } });
-    expect(rows.map((r) => [r.year, r.month, r.threshold])).toEqual([[2031, 11, 80]]);
+    const rows = await prisma.budgetAlertLog.findMany({ where: { householdId } });
+    expect(rows.map((r) => [r.categoryId, r.year, r.month, r.threshold])).toEqual([[foodId, 2031, 11, 80]]);
   });
 });
 
@@ -264,7 +282,7 @@ describe("editing only the day of a recurring template", () => {
 });
 
 describe("withdrawing from the savings pool", () => {
-  it("caps the amount at the pool minus what completed goals reserved", async () => {
+  it("caps the amount at the pool minus what goals completed before withdrawals were booked hold back", async () => {
     await prisma.transaction.create({
       data: { accountId: ACCOUNT_A, categoryId: sparenId, amountCents: -100_000, description: "deposit", occurredAt: oct(5) }
     });
@@ -277,7 +295,9 @@ describe("withdrawing from the savings pool", () => {
         month: 10,
         year: 2031,
         completedAt: oct(20),
-        spentCents: 60_000
+        spentCents: 60_000,
+        // what the migration leaves on a goal completed before the change
+        reservedCents: 60_000
       }
     });
     const { POST } = await import("../app/api/saving-plan/withdraw/route");

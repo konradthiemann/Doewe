@@ -282,7 +282,7 @@ describe("a category budget is not a saving goal", () => {
 });
 
 describe("completing and withdrawing use the household pool", () => {
-  it("completing a goal reserves its amount out of the pool; reopening releases it", async () => {
+  it("completing a goal takes its amount out of the pool with a booking; reopening puts it back", async () => {
     bikeGoalId = (
       await prisma.budget.create({
         data: { accountId: SECOND_ACCOUNT_ID, categoryId: null, title: "Fahrrad", month: 12, year: 2026, amountCents: 25_000 }
@@ -293,15 +293,17 @@ describe("completing and withdrawing use the household pool", () => {
 
     const done = await routes.POST(jsonReq(url, "POST", { spentCents: 25_000 }), ctx(bikeGoalId));
     expect(done.status).toBe(200);
-    const body = (await done.json()) as { completedAt: string; spentCents: number };
+    const body = (await done.json()) as { completedAt: string; spentCents: number; withdrawnCents: number };
     // completedAt is the instant of the request.
     expect(body.completedAt).toBe(NOW.toISOString());
     expect(body.spentCents).toBe(25_000);
+    expect(body.withdrawnCents).toBe(25_000);
 
+    // The pool is the sum of the savings bookings again: nothing is held back.
     const afterComplete = await plan();
     expect(afterComplete.completedGoals.map((g) => g.title)).toEqual(["Fahrrad"]);
-    expect(afterComplete.totals.rawAvailableCents).toBe(85_000);
-    expect(afterComplete.totals.withdrawnForCompletedCents).toBe(25_000);
+    expect(afterComplete.totals.rawAvailableCents).toBe(60_000);
+    expect(afterComplete.totals.withdrawnForCompletedCents).toBe(0);
     expect(afterComplete.totals.availableCents).toBe(60_000);
 
     const tooMuch = await routes.POST(jsonReq(url, "POST", { spentCents: 3_000_000_000 }), ctx(bikeGoalId));
@@ -309,7 +311,9 @@ describe("completing and withdrawing use the household pool", () => {
 
     const reopened = await routes.DELETE(jsonReq(url, "DELETE"), ctx(bikeGoalId));
     expect(reopened.status).toBe(200);
-    expect((await plan()).totals.availableCents).toBe(85_000);
+    const afterReopen = await plan();
+    expect(afterReopen.totals.rawAvailableCents).toBe(85_000);
+    expect(afterReopen.totals.availableCents).toBe(85_000);
 
     await prisma.budget.delete({ where: { id: bikeGoalId } });
   });
@@ -335,9 +339,10 @@ describe("completing and withdrawing use the household pool", () => {
 
     const data = await plan();
     expect(data.totals.availableCents).toBe(5_000);
-    // November is now a net withdrawal (450 − 800): it is not added back, the
-    // rate is measured against the 50 € that are left: ceil((1200 − 50) / 2).
-    expect(data.totals.suggestedMonthlyCents).toBe(57_500);
+    // The rate is measured against the pool minus November's 450 € of
+    // deposits; the 800 € withdrawal stays taken out: max(50 − 450, 0) = 0
+    // covered at the start of the month, two months left: 1200 / 2.
+    expect(data.totals.suggestedMonthlyCents).toBe(60_000);
 
     const next = await withdraw({ amountCents: 5_001 });
     expect(next.status).toBe(409);

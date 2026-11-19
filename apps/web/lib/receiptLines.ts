@@ -108,10 +108,11 @@ export function groupBookableLines<Line extends ReceiptLine, Category extends { 
 }
 
 /**
- * What confirming the review books in total: each group becomes one expense of
- * the absolute amount of its lines (POST /api/transactions/batch). Lines that
- * are not booked are not part of it.
+ * What confirming the review books in total — the receipt's own total. Each
+ * group becomes one booking of its signed sum (POST /api/transactions/batch):
+ * a group of only discounts or deposit returns is booked as a small income and
+ * reduces the total. Lines that are not booked are not part of it.
  */
 export function bookedTotalCents(groups: ReadonlyArray<{ totalCents: number }>): number {
-  return groups.reduce((sum, group) => sum + Math.abs(group.totalCents), 0);
+  return groups.reduce((sum, group) => sum + group.totalCents, 0);
 }
