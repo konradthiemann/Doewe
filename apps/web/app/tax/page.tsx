@@ -1,6 +1,6 @@
 "use client";
 
-import { fromCents, toDecimalString, zonedMonth } from "@doewe/shared";
+import { zonedMonth } from "@doewe/shared";
 import { useMemo, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
@@ -39,6 +39,9 @@ const YEAR_RANGE = 6;
 
 export default function TaxPage() {
   const { locale, t } = useI18n();
+  // Same localized amount format as every other screen ("1.234,56 €" in de).
+  const formatCurrency = (cents: number) =>
+    `${(cents / 100).toLocaleString(locale === "de" ? "de-DE" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
   // Current tax year = the calendar year in the app's time zone (Europe/Berlin).
   const currentYear = zonedMonth(new Date()).year;
@@ -232,14 +235,14 @@ export default function TaxPage() {
                       </p>
                     </div>
                     <span className="shrink-0 font-semibold tabular-nums">
-                      {toDecimalString(fromCents(entry.totalCents))} €
+                      {formatCurrency(entry.totalCents)}
                     </span>
                   </li>
                 ))}
               </ul>
               <div className="mt-2 flex items-center justify-between border-t border-line pt-2 text-sm font-semibold">
                 <span>{t("tax.total")}</span>
-                <span className="tabular-nums">{toDecimalString(fromCents(totalCents))} €</span>
+                <span className="tabular-nums">{formatCurrency(totalCents)}</span>
               </div>
             </section>
 
@@ -285,7 +288,7 @@ export default function TaxPage() {
                             tx.amountCents >= 0 ? "text-income" : "text-expense"
                           }`}
                         >
-                          {toDecimalString(fromCents(tx.amountCents))} €
+                          {formatCurrency(tx.amountCents)}
                         </span>
                       </button>
                       {isExpanded && (

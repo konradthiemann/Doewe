@@ -149,7 +149,8 @@ export default function RecurringTransactionForm({
       accountId: values.accountId,
       amountCents: signedCents,
       description: values.description,
-      categoryId: values.categoryId || undefined,
+      // "(keine)" removes the category: null clears it, undefined would leave it.
+      categoryId: values.categoryId || null,
       intervalMonths: values.intervalMonths,
       // Untouched day and start date are not sent: the server leaves the
       // series' anchor alone unless one of them is in the body.
