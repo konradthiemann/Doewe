@@ -19,8 +19,12 @@ Budget (als Sparziel)
 ├── year        = Zieljahr   — null = ohne Termin (Monat und Jahr nur gemeinsam)
 ├── amountCents              — Ziel-Betrag in Cents (mind. 1); null = noch kein Betrag
 ├── completedAt = null       — null = aktives Ziel, gesetzt = abgeschlossen
-└── spentCents  = null       — beim Abschluss tatsächlich aus dem Spar-Topf
-                                entnommener Betrag (Snapshot); null solange aktiv
+├── spentCents  = null       — was das Ziel am Ende gekostet hat (beim Abschluss
+│                               angegeben, Anzeige „Ausgegeben"); null solange aktiv
+├── withdrawalTransactionId  — die Entnahme-Buchung des Abschlusses, damit
+│                               Wiedereröffnen sie zurücknehmen kann; sonst null
+└── reservedCents            — nur Altbestand: was ein Ziel zurückhält, das vor den
+                                Entnahme-Buchungen abgeschlossen wurde; sonst null
 ```
 
 Drei Zustände, in der GET-Response getrennt geliefert:
@@ -29,13 +33,19 @@ Drei Zustände, in der GET-Response getrennt geliefert:
 |---|---|---|
 | `goals` | `completedAt == null`, Monat und Jahr gesetzt | aktive Ziele mit Termin — nur sie treiben Zielsumme und Monatsrate |
 | `undatedGoals` | `completedAt == null`, ohne Termin | Ideen-Liste; nimmt an keiner Berechnung teil |
-| `completedGoals` | `completedAt` gesetzt | abgeschlossen; `spentCents` reserviert einen Teil des Topfs |
+| `completedGoals` | `completedAt` gesetzt | abgeschlossen; das Geld hat den Topf als Buchung verlassen |
 
 Die Sparplan-Routen arbeiten nur mit `Budget`-Zeilen **ohne** Kategorie, gelesen über alle Konten des
 Haushalts. Ein Kategorie-Budget ist hier kein Ziel: `GET` listet es nicht, die Routen unter `[id]`
-und `[id]/complete` antworten dafür mit `404`.
+und `[id]/complete` antworten dafür mit `404`. Dasselbe gilt für ein gelöschtes Ziel (`deletedAt`
+gesetzt): Es kann nicht mehr gelesen, geändert, abgeschlossen oder wiedereröffnet werden.
 
 ## Verfügbares Spar-Guthaben (rawAvailableCents → availableCents)
+
+Der Spartopf ist die Summe der Sparbuchungen. Ein abgeschlossenes Ziel hat sein Geld mit einer
+Entnahme-Buchung aus dem Topf genommen (siehe „Completion-Lebenszyklus"), deshalb gilt für jeden
+Haushalt, der kein Ziel aus der Zeit davor hat: `availableCents == rawAvailableCents` — „Verfügbar"
+lässt sich in der Buchungsliste (Typ „Sparen") nachrechnen.
 
 ### Schritt 1: Roher Spar-Saldo (rawAvailableCents)
 
@@ -63,38 +73,50 @@ return 0 - (aggregate._sum.amountCents ?? 0);
 
 Dieser Wert wird in den Totals als `rawAvailableCents` ausgewiesen.
 
-### Schritt 2: Reservierung für abgeschlossene Ziele (availableCents)
+### Schritt 2: Altbestand abziehen (availableCents)
 
-Der eigentliche Topf für die verbleibenden **aktiven** Ziele wird in der reinen Funktion
-`computeSavingPlanTotals` (`compute.ts`) berechnet. Abgeschlossene Ziele reservieren
-ihren bei Abschluss entnommenen Betrag (`spentCents`) aus dem rohen Saldo:
+Ziele, die abgeschlossen wurden, bevor der Abschluss eine Entnahme buchte, haben kein Geld aus dem
+Topf genommen, sondern ihren Betrag nur rechnerisch zurückgehalten. Die Migration hat diesen Betrag
+einmalig aus `spentCents` nach `reservedCents` kopiert; für einen neuen Abschluss wird
+`reservedCents` nie gesetzt. `computeSavingPlanTotals` (`compute.ts`) zieht ihn ab:
 
 ```typescript
 const withdrawnForCompletedCents = goals
   .filter(isCompleted)                         // completedAt != null
-  .reduce((sum, goal) => sum + (goal.spentCents ?? 0), 0);
+  .reduce((sum, goal) => sum + (goal.reservedCents ?? 0), 0);
 
 const availableCents = Math.max(rawSavingsBalance - withdrawnForCompletedCents, 0);
 ```
 
 **Wichtig:**
-- `withdrawnForCompletedCents` = Summe `spentCents` **aller abgeschlossenen Ziele**
-- `availableCents` = `max(rawAvailableCents − withdrawnForCompletedCents, 0)` — der bei 0
-  geklammerte Topf, der den **aktiven** Zielen zur Verfügung steht
-- Der Abschluss eines Ziels reduziert nur diesen rechnerischen Topf — siehe Abschnitt
-  "Completion-Lebenszyklus" zur Buchungs-Konvention
+- `withdrawnForCompletedCents` = Summe `reservedCents` der abgeschlossenen Ziele — der Altbestand.
+  Der Feldname ist geblieben; für Haushalte ohne solche Ziele ist der Wert 0
+- `availableCents` = `max(rawAvailableCents − withdrawnForCompletedCents, 0)`
+- Ein Ziel aus dem Altbestand zeigt damit denselben verfügbaren Topf wie vor der Umstellung
+- Der Altbestand endet, wenn das Ziel wiedereröffnet (`reservedCents` wird geleert) oder gelöscht
+  wird (gelöschte Ziele zählen nicht)
 
 `getAvailableSavingsCents(householdId)` in `savings.ts` berechnet denselben Wert für die Entnahme
-(Obergrenze von `POST /api/saving-plan/withdraw`).
+(Obergrenze von `POST /api/saving-plan/withdraw`) und für den Abschluss eines Ziels.
 
 ## Transaktionen verknüpft mit Sparzielen
 
 ```typescript
-transactionSpentCents: goal.transactions.reduce((sum, tx) => sum + Math.abs(tx.amountCents), 0)
+// compute.ts
+export function linkedSpentCents(rows, savingsIds) {
+  const { outcomeCents, incomeCents } = sumFlows(rows, savingsIds);
+  return Math.max(outcomeCents - incomeCents, 0);
+}
+
+transactionSpentCents: linkedSpentCents(goal.transactions, savingsIds)
 ```
 
 - `goal.transactions` = alle **nicht gelöschten** Transaktionen mit `savingGoalId = goal.id`
-- Summiert den **absoluten Betrag** aller verknüpften Transaktionen
+- Eingeordnet wird wie überall mit `classifyFlow` (Grundregeln §2): Ausgaben der verknüpften
+  Buchungen **minus** verknüpfte Erstattungen, mindestens 0
+- Verknüpfte Buchungen einer Spar-Kategorie (Einzahlung oder Entnahme) zählen nicht — sie sind
+  Umbuchungen, keine Ausgabe für das Ziel. Die Entnahme-Buchung des Abschlusses ist ohnehin nicht
+  mit dem Ziel verknüpft
 - Die Oberfläche zeigt den Wert als für das Ziel **ausgegeben** an. In die Berechnung des Topfs und
   der Monatsrate geht er nicht ein.
 
@@ -140,7 +162,7 @@ ist aus dem Topf.
 ```mermaid
 flowchart TD
     A["Aktive Sparziele mit Termin, sortiert nach Termin"] --> B
-    B["availableCents = max(rawSaldo - withdrawnForCompleted, 0)"] --> C
+    B["availableCents = max(rawSaldo - Altbestand reservedCents, 0)"] --> C
     C["coveredAtMonthStart = max(availableCents - max(savedThisMonth, 0), 0)"] --> LOOP
     LOOP["Für jedes Ziel i in Reihenfolge:"] --> CUM["cumulativeAmount += goal.amountCents"]
     CUM --> REM["cumulativeRemaining = max(cumulativeAmount - coveredAtMonthStart, 0)"]
@@ -155,7 +177,7 @@ flowchart TD
 
 **Annahmen:**
 - Aktuell: Juni 2026
-- Keine abgeschlossenen Ziele → `availableCents == rawAvailableCents`
+- Kein Ziel aus dem Altbestand → `availableCents == rawAvailableCents`
 - Topf zu Monatsbeginn: 1.000 € (100.000 Cents), im Juni noch nichts eingezahlt
 - Ziel 1: "Laptop" — 800 € bis September 2026 (3 Monate), aktiv
 - Ziel 2: "Urlaub" — 1.500 € bis Dezember 2026 (6 Monate), aktiv
@@ -217,7 +239,7 @@ Termins, bei Zielen ohne Termin einen leeren Text.
       month: number,
       year: number,
       amountCents: number | null,
-      transactionSpentCents: number,  // Abs-Summe verknüpfter, nicht gelöschter Transaktionen
+      transactionSpentCents: number,  // verknüpfte Ausgaben minus Erstattungen, mind. 0
       completedAt: null,              // bei aktiven Zielen immer null
       spentCents: null,               // bei aktiven Zielen immer null
       createdAt: DateTime
@@ -228,12 +250,12 @@ Termins, bei Zielen ohne Termin einen leeren Text.
     {
       // …
       completedAt: DateTime,          // Abschluss-Zeitpunkt
-      spentCents: number              // bei Abschluss entnommener Betrag (Snapshot)
+      spentCents: number              // was das Ziel gekostet hat (Angabe beim Abschluss)
     }
   ],
   totals: {
-    rawAvailableCents: number,          // roher Spar-Saldo (vor Reservierung)
-    withdrawnForCompletedCents: number, // SUM spentCents aller abgeschlossenen Ziele
+    rawAvailableCents: number,          // Spartopf = Summe der Sparbuchungen
+    withdrawnForCompletedCents: number, // Altbestand: SUM reservedCents abgeschlossener Ziele (sonst 0)
     availableCents: number,             // max(rawAvailableCents - withdrawnForCompleted, 0)
     totalTargetCents: number,           // Summe der Zielbeträge aktiver Ziele mit Termin
     suggestedMonthlyCents: number       // Empfohlene Monatsrate (siehe oben)
@@ -251,8 +273,10 @@ verringert „Gespart" des Monats und ist keine Einnahme.
 
 - **Body:** `{ amountCents, accountId?, description? }` — `amountCents` ganze Zahl > 0; `accountId`
   Standard: das älteste Konto des Haushalts; `description` Standard `"Savings withdrawal"`
-- **Obergrenze:** `getAvailableSavingsCents` — der Topf des Haushalts abzüglich der Reservierungen
-  abgeschlossener Ziele. Mehr geht nicht: `409` mit `availableCents`
+- **Obergrenze:** `getAvailableSavingsCents` — der Topf des Haushalts (abzüglich des Altbestands,
+  siehe oben). Mehr geht nicht: `409` mit `availableCents`. Prüfung und Buchung laufen in einer
+  Datenbank-Transaktion unter der Topf-Sperre des Haushalts (`lockSavingsPool`), damit zwei
+  gleichzeitige Entnahmen nicht dasselbe Geld verwenden
 - **Kategorie:** Bei mehreren Spar-Kategorien geht die Buchung in die älteste
   (`findSavingsBookingCategoryId`). Gibt es keine: `409`
 - **Datum:** `occurredAt` ist der Zeitpunkt der Anfrage
@@ -262,52 +286,84 @@ verringert „Gespart" des Monats und ist keine Einnahme.
 
 Ein Sparziel durchläuft zwei Zustände: **aktiv** (`completedAt == null`) und
 **abgeschlossen** (`completedAt` gesetzt). Der Übergang erfolgt über die dedizierte
-Route `POST/DELETE /api/saving-plan/[id]/complete`.
+Route `POST/DELETE /api/saving-plan/[id]/complete`. `completedAt` ist der Zeitpunkt der Anfrage.
 
 ### Abschließen — `POST /api/saving-plan/[id]/complete`
 
-- **Body (Zod):** `{ spentCents: number }` — Integer `>= 0` (höchstens int4), der tatsächlich aus dem
-  Spar-Topf entnommene Betrag
-- **Wirkung:** `completedAt = now`, `spentCents = <Body>`
+- **Body (Zod):**
+  ```typescript
+  {
+    spentCents: number,                    // Integer >= 0 (höchstens int4): was das Ziel gekostet hat
+    withdraw?: boolean,                    // Standard true: Geld aus dem Topf entnehmen
+    expense?: { categoryId: string | null, accountId?: string } | null   // den Kauf mitbuchen
+  }
+  ```
+- **Wirkung:** `completedAt = now`, `spentCents = <Body>`, dazu die Buchungen unten — alles in
+  **einer** Datenbank-Transaktion unter der Topf-Sperre des Haushalts
 - **Guards:** Auth (`401` ohne Session), Existenz (`404` Goal not found — auch für ein
-  Kategorie-Budget), Haushalt (`403` Forbidden), Validierung (`400` bei ungültigem Body)
-- **Response:** `{ id, completedAt, spentCents }`
+  Kategorie-Budget und ein gelöschtes Ziel), Haushalt (`403` Forbidden), Validierung (`400` bei
+  ungültigem Body), schon abgeschlossen (`409`)
+- **Response:** die aktualisierte `Budget`-Zeile des Ziels, dazu `withdrawnCents` (tatsächlich
+  entnommen) und `expenseTransactionId` (`null`, wenn kein Kauf gebucht wurde)
 
 ### Wiedereröffnen — `DELETE /api/saving-plan/[id]/complete`
 
-- **Wirkung:** `completedAt = null`, `spentCents = null` — das Ziel ist wieder aktiv
+- **Wirkung:** `completedAt`, `spentCents`, `withdrawalTransactionId` und `reservedCents` werden
+  geleert — das Ziel ist wieder aktiv. Wurde beim Abschluss eine Entnahme gebucht, wird sie gelöscht
+  (`deletedAt`): Das Geld ist wieder im Topf. Bei einem Ziel aus dem Altbestand gibt das Leeren von
+  `reservedCents` den zurückgehaltenen Betrag frei
+- Ein beim Abschluss gebuchter **Kauf bleibt stehen** — er ist eine gewöhnliche Buchung, die man in
+  der Buchungsliste löschen kann
 - **Guards:** identisch (Auth, Existenz, Haushalt)
-- **Response:** `{ id, completedAt, spentCents }`
+- **Response:** die aktualisierte `Budget`-Zeile des Ziels
 
 ### Buchungs-Konvention (wichtig)
 
-Der Abschluss erzeugt **keine echte Transaktion**. Der `spentCents`-Abzug ist eine
-reine Berechnung in der Sparplan-API:
+Der Abschluss nimmt das Geld mit einer **echten Buchung** aus dem Topf. Damit bleibt „Verfügbar"
+immer die Summe der Sparbuchungen.
 
-- Der **rohe Spar-Saldo** (`rawAvailableCents`, abgeleitet aus den Transaktionen der
-  Spar-Kategorien) bleibt durch den Abschluss **unverändert**.
-- Lediglich `availableCents` (der Topf für die aktiven Ziele) sinkt rechnerisch um den
-  reservierten `spentCents`-Betrag.
-- Der **echte Kontostand** sinkt nur, wenn die Ausgabe **separat als Transaktion**
-  gebucht wird — der Abschluss allein bewegt kein Geld.
+**Entnahme** (`withdraw`, Standard `true`):
 
-### Bekannte Grenzen
+- Betrag: `min(spentCents, im Moment verfügbarer Topf)`. Ist das 0 (Topf leer oder nichts
+  ausgegeben), wird nichts gebucht
+- eine **positive** Buchung in der Spar-Kategorie für Buchungen (`findSavingsBookingCategoryId`, bei
+  mehreren die älteste), Datum = Zeitpunkt der Anfrage, auf dem Konto des Ziels, Beschreibung
+  `Sparziel: <Titel>`
+- **nicht** mit dem Ziel verknüpft (`savingGoalId` bleibt leer — eine Entnahme ist nicht „für das
+  Ziel ausgegeben"); ihre ID steht in `Budget.withdrawalTransactionId`
+- `withdraw: false`: Das Geld wurde schon entnommen (z. B. über `withdraw`); es wird nichts gebucht.
+  So zieht „erst entnehmen, dann abschließen" den Betrag nur einmal ab
 
-Diese Punkte sind bewusst unverändert und offen:
+**Kauf** (`expense`, nur wenn angegeben und `spentCents > 0`):
 
-- **Kein Abgleich mit den Buchungen:** Weil der Abschluss keine Buchung erzeugt, ist „Verfügbar"
-  (`availableCents`) = roher Topf − Σ `spentCents`. Sobald ein Ziel abgeschlossen wurde, lässt sich
-  diese Zahl nicht mehr aus den Sparbuchungen allein herleiten und stimmt mit ihrer Summe nicht
-  überein.
-- **Entnahme und Abschluss zählen doppelt:** Wer das Geld für ein Ziel erst über `withdraw` entnimmt
-  (der rohe Topf sinkt) und das Ziel danach mit demselben Betrag als `spentCents` abschließt (die
-  Reservierung steigt), zieht den Betrag zweimal vom verfügbaren Topf ab. Die Oberfläche schlägt
-  beim Abschluss den dem Ziel zugeordneten Anteil des Topfs als Betrag vor.
-- **`spentCents` ist nicht durch den Topf begrenzt:** Jeder Wert von 0 bis zum int4-Maximum wird
-  angenommen. `availableCents` wird bei 0 abgeschnitten, eine Überziehung ist danach nicht mehr
-  sichtbar.
-- **Wiedereröffnen gibt die Reservierung frei:** `spentCents` wird gelöscht, `availableCents` steigt
-  wieder um diesen Betrag — auch wenn das Geld tatsächlich ausgegeben wurde.
+- eine **negative** Buchung über `spentCents`, Beschreibung = Titel des Ziels, mit dem Ziel
+  verknüpft (`savingGoalId`), Datum = Zeitpunkt der Anfrage, auf `expense.accountId` oder sonst dem
+  Konto des Ziels
+- `expense.categoryId`: muss zum Haushalt gehören (`404`), darf keine Spar-Kategorie sein (`400`);
+  `null` = ohne Kategorie. Die Steuer-Markierung kommt von der Kategorie (`isTaxRelevant`)
+- danach wird die Budget-Warnung der Kategorie geprüft, wie nach jeder neuen Buchung
+  ([06-budgets.md](./06-budgets.md))
+
+**Kontostand:** Einzahlung (−), Entnahme (+) und Kauf (−) ergeben zusammen einmal den Kaufbetrag.
+Wer den Kauf schon selbst gebucht hat, schließt ohne `expense` ab — die Entnahme gleicht dann die
+frühere Einzahlung aus, und das Geld hat das Konto ebenfalls genau einmal verlassen.
+
+**`reservedCents`** wird bei einem neuen Abschluss nie gesetzt.
+
+### Was man wissen sollte
+
+- **`spentCents` kann größer sein als der Topf:** Entnommen wird höchstens, was da ist;
+  `withdrawnCents` in der Antwort nennt den Betrag. `spentCents` bleibt, was das Ziel gekostet hat.
+  Spätere Einzahlungen stehen vollständig zur Verfügung
+- **Zweimal abschließen geht nicht:** Ein zweiter Abschluss — auch zeitgleich durch Doppelklick oder
+  das andere Haushaltsmitglied — endet mit `409` und bucht nichts
+- **Ein abgeschlossenes Ziel löschen** (`DELETE /api/saving-plan/[id]`) lässt die Entnahme stehen:
+  Das Geld hat den Topf verlassen. Wer es zurück im Topf haben will, öffnet das Ziel vorher wieder
+  oder löscht die Entnahme in der Buchungsliste
+- **Wiedereröffnen nach gelöschter Entnahme:** Hat der Nutzer die Entnahme-Buchung schon selbst
+  gelöscht, passiert nichts weiter
+- **Altbestand:** Ziele mit `reservedCents` haben keine Entnahme-Buchung. Solange sie abgeschlossen
+  sind, weicht `availableCents` um diesen Betrag von der Summe der Sparbuchungen ab
 
 ### Auswirkungen auf andere Endpunkte
 
