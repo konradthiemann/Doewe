@@ -7,6 +7,7 @@
  * coupon or refund that ended up alone in its category — is booked as a positive
  * row, so the rows of one receipt always add up to minus the receipt total.
  * Groups that net to zero are skipped; if nothing is left to book: 400.
+ * After the commit the budget alert is checked for each booked group.
  *
  * Body (JSON):
  *   receiptDate      string  — calendar day `yyyy-mm-dd`; stored as 12:00
@@ -27,6 +28,7 @@ import { parseDayKey, zonedTimeToUtc } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { checkBudgetAlerts } from "../../../../lib/budgetAlerts";
 import { prisma } from "../../../../lib/prisma";
 
 import { BatchTransactionInput } from "./schema";
@@ -132,6 +134,13 @@ export async function POST(req: Request) {
 
     return results;
   });
+
+  // Budget alert, as after a single booking: once per booked group, one after
+  // the other (two groups may share a category). Awaited; errors are swallowed
+  // inside, the receipt never fails on a push problem.
+  for (const booked of created) {
+    await checkBudgetAlerts({ householdId: user.householdId, categoryId: booked.categoryId, occurredAt });
+  }
 
   return NextResponse.json({ transactions: created }, { status: 201 });
 }

@@ -14,11 +14,18 @@ import { loadBookedOccurrenceKeys, occurrenceKey } from "./recurringPeriods";
 import { loadSavingsCategoryIds } from "./savingsCategory";
 
 /**
- * Budget-Warnungen (Teil C): Nach einer Transaktions-Mutation prüfen, ob eine
- * Kategorie-Budget-Schwelle (80 % / 100 %) erreicht wurde, und — falls neu —
- * einen Push an den buchenden Nutzer senden. Dedupe über den BudgetAlertLog
- * (Unique auf [budgetId, year, month, threshold]), damit dieselbe Schwelle im
- * selben Monat nur einmal meldet.
+ * Budget-Warnungen (Teil C): Nach einer Buchung prüfen, ob die Kategorie eine
+ * Budget-Schwelle (80 % / 100 %) erreicht hat, und — falls neu — einen Push an
+ * alle Mitglieder des Haushalts senden, die `notifyBudgetAlerts` eingeschaltet
+ * haben, jeweils in ihrer Sprache.
+ *
+ * Dedupe über den BudgetAlertLog, Unique auf
+ * [householdId, categoryId, year, month, threshold]: Dieselbe Schwelle meldet
+ * im selben Monat nur einmal, egal wer bucht und auf welchem Konto. Der
+ * Schlüssel braucht keine `Budget`-Zeile, die Warnung gilt deshalb für
+ * Budget-Pläne genauso wie für Monats-Budgets. Zeilen aus der Zeit davor
+ * (mit `budgetId`) hat die Migration um Haushalt und Kategorie ergänzt; sie
+ * zählen weiter mit, eine schon gemeldete Schwelle meldet nicht erneut.
  *
  * "Ausgegeben" je Kategorie ist dieselbe Zahl wie in /api/analytics/summary
  * (docs/calculations/00-grundregeln.md): die gebuchten Ausgaben der Kategorie
@@ -30,13 +37,12 @@ import { loadSavingsCategoryIds } from "./savingsCategory";
  *
  * Das Budget ist dieselbe Zahl wie auf dem Dashboard (lib/categoryBudgets.ts):
  * der Budget-Plan der Kategorie, sonst die Monats-Budgets des Haushalts
- * zusammen.
+ * zusammen; für einen abgeschlossenen Monat der eingefrorene Stand.
  *
- * Bekannte Einschränkung: Der BudgetAlertLog hängt an `budgetId`. Eine Warnung
- * gibt es deshalb nur, wenn für Kategorie und Monat mindestens ein
- * Monats-Budget (`Budget`-Zeile) im Haushalt existiert. Eine Kategorie, die nur
- * einen Budget-Plan (`CategoryBudgetPlan`) hat — das ist alles, was die
- * Oberfläche anlegt —, löst keine Warnung aus.
+ * Aufgerufen nach dem Anlegen und nach dem Bearbeiten einer Buchung, je
+ * gebuchter Gruppe eines Belegs und für den Kauf beim Abschluss eines
+ * Sparziels. Sync und automatisch gebuchte Daueraufträge rufen die Prüfung
+ * nicht auf.
  */
 
 /** Geplante Daueraufträge einer Kategorie im Monat (siehe oben), Ausgaben in Cents. */
@@ -47,12 +53,23 @@ async function plannedRecurringExpenseCents(
   year: number,
   savingsIds: ReadonlySet<string>
 ): Promise<number> {
+  const period = monthKey({ year, month });
   const recurring = await prisma.recurringTransaction.findMany({
     where: { account: { householdId }, categoryId },
-    select: { id: true, amountCents: true, categoryId: true, intervalMonths: true, nextOccurrence: true }
+    select: {
+      id: true,
+      amountCents: true,
+      categoryId: true,
+      intervalMonths: true,
+      nextOccurrence: true,
+      bookFromPeriod: true
+    }
   });
 
   const due = recurring.filter((rec) => {
+    // Ein Vorkommen vor `bookFromPeriod` wird nie automatisch gebucht — es ist
+    // nicht geplant. ("JJJJ-MM" sortiert als Text wie der Kalender.)
+    if (rec.bookFromPeriod !== null && period < rec.bookFromPeriod) return false;
     const anchor = zonedMonth(rec.nextOccurrence);
     return isRecurringDueInMonth({
       nextYear: anchor.year,
@@ -75,50 +92,45 @@ async function plannedRecurringExpenseCents(
   // Bereits gebuchte Vorkommen stecken schon in den gebuchten Ausgaben (oder
   // wurden vom Nutzer gelöscht/verschoben) — hier nicht nochmal addieren.
   const bookedKeys = await loadBookedOccurrenceKeys(dueIds);
-  const period = monthKey({ year, month });
 
   const planned = due.filter((r) => !skipped.has(r.id) && !bookedKeys.has(occurrenceKey(r.id, period)));
   return sumFlows(planned, savingsIds).outcomeCents;
 }
 
 /**
- * Prüft die Budget-Schwellen der Kategorie für den Monat der Transaktion und
- * versendet ggf. neue Warn-Pushes. Fehler werden geschluckt (Fire-and-forget aus
- * dem Request-Pfad) — die Mutation selbst darf nie an einem Push-Problem scheitern.
+ * Prüft die Budget-Schwellen der Kategorie für den Berliner Monat von
+ * `occurredAt` und versendet ggf. neue Warn-Pushes an den Haushalt. Fehler
+ * werden geschluckt (Fire-and-forget aus dem Request-Pfad) — die Mutation
+ * selbst darf nie an einem Push-Problem scheitern.
  */
 export async function checkBudgetAlerts(params: {
-  accountId: string;
-  userId: string;
+  householdId: string;
   categoryId: string | null;
   occurredAt: Date;
 }): Promise<void> {
-  const { accountId, userId, categoryId } = params;
+  const { householdId, categoryId } = params;
   if (!categoryId) return;
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { notifyBudgetAlerts: true, locale: true }
-    });
-    if (!user?.notifyBudgetAlerts) return;
-
     // Monat der Buchung im App-Kalender (Europe/Berlin), halboffen [start, end).
     const { month, year } = zonedMonth(params.occurredAt);
     const { start, end } = zonedMonthRange(year, month);
 
-    const account = await prisma.account.findFirst({ where: { id: accountId }, select: { householdId: true } });
-    if (!account) return;
-    const householdId = account.householdId;
-
-    // The alert log is keyed by a Budget row, so an alert needs one per-month
-    // row of the household for this category as its anchor (the oldest, so
-    // every account's bookings dedupe on the same row).
-    const budget = await prisma.budget.findFirst({
-      where: { account: { householdId }, categoryId, month, year },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { id: true, category: { select: { name: true } } }
+    // Empfänger: alle Mitglieder des Haushalts, die die Warnung nicht
+    // abgeschaltet haben. Ohne Empfänger wird nichts als gemeldet vermerkt —
+    // wer die Warnung später einschaltet, erfährt die Schwelle dann noch.
+    const recipients = await prisma.householdMember.findMany({
+      where: { householdId, user: { notifyBudgetAlerts: true, deletedAt: null, suspendedAt: null } },
+      select: { userId: true, user: { select: { locale: true } } },
+      orderBy: { joinedAt: "asc" }
     });
-    if (!budget) return;
+    if (recipients.length === 0) return;
+
+    const category = await prisma.category.findFirst({
+      where: { id: categoryId, householdId },
+      select: { name: true }
+    });
+    if (!category) return;
 
     // The amount is the budget the dashboard shows for this month: the plan if
     // the category has one, otherwise the household's per-month rows added up.
@@ -141,34 +153,41 @@ export async function checkBudgetAlerts(params: {
 
     // Nur die HÖCHSTE erreichte Schwelle ist relevant (100 % schließt 80 % ein).
     const highest = Math.max(...reached);
+    const key = { householdId, categoryId, year, month };
 
-    // Idempotenz: den Versand der höchsten Schwelle atomar "reservieren".
-    // Der Unique-Constraint [budgetId, year, month, threshold] macht den zweiten
-    // Trigger derselben Schwelle zum No-op.
-    try {
-      await prisma.budgetAlertLog.create({
-        data: { budgetId: budget.id, year, month, threshold: highest }
-      });
-    } catch {
-      // Höchste Schwelle wurde bereits gemeldet → nichts zu tun.
-      return;
-    }
+    // Idempotenz: den Versand der höchsten Schwelle atomar "reservieren". Der
+    // Unique-Constraint macht den zweiten Trigger derselben Schwelle zum No-op
+    // (`skipDuplicates` = ON CONFLICT DO NOTHING, auch bei parallelen Buchungen).
+    const reserved = await prisma.budgetAlertLog.createMany({
+      data: [{ ...key, threshold: highest }],
+      skipDuplicates: true
+    });
+    // Höchste Schwelle wurde bereits gemeldet → nichts zu tun.
+    if (reserved.count === 0) return;
 
     // Alle niedrigeren erreichten Schwellen als "gesendet" markieren, damit sie
     // später nie mehr einzeln nachfeuern (z. B. 80 % nach bereits gemeldeten 100 %).
-    for (const lower of reached.filter((t) => t < highest)) {
-      await prisma.budgetAlertLog
-        .create({ data: { budgetId: budget.id, year, month, threshold: lower } })
-        .catch(() => undefined);
+    const lower = reached.filter((t) => t < highest);
+    if (lower.length > 0) {
+      await prisma.budgetAlertLog.createMany({
+        data: lower.map((threshold) => ({ ...key, threshold })),
+        skipDuplicates: true
+      });
     }
 
-    const categoryName = budget.category?.name ?? "";
-    const isDe = user.locale !== "en";
-    const title = isDe ? "Budget-Warnung" : "Budget alert";
-    const body = isDe
-      ? `${categoryName}: Budget zu ${highest} % ausgeschöpft.`
-      : `${categoryName}: budget ${highest}% used.`;
-    await sendPushToUser(userId, { title, body, url: "/dashboard", tag: `budget-${budget.id}` });
+    const tag = `budget-${categoryId}-${monthKey({ year, month })}`;
+    await Promise.all(
+      recipients.map((recipient) => {
+        const isDe = recipient.user.locale !== "en";
+        const title = isDe ? "Budget-Warnung" : "Budget alert";
+        const body = isDe
+          ? `${category.name}: Budget zu ${highest} % ausgeschöpft.`
+          : `${category.name}: budget ${highest}% used.`;
+        // Je Empfänger abfangen: ein Fehler beim einen darf den Push an den
+        // anderen nicht verhindern.
+        return sendPushToUser(recipient.userId, { title, body, url: "/dashboard", tag }).catch(() => 0);
+      })
+    );
   } catch {
     // Push-/DB-Fehler dürfen die auslösende Mutation nicht beeinflussen.
   }

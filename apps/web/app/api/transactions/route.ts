@@ -125,12 +125,11 @@ export async function POST(req: Request) {
     });
 
     // Budget-Warnung (Teil C): Nach dem Commit prüfen, ob eine Kategorie-Budget-
-    // Schwelle erreicht wurde, und ggf. einen Push senden. Bewusst awaited (auf
-    // Serverless enden Handler sonst vor dem Versand); alle Fehler werden intern
-    // geschluckt, die Buchung darf nie an einem Push-Problem scheitern.
+    // Schwelle erreicht wurde, und ggf. einen Push an den Haushalt senden. Bewusst
+    // awaited (auf Serverless enden Handler sonst vor dem Versand); alle Fehler
+    // werden intern geschluckt, die Buchung darf nie an einem Push-Problem scheitern.
     await checkBudgetAlerts({
-      accountId: created.accountId,
-      userId: user.id,
+      householdId: user.householdId,
       categoryId: created.categoryId,
       occurredAt: created.occurredAt
     });
