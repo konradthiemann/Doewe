@@ -166,6 +166,10 @@ model RecurringTransaction {
   intervalMonths Int       @default(1)
   dayOfMonth     Int       @default(1) // Day of month (1-31) when transaction occurs
   nextOccurrence DateTime
+  // First month ("YYYY-MM", Europe/Berlin) that may be booked automatically.
+  // Occurrences before it stay unbooked: a template that starts in the past is
+  // not back-booked unless the user asked for it. Null = no lower bound.
+  bookFromPeriod String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now()) @updatedAt
   deletedAt      DateTime?
@@ -202,7 +206,13 @@ model Budget {
   // have a concrete target amount yet).
   amountCents Int?      // goal amount; null = no amount set yet
   completedAt DateTime? // null = active goal, set = goal closed
-  spentCents  Int?      // amount actually withdrawn from savings on completion (snapshot)
+  spentCents  Int?      // what the goal cost in the end (shown as "Ausgegeben")
+  // Completing a goal takes the money out of the savings pool with a real
+  // withdrawal booking; its id is kept so that reopening the goal can undo it.
+  withdrawalTransactionId String?
+  // Only for goals completed before withdrawals were booked: the amount that is
+  // still held back from the pool instead of a booking. Never set for new goals.
+  reservedCents Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
   deletedAt   DateTime?
@@ -269,6 +279,7 @@ model Household {
   accounts   Account[]
   categories Category[]
   categoryBudgetPlans CategoryBudgetPlan[]
+  budgetSnapshots BudgetMonthSnapshot[]
 }
 
 // v1: one household per user (`userId @unique`) → the session carries a single
@@ -376,16 +387,38 @@ model PushSubscription {
 // Dedupe for budget-threshold pushes — the unique constraint guarantees the
 // same threshold for the same category-budget month is only sent once (same
 // idempotency shape as RecurringTransactionSkip). budgetId is the Budget row id.
+// One row per budget threshold that was already announced. Keyed by household
+// and category, so it works for budget plans as well as per-month Budget rows
+// (budgetId is only kept for rows written before that).
 model BudgetAlertLog {
-  id        String   @id @default(cuid())
-  budgetId  String
-  year      Int
-  month     Int
-  threshold Int
-  sentAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  budgetId    String?
+  householdId String?
+  categoryId  String?
+  year        Int
+  month       Int
+  threshold   Int
+  sentAt      DateTime @default(now())
 
-  @@unique([budgetId, year, month, threshold])
+  @@unique([householdId, categoryId, year, month, threshold])
   @@index([budgetId])
+}
+
+// The category budgets of a completed month, frozen the first time the month
+// is read after it ended. Without it, the budgets of past months would change
+// whenever a plan or a standing order is edited (a YEARLY plan is distributed
+// by the standing orders of its year). `budgets` maps categoryId to cents.
+model BudgetMonthSnapshot {
+  id          String   @id @default(cuid())
+  householdId String
+  year        Int
+  month       Int
+  budgets     Json
+  createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, year, month])
 }
 
 // Configurable capture reminder (Teil C, 5.3). Server-side cron scheduling
