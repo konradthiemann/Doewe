@@ -100,6 +100,11 @@ model Transaction {
   // and avoid double-counting it as still-planned in analytics. Kept (SetNull)
   // if the originating recurring template is later deleted.
   recurringTransactionId String?
+  // The month ("YYYY-MM", Europe/Berlin) this auto-booked occurrence was
+  // booked FOR. It identifies the occurrence: the row keeps it when the user
+  // moves `occurredAt` into another month or deletes the row (tombstone), so
+  // that month still counts as booked and is not booked a second time.
+  recurringPeriod String?
 
   account     Account  @relation(fields: [accountId], references: [id])
   category    Category? @relation(fields: [categoryId], references: [id])
@@ -108,7 +113,7 @@ model Transaction {
   attachments Attachment[]
   receiptLineItems ReceiptLineItem[]
 
-  @@index([recurringTransactionId])
+  @@index([recurringTransactionId, recurringPeriod])
 }
 
 // Receipt files (photos/PDFs) attached to a transaction as tax evidence.

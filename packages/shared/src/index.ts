@@ -24,6 +24,43 @@ export { decideFlushStep } from "./outbox";
 export type { DashboardBudgetInput, DashboardBudget } from "./dashboardBudget";
 export { computeAvailableBudget } from "./dashboardBudget";
 
+export type { ZonedDateTime } from "./calendar";
+export {
+  APP_TIME_ZONE,
+  zonedDateTime,
+  zonedDate,
+  zonedMonth,
+  zonedDayKey,
+  zonedTimeToUtc,
+  zonedDayRange,
+  zonedMonthRange,
+  zonedYearRange,
+  daysInMonth,
+  shiftMonth,
+  monthKey,
+  parseDayKey
+} from "./calendar";
+
+export type { TransactionTypeFilter, ListFilter, ListRow, ListTotals } from "./transactionFilter";
+export {
+  filterTransactions,
+  listTotals,
+  monthDayRange,
+  monthOfDayRange,
+  monthsWithTransactions
+} from "./transactionFilter";
+
+export type { FlowKind, FlowRow, FlowTotals } from "./cashflow";
+export {
+  SAVINGS_CATEGORY_NAMES,
+  isSavingsCategoryName,
+  savingsCategoryIds,
+  classifyFlow,
+  emptyFlowTotals,
+  addFlow,
+  sumFlows
+} from "./cashflow";
+
 export type { RecurringAnchor, MonthRef, CalendarDate } from "./recurringSchedule";
 export { isRecurringDueInMonth, dueMonthsBetween, addMonthsClamped } from "./recurringSchedule";
 
