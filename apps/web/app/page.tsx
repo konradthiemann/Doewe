@@ -1,5 +1,5 @@
 "use client";
-import { computeAvailableBudget } from "@doewe/shared";
+import { computeAvailableBudget, zonedMonth } from "@doewe/shared";
 import {
   Chart as ChartJS,
   ArcElement,
@@ -21,7 +21,9 @@ import PageContainer from "../components/PageContainer";
 import { CategoryBreakdown } from "../components/review/CategoryBreakdown";
 import { Skeleton } from "../components/ui/Skeleton";
 import { useApiQuery } from "../lib/api/useApiQuery";
+import { formatBookingDayMonth, formatMonth } from "../lib/bookingDate";
 import { toBreakdownRows, type DashboardCategoryBudget } from "../lib/budgetRows";
+import { fixedCostRatioPercent, nextGoalDeadline, recurringDueFigures, sortByDueDay } from "../lib/dashboardFigures";
 import { useI18n } from "../lib/i18n";
 
 ChartJS.register(
@@ -57,6 +59,11 @@ type SummaryData = {
   recurringIncomeTotal?: number;
   recurringOutcomeTotal?: number;
   recurringPlannedSavings?: number;
+  // All templates due this month and not skipped, booked or not (euros / count).
+  // Optional: an offline cache may still hold a payload from before these existed.
+  recurringDueIncomeTotal?: number;
+  recurringDueOutcomeTotal?: number;
+  recurringDueCount?: number;
   projectedIncomeTotal?: number;
   projectedOutcomeTotal?: number;
   projectedSavingsTotal?: number;
@@ -117,15 +124,10 @@ export default function HomePage() {
   const savingPlan = useMemo(() => {
     const data = savingPlanQuery.data;
     if (!data) return null;
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    const upcoming = (data.goals || [])
-      .filter((g) => g.year > currentYear || (g.year === currentYear && g.month >= currentMonth))
-      .sort((a, b) => (a.year - b.year) * 12 + (a.month - b.month));
     return {
       totals: data.totals,
-      nextDeadline: upcoming[0] ? { month: upcoming[0].month, year: upcoming[0].year } : null
+      // "Current month" is the app's calendar month (Europe/Berlin), like on the server.
+      nextDeadline: nextGoalDeadline(data.goals || [], zonedMonth(new Date()))
     };
   }, [savingPlanQuery.data]);
 
@@ -161,7 +163,6 @@ export default function HomePage() {
     projectedExpenses,
     availableBudget,
     projectedLeft,
-    spentPercent,
     expensesPercent,
     savedPercent,
     overspent,
@@ -186,11 +187,12 @@ export default function HomePage() {
   const savingsRate = projectedIncome > 0
     ? Math.max(0, Math.round((totalSavingsTransfer / projectedIncome) * 100))
     : 0;
+  // Standing orders of this month, whether already booked or not. The
+  // `recurring*Total` fields only cover what is not booked yet and shrink to 0
+  // during the month, so they cannot describe the month's fixed costs.
+  const recurringDue = recurringDueFigures(summary);
   // Fixed-cost ratio: recurring expenses as share of projected income (proxy for financial obligation load).
-  const recurringOutcome = summary.recurringOutcomeTotal || 0;
-  const fixedCostRatio = projectedIncome > 0
-    ? Math.max(0, Math.round((recurringOutcome / projectedIncome) * 100))
-    : 0;
+  const fixedCostRatio = fixedCostRatioPercent(recurringDue.outcomeTotal, projectedIncome);
 
   // Saving-plan recommendation: suggested monthly savings vs. actual.
   const suggestedMonthly = savingPlan ? savingPlan.totals.suggestedMonthlyCents / 100 : 0;
@@ -292,15 +294,13 @@ export default function HomePage() {
   const formatCurrency = (value: number) =>
     `${value.toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
+  // Geplante Daueraufträge: diesen Monat fällig, nicht übersprungen, noch nicht gebucht.
   const recurringTransactions = summary.recurringTransactions || [];
-  const recurringIncomeTotal = summary.recurringIncomeTotal || 0;
-  const recurringOutcomeTotal = summary.recurringOutcomeTotal || 0;
 
-  // "Steht noch an": Daueraufträge mit Fälligkeitstag ab heute (Restmonat)
-  const todayOfMonth = new Date().getDate();
-  const upcomingRecurring = recurringTransactions
-    .filter((rec) => rec.dayOfMonth != null && rec.dayOfMonth >= todayOfMonth)
-    .sort((a, b) => (a.dayOfMonth ?? 0) - (b.dayOfMonth ?? 0));
+  // "Steht noch an": alle geplanten Daueraufträge nach Fälligkeitstag — auch die,
+  // deren Tag schon vorbei ist: solange sie nicht gebucht sind, stecken sie in
+  // jeder Hochrechnung dieser Seite.
+  const upcomingRecurring = sortByDueDay(recurringTransactions);
 
   // Budgets: kritischste zuerst (static rows, no bookings attached)
   const budgetRows = toBreakdownRows(categoryBudgets.slice().sort((a, b) => b.diff - a.diff));
@@ -448,8 +448,8 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="min-w-0 rounded-card border border-line bg-surface p-3 shadow-card">
               <p className="text-xs text-ink-muted">{t("dashboard.spent")}</p>
-              <p className="mt-0.5 text-amount font-semibold tabular-nums text-expense">{formatCurrency(projectedSpent)}</p>
-              <p className="text-[11px] text-ink-faint">{t("dashboard.spentOfBudget", { percent: spentPercent })}</p>
+              <p className="mt-0.5 text-amount font-semibold tabular-nums text-expense">{formatCurrency(projectedExpenses)}</p>
+              <p className="text-[11px] text-ink-faint">{t("dashboard.spentOfBudget", { percent: expensesPercent })}</p>
             </div>
             <div className="min-w-0 rounded-card border border-line bg-surface p-3 shadow-card">
               <p className="text-xs text-ink-muted">{t("dashboard.saved")}</p>
@@ -542,34 +542,34 @@ export default function HomePage() {
               <Skeleton className="h-14" />
               <Skeleton className="h-14" />
             </div>
-          ) : recurringTransactions.length > 0 ? (
+          ) : recurringTransactions.length > 0 || recurringDue.count > 0 ? (
             <>
               <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                 {t("dashboard.upcomingTitle")}
               </p>
               {upcomingRecurring.length > 0 ? (
                 <ul className="mt-2 space-y-2">
-                  {upcomingRecurring.slice(0, 5).map(renderRecurringItem)}
+                  {upcomingRecurring.map(renderRecurringItem)}
                 </ul>
               ) : (
                 <p className="mt-2 text-sm text-ink-muted">{t("dashboard.upcomingNone")}</p>
               )}
               <details className="mt-4">
                 <summary className="cursor-pointer select-none text-sm font-medium text-brand">
-                  {t("dashboard.recurringShowAll", { count: recurringTransactions.length })}
+                  {t("dashboard.recurringShowAll", { count: recurringDue.count })}
                 </summary>
                 <div className="mt-3">
                   <div className="grid gap-4 sm:grid-cols-2 mb-4">
                     <div>
                       <p className="text-sm text-ink-muted">{t("dashboard.recurringIncome")}</p>
                       <p className="text-amount-lg font-semibold tabular-nums text-income">
-                        {formatCurrency(recurringIncomeTotal)}
+                        {formatCurrency(recurringDue.incomeTotal)}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-ink-muted">{t("dashboard.recurringOutcome")}</p>
                       <p className="text-amount-lg font-semibold tabular-nums text-expense">
-                        {formatCurrency(recurringOutcomeTotal)}
+                        {formatCurrency(recurringDue.outcomeTotal)}
                       </p>
                     </div>
                   </div>
@@ -590,15 +590,17 @@ export default function HomePage() {
           <h2 id="savings-overview" className="text-lg font-medium mb-4">
             {t("dashboard.savingsOverview")}
           </h2>
-          <div className="grid gap-4 sm:grid-cols-3">
+          {/* Amounts carry cents ("1.234,56 €"): three columns only where each is wide
+              enough — the card is half-width from lg on, so stack there until 2xl. */}
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
             <div>
               <p className="text-sm text-ink-muted">{t("dashboard.plannedSavings")}</p>
-              <p className="text-amount-lg font-semibold tabular-nums" style={{ color: plannedColor }}>{plannedSavings.toFixed(0)} €</p>
+              <p className="text-amount-lg font-semibold tabular-nums" style={{ color: plannedColor }}>{formatCurrency(plannedSavings)}</p>
               <p className="text-xs text-ink-muted">{t("dashboard.targetForMonth")}</p>
             </div>
             <div>
               <p className="text-sm text-ink-muted">{t("dashboard.actualSaved")}</p>
-              <p className="text-amount-lg font-semibold tabular-nums" style={{ color: actualSavings >= 0 ? actualColor : "#8a6116" }}>{actualSavings.toFixed(0)} €</p>
+              <p className="text-amount-lg font-semibold tabular-nums" style={{ color: actualSavings >= 0 ? actualColor : "#8a6116" }}>{formatCurrency(actualSavings)}</p>
               <p className="text-xs text-ink-muted">
                 {actualSavings >= 0
                   ? t("dashboard.percentOfTarget", { percent: savingsProgress })
@@ -608,7 +610,7 @@ export default function HomePage() {
             <div>
               <p className="text-sm text-ink-muted">{t("dashboard.recommendedSavings")}</p>
               <p className={`text-amount-lg font-semibold tabular-nums ${savingOnTrack ? "text-income" : "text-warning"}`}>
-                {suggestedMonthly.toFixed(0)} €
+                {formatCurrency(suggestedMonthly)}
               </p>
               <p className="text-xs text-ink-muted">{t("dashboard.recommendedSavingsHint")}</p>
             </div>
@@ -640,8 +642,7 @@ export default function HomePage() {
               {savingPlan.nextDeadline && (
                 <p className="mt-0.5 text-[11px] opacity-80">
                   {t("dashboard.savingNextDeadline", {
-                    date: new Date(savingPlan.nextDeadline.year, savingPlan.nextDeadline.month - 1, 1)
-                      .toLocaleDateString(dateLocale, { month: "long", year: "numeric" })
+                    date: formatMonth(savingPlan.nextDeadline, dateLocale)
                   })}
                 </p>
               )}
@@ -660,7 +661,7 @@ export default function HomePage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm text-ink-muted">{goal.title}</p>
                         <p className="text-xs text-ink-muted">
-                          {new Date(goal.completedAt).toLocaleDateString(dateLocale, { day: "numeric", month: "long" })}
+                          {formatBookingDayMonth(goal.completedAt, dateLocale, { month: "long" })}
                           {" · "}
                           {t("dashboard.completedGoalTarget", { amount: formatCurrency(goal.target) })}
                         </p>
@@ -716,10 +717,7 @@ export default function HomePage() {
               <div className="h-48 sm:h-64 mb-4 sm:mb-6">
                 <Bar
                   data={{
-                    labels: quarterly.quarters.map(q => {
-                      const date = new Date(q.year, q.month - 1, 1);
-                      return date.toLocaleDateString(dateLocale, { month: "short", year: "numeric" });
-                    }),
+                    labels: quarterly.quarters.map(q => formatMonth(q, dateLocale, { month: "short" })),
                     datasets: [
                       {
                         label: t("dashboard.quarterlyIncome"),
@@ -811,7 +809,7 @@ export default function HomePage() {
                         <th className="py-2 pr-2 text-left font-medium text-ink-muted whitespace-nowrap"></th>
                         {quarterly.quarters.map(q => (
                           <th key={`${q.year}-${q.month}`} className="py-2 px-1 sm:px-2 text-right font-medium text-ink-muted whitespace-nowrap">
-                            {new Date(q.year, q.month - 1, 1).toLocaleDateString(dateLocale, { month: "short" })}
+                            {formatMonth(q, dateLocale, { month: "short", year: false })}
                           </th>
                         ))}
                         <th className="py-2 pl-2 text-right font-semibold text-ink whitespace-nowrap">{t("dashboard.quarterlyTotal")}</th>
