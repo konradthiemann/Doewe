@@ -2,14 +2,19 @@
  * POST /api/saving-plan/withdraw — move money from the savings pool back into
  * everyday spending.
  *
- * Requires an authenticated session. Creates a POSITIVE transaction in the
- * user's savings category (the inverse of a savings deposit): the money returns
- * to the current account and the savings pool shrinks accordingly. The analytics
- * routes treat positive savings transactions as a net-savings reduction (not
- * income), so the withdrawn amount raises the month's available budget.
+ * Requires an authenticated session. Creates a POSITIVE transaction in a
+ * savings category of the household (the inverse of a savings deposit): the
+ * money returns to the current account and the savings pool shrinks accordingly.
+ * The analytics routes treat positive savings transactions as a net-savings
+ * reduction (not income), so the withdrawn amount raises the month's available
+ * budget.
+ *
+ * The cap is the household's pool: all savings categories, all accounts, minus
+ * what completed goals reserved. With several savings categories the booking
+ * goes to the oldest one. `occurredAt` is the instant of the request.
  *
  * Body (JSON):
- *   accountId?   string — defaults to the user's first account
+ *   accountId?   string — defaults to the household's oldest account
  *   amountCents  number — integer > 0, capped at the available savings pool
  *   description? string — shown in the transaction list
  */
@@ -18,7 +23,7 @@ import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
-import { findSavingsCategoryId, getAvailableSavingsCents } from "../savings";
+import { findSavingsBookingCategoryId, getAvailableSavingsCents } from "../savings";
 
 const WithdrawInput = z.object({
   accountId: z.string().min(1).optional(),
@@ -44,12 +49,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
-  const savingsCatId = await findSavingsCategoryId(user.householdId);
+  const savingsCatId = await findSavingsBookingCategoryId(user.householdId);
   if (!savingsCatId) {
     return NextResponse.json({ error: "No savings category" }, { status: 409 });
   }
 
-  const availableCents = await getAvailableSavingsCents(account.id, user.householdId);
+  const availableCents = await getAvailableSavingsCents(user.householdId);
   if (availableCents <= 0) {
     return NextResponse.json({ error: "Nothing available to withdraw", availableCents }, { status: 409 });
   }

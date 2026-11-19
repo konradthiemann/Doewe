@@ -1,57 +1,104 @@
 /**
  * Shared savings-pool helpers used by the saving-plan routes.
  *
- * Convention (see analytics routes): the savings category holds the running
- * "money set aside" balance. Deposits are stored as NEGATIVE transactions
- * (money leaving the current account), withdrawals as POSITIVE ones (money
- * coming back). Negating the net sum yields a positive pool balance.
+ * The pool is one figure per household (docs/calculations/00-grundregeln.md
+ * §2 and §3): the negated sum of all bookings in ALL savings categories of
+ * the household, across all of its accounts. Deposits are stored as NEGATIVE
+ * transactions (money leaving the current account), withdrawals as POSITIVE
+ * ones (money coming back), so negating the net sum yields a positive balance.
  */
+import { isSavingsCategoryName, zonedMonth, zonedMonthRange } from "@doewe/shared";
+
 import { prisma } from "../../../lib/prisma";
+import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
 
 /**
- * Savings category names recognised by the system (EN / DE).
- * The lookup is case-insensitive so "savings", "Savings", "Sparen" etc. all match.
+ * @deprecated Import `SAVINGS_CATEGORY_NAMES` / `isSavingsCategoryName` from
+ * `@doewe/shared`. Re-exported only until the remaining callers have moved.
  */
-export const SAVINGS_CATEGORY_NAMES = ["savings", "sparen"];
+export { SAVINGS_CATEGORY_NAMES } from "@doewe/shared";
 
-export async function findSavingsCategoryId(householdId: string): Promise<string | null> {
+/**
+ * The savings category a new pool booking (a withdrawal) is written to: the
+ * oldest one, so the choice is stable when a household has several.
+ */
+export async function findSavingsBookingCategoryId(householdId: string): Promise<string | null> {
   const categories = await prisma.category.findMany({
     where: { householdId },
-    select: { id: true, name: true }
+    select: { id: true, name: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }]
   });
-  const match = categories.find((c) =>
-    SAVINGS_CATEGORY_NAMES.includes(c.name.toLowerCase().trim())
-  );
-  return match?.id ?? null;
+  return categories.find((category) => isSavingsCategoryName(category.name))?.id ?? null;
 }
 
-/** Raw savings balance: negated net sum of the savings category. */
-export async function resolveSavingsBalanceCents(accountId: string, householdId: string): Promise<number> {
-  const savingsCatId = await findSavingsCategoryId(householdId);
+/**
+ * @deprecated A household can have several savings categories; reading "the"
+ * savings category misses the others. Classify with `loadSavingsCategoryIds`
+ * (lib/savingsCategory.ts). Kept only until the remaining callers have moved.
+ */
+export async function findSavingsCategoryId(householdId: string): Promise<string | null> {
+  return findSavingsBookingCategoryId(householdId);
+}
 
-  if (!savingsCatId) {
+/**
+ * Negated net sum of the household's savings bookings, optionally within
+ * `[start, end)`. A caller that needs several sums passes the same
+ * `savingsIds` (from `loadSavingsCategoryIds`) to each of them.
+ */
+async function sumSavingsCents(
+  householdId: string,
+  savingsIds: ReadonlySet<string> | undefined,
+  range?: { start: Date; end: Date }
+): Promise<number> {
+  savingsIds ??= await loadSavingsCategoryIds(householdId);
+  if (savingsIds.size === 0) {
     return 0;
   }
 
-  const savingsTransactions = await prisma.transaction.findMany({
-    where: { accountId, categoryId: savingsCatId },
-    select: { amountCents: true }
+  const aggregate = await prisma.transaction.aggregate({
+    where: {
+      account: { householdId },
+      categoryId: { in: [...savingsIds] },
+      ...(range ? { occurredAt: { gte: range.start, lt: range.end } } : {})
+    },
+    _sum: { amountCents: true }
   });
 
   // Deposits are negative, withdrawals positive — negate the net to get a
-  // positive "set aside" balance.
-  return savingsTransactions.reduce((total, tx) => total - tx.amountCents, 0);
+  // positive "set aside" balance. `0 -` avoids returning -0.
+  return 0 - (aggregate._sum.amountCents ?? 0);
+}
+
+/** Raw savings balance of the household: all savings categories, all accounts. */
+export async function resolveSavingsBalanceCents(
+  householdId: string,
+  savingsIds?: ReadonlySet<string>
+): Promise<number> {
+  return sumSavingsCents(householdId, savingsIds);
+}
+
+/**
+ * Net amount moved into the pool (deposits minus withdrawals, may be negative)
+ * within the Europe/Berlin calendar month of `now`.
+ */
+export async function resolveSavedThisMonthCents(
+  householdId: string,
+  now: Date,
+  savingsIds?: ReadonlySet<string>
+): Promise<number> {
+  const { year, month } = zonedMonth(now);
+  return sumSavingsCents(householdId, savingsIds, zonedMonthRange(year, month));
 }
 
 /**
  * Savings pool currently available to spend or withdraw: the raw balance minus
  * the amounts already reserved (withdrawn) for completed goals. Floored at 0.
  */
-export async function getAvailableSavingsCents(accountId: string, householdId: string): Promise<number> {
+export async function getAvailableSavingsCents(householdId: string): Promise<number> {
   const [raw, withdrawnAgg] = await Promise.all([
-    resolveSavingsBalanceCents(accountId, householdId),
+    resolveSavingsBalanceCents(householdId),
     prisma.budget.aggregate({
-      where: { accountId, categoryId: null, completedAt: { not: null } },
+      where: { account: { householdId }, categoryId: null, completedAt: { not: null } },
       _sum: { spentCents: true }
     })
   ]);

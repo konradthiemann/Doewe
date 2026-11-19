@@ -1,21 +1,31 @@
-import { ensureNonEmpty } from "@doewe/shared";
+/**
+ * GET    /api/saving-plan/[id] — ein Sparziel lesen
+ * PATCH  /api/saving-plan/[id] — Titel, Termin und/oder Betrag ändern
+ * DELETE /api/saving-plan/[id] — Sparziel löschen (Soft-Delete)
+ *
+ * Authentifizierung: Pflicht (401). Fremder Haushalt: 403.
+ * Ein Sparziel ist eine `Budget`-Zeile mit `categoryId = null`; ein
+ * Kategorie-Budget ist hier kein Ziel und liefert 404.
+ *
+ * PATCH Body: { title?, targetMonth?, targetYear?, amountCents? } — Monat und
+ *   Jahr nur gemeinsam; `null` entfernt Termin bzw. Betrag.
+ */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
+import { INT4_MAX } from "../../transactions/schema";
 
 const UpdateSavingPlanInput = z
   .object({
-    title: z
-      .string()
-      .transform((value) => ensureNonEmpty(value))
-      .transform((value) => value.trim())
-      .optional(),
+    // trim().min(1) statt eines werfenden Transforms: ein Titel nur aus
+    // Leerraum ist ein 400, kein 500.
+    title: z.string().trim().min(1).optional(),
     // `undefined` = leave unchanged; `null` = clear (un-schedule / remove amount).
     targetMonth: z.number().int().min(1).max(12).nullish(),
     targetYear: z.number().int().min(1970).max(9999).nullish(),
-    amountCents: z.number().int().min(1).nullish()
+    amountCents: z.number().int().min(1).max(INT4_MAX).nullish()
   })
   .refine(
     (data) => {
@@ -52,7 +62,7 @@ export async function GET(
     }
   });
 
-  if (!goal) {
+  if (!goal || goal.categoryId !== null) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 
@@ -89,7 +99,7 @@ export async function PATCH(
     include: { account: { select: { householdId: true } } }
   });
 
-  if (!goal) {
+  if (!goal || goal.categoryId !== null) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 
@@ -153,7 +163,7 @@ export async function DELETE(
     include: { account: { select: { householdId: true } } }
   });
 
-  if (!goal) {
+  if (!goal || goal.categoryId !== null) {
     return NextResponse.json({ error: "Goal not found" }, { status: 404 });
   }
 

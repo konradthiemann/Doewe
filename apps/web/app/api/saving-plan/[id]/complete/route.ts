@@ -2,19 +2,23 @@
  * POST   /api/saving-plan/[id]/complete  — mark a saving goal as completed.
  * DELETE /api/saving-plan/[id]/complete  — reopen a completed goal.
  *
- * Requires an authenticated session; only the owner of the goal's account may act.
+ * Requires an authenticated session; only members of the goal's household may act
+ * (403 otherwise). A saving goal is a `Budget` row with `categoryId = null`; a
+ * category budget is not a goal here and yields 404.
  * Body (POST): { spentCents: number >= 0 } — the amount actually withdrawn from
- * savings on completion. It is stored as a snapshot and reserved out of the savings
- * pool that funds the remaining active goals (see ../compute.ts).
+ * savings on completion. It is stored as a snapshot and reserved out of the
+ * household's savings pool that funds the remaining active goals (see
+ * ../compute.ts). `completedAt` is the instant of the request.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../../lib/auth";
 import { prisma } from "../../../../../lib/prisma";
+import { INT4_MAX } from "../../../transactions/schema";
 
 const CompleteInput = z.object({
-  spentCents: z.number().int().min(0)
+  spentCents: z.number().int().min(0).max(INT4_MAX)
 });
 
 async function loadOwnedGoal(id: string, householdId: string) {
@@ -23,7 +27,7 @@ async function loadOwnedGoal(id: string, householdId: string) {
     include: { account: { select: { householdId: true } } }
   });
 
-  if (!goal) {
+  if (!goal || goal.categoryId !== null) {
     return { error: NextResponse.json({ error: "Goal not found" }, { status: 404 }) } as const;
   }
   if (goal.account.householdId !== householdId) {
@@ -43,7 +47,7 @@ export async function POST(
 
   const { id } = await params;
   const result = await loadOwnedGoal(id, user.householdId);
-  if ("error" in result) return result.error;
+  if (result.error) return result.error;
 
   const json = await request.json();
   const parsed = CompleteInput.safeParse(json);
@@ -77,7 +81,7 @@ export async function DELETE(
 
   const { id } = await params;
   const result = await loadOwnedGoal(id, user.householdId);
-  if ("error" in result) return result.error;
+  if (result.error) return result.error;
 
   const updated = await prisma.budget.update({
     where: { id },
