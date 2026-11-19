@@ -355,6 +355,24 @@ describe("GET /api/budget-plans", () => {
     }
   });
 
+  it("defaults to the current year in Europe/Berlin, evaluated per request", async () => {
+    try {
+      // 1 Jan 2027, 00:30 in Berlin — still 31 Dec 2026 in UTC.
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-31T23:30:00.000Z") });
+      expect(((await (await list("")).json()) as ListResponse).year).toBe(2027);
+
+      // One hour earlier it is still 2026 in Berlin.
+      vi.setSystemTime(new Date("2026-12-31T22:30:00.000Z"));
+      expect(((await (await list("")).json()) as ListResponse).year).toBe(2026);
+
+      // The default is not frozen at module load: a year later, same module.
+      vi.setSystemTime(new Date("2028-01-01T10:00:00.000Z"));
+      expect(((await (await list("")).json()) as ListResponse).year).toBe(2028);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns 401 for unauthenticated requests on all handlers", async () => {
     process.env.TEST_USER_ID_BYPASS = "test-user-budget-plans-no-household";
     vi.resetModules();

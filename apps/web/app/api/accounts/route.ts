@@ -1,3 +1,15 @@
+/**
+ * GET  /api/accounts — Konten des Haushalts, ältestes zuerst
+ * POST /api/accounts — Konto anlegen
+ *
+ * Authentifizierung: Pflicht (401). Haushaltsbezogen.
+ *
+ * Die Reihenfolge ist Teil des Vertrags: Formulare wählen `accounts[0]` vor,
+ * und alles, was serverseitig "das" Konto braucht, nimmt das älteste
+ * (`orderBy: { createdAt: "asc" }`). Beide müssen dasselbe Konto treffen.
+ *
+ * POST Body: { name } — 201 Konto | 400 Validierung
+ */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -14,7 +26,7 @@ export async function GET() {
 
   const items = await prisma.account.findMany({
     where: { householdId: user.householdId },
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "asc" }
   });
   return NextResponse.json(items);
 }
