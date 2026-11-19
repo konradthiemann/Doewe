@@ -8,13 +8,17 @@
  * Ursprungsmonat nicht erneut automatisch gebucht. Die Buchung selbst gilt als das Vorkommen
  * ihres Berliner Monats (`recurringPeriod`), auch wenn sie später verschoben oder gelöscht wird.
  *
+ * `bookFromPeriod` wird auf den laufenden Berliner Monat gesetzt: die Serie läuft ab jetzt
+ * weiter. Aus einer älteren Buchung entsteht so kein Nachbuchen der Monate zwischen Buchung
+ * und heute — die könnten längst von Hand erfasst sein.
+ *
  * Haushaltsbezogen (kein Demo-Account-Sonderweg nötig): die Buchung wird über ihr Konto im Haushalt
  * des Nutzers gesucht. Soft-gelöschte Buchungen filtert die Extension in lib/prisma.ts heraus.
  *
  * POST Body: { intervalMonths (1-24), dayOfMonth? (1-31) }
  * Antworten: 201 RecurringTransaction | 400 | 401 | 404 | 409 (bereits verknüpft)
  */
-import { addMonthsClamped, monthKey, zonedDate, zonedTimeToUtc } from "@doewe/shared";
+import { addMonthsClamped, monthKey, zonedDate, zonedMonth, zonedTimeToUtc } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../../lib/auth";
@@ -66,7 +70,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           frequency: "MONTHLY",
           intervalMonths,
           dayOfMonth: dayOfMonth ?? booking.day,
-          nextOccurrence
+          nextOccurrence,
+          // The series continues from now: months between the booking and
+          // today are not back-booked.
+          bookFromPeriod: monthKey(zonedMonth(new Date()))
         }
       });
       // Guard against a concurrent request linking the booking first: roll back if we lost the race.

@@ -11,7 +11,7 @@
  * `zonedDate` from ./calendar) and turns a calendar day back into an instant
  * with `zonedTimeToUtc({ ...day, hour: 12 })`.
  */
-import { daysInMonth, shiftMonth } from "./calendar";
+import { daysInMonth, monthKey, shiftMonth, zonedDate } from "./calendar";
 
 export type RecurringAnchor = {
   nextYear: number;
@@ -110,4 +110,127 @@ export function firstOccurrenceFrom(today: CalendarDate, dayOfMonth: number): Ca
   const thisMonth = occurrenceDate(today, dayOfMonth);
   if (thisMonth.day > today.day) return thisMonth;
   return occurrenceDate(shiftMonth(today, 1), dayOfMonth);
+}
+
+/**
+ * First occurrence of a series created with an explicit start date `start`
+ * that books on `dayOfMonth`: the booking day in the start month if it is the
+ * start day or later, otherwise the booking day of the following month. A
+ * start of 20 November with day 5 therefore begins on 5 December — never
+ * before the date the user entered as the first booking. Days are clamped to
+ * the length of their month.
+ */
+export function firstOccurrenceOnOrAfter(start: CalendarDate, dayOfMonth: number): CalendarDate {
+  const inStartMonth = occurrenceDate(start, dayOfMonth);
+  if (inStartMonth.day >= start.day) return inStartMonth;
+  return occurrenceDate(shiftMonth(start, 1), dayOfMonth);
+}
+
+/** A start date may lie at most this many years before or after today. */
+export const RECURRING_START_MAX_YEARS = 10;
+
+/**
+ * Whether `date` is at most `years` calendar years before or after `today`
+ * (the same day `years` years away still counts). Guards a start date against
+ * typos such as 2016 instead of 2026.
+ */
+export function isWithinYearsOf(
+  date: CalendarDate,
+  today: CalendarDate,
+  years: number = RECURRING_START_MAX_YEARS
+): boolean {
+  const earliest = { ...today, year: today.year - years };
+  const latest = { ...today, year: today.year + years };
+  return isOnOrBeforeDate(earliest, date) && isOnOrBeforeDate(date, latest);
+}
+
+/**
+ * `RecurringTransaction.bookFromPeriod` for a schedule whose first occurrence
+ * lies in the month `first`, decided in the month `current`: a series that
+ * starts before the current month is booked from the current month on — the
+ * months in between are not back-booked — unless the user asked for the
+ * backfill. `null` means no lower bound.
+ */
+export function bookFromPeriodFor(first: MonthRef, current: MonthRef, backfill: boolean): string | null {
+  if (backfill) return null;
+  return monthKey(first) < monthKey(current) ? monthKey(current) : null;
+}
+
+/** Whether the occurrence of month `ref` lies before `bookFromPeriod` and must not be booked automatically. */
+export function isBeforeBookFromPeriod(ref: MonthRef, bookFromPeriod: string | null): boolean {
+  return bookFromPeriod !== null && monthKey(ref) < bookFromPeriod;
+}
+
+/** Calendar days from `from` to `to` (negative if `to` is the earlier day). */
+export function calendarDaysBetween(from: CalendarDate, to: CalendarDate): number {
+  const dayNumber = (d: CalendarDate) => Date.UTC(d.year, d.month - 1, d.day) / 86_400_000;
+  return Math.round(dayNumber(to) - dayNumber(from));
+}
+
+/** A hand-entered booking this many calendar days before or after the due day can stand for the occurrence. */
+export const ADOPTION_WINDOW_DAYS = 7;
+
+export type AdoptionTemplate = {
+  accountId: string;
+  categoryId: string | null;
+  amountCents: number;
+  description: string;
+};
+
+export type AdoptionRow = {
+  id: string;
+  accountId: string;
+  categoryId: string | null;
+  amountCents: number;
+  description: string;
+  occurredAt: Date;
+  createdAt: Date;
+  /** Only rows without a link and without a tombstone qualify; absent = unlinked / not deleted. */
+  recurringTransactionId?: string | null;
+  deletedAt?: Date | null;
+};
+
+const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Whether a hand-entered booking can stand for the occurrence of `template`
+ * that is due on `dueDay`: same account, not deleted, not linked to any
+ * recurring transaction, exactly the same amount, the same category — or, for
+ * a template without category, no category and the same description (ignoring
+ * case and surrounding whitespace) — and dated, as a calendar day in the app's
+ * time zone, at most ADOPTION_WINDOW_DAYS before or after the due day.
+ */
+export function isAdoptionCandidate(row: AdoptionRow, template: AdoptionTemplate, dueDay: CalendarDate): boolean {
+  if (row.deletedAt != null || row.recurringTransactionId != null) return false;
+  if (row.accountId !== template.accountId || row.amountCents !== template.amountCents) return false;
+  if (template.categoryId !== null) {
+    if (row.categoryId !== template.categoryId) return false;
+  } else if (row.categoryId !== null || !sameText(row.description, template.description)) {
+    return false;
+  }
+  return Math.abs(calendarDaysBetween(dueDay, zonedDate(row.occurredAt))) <= ADOPTION_WINDOW_DAYS;
+}
+
+/**
+ * The hand-entered booking that stands for the occurrence due on `dueDay`, or
+ * null: of all candidates (`isAdoptionCandidate`) the one closest to the due
+ * day; among equally close ones the oldest — earliest date, then entered
+ * first. `exclude` holds ids that already stand for another occurrence.
+ */
+export function pickAdoptionCandidate<Row extends AdoptionRow>(
+  rows: readonly Row[],
+  template: AdoptionTemplate,
+  dueDay: CalendarDate,
+  exclude: ReadonlySet<string> = new Set()
+): Row | null {
+  const distance = (row: Row) => Math.abs(calendarDaysBetween(dueDay, zonedDate(row.occurredAt)));
+  const candidates = rows.filter((row) => !exclude.has(row.id) && isAdoptionCandidate(row, template, dueDay));
+  candidates.sort(
+    (a, b) =>
+      distance(a) - distance(b) ||
+      a.occurredAt.getTime() - b.occurredAt.getTime() ||
+      a.createdAt.getTime() - b.createdAt.getTime() ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  );
+  return candidates[0] ?? null;
 }

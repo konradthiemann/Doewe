@@ -124,3 +124,16 @@ export type {
 export { buildCategoryYearMatrix } from "./categoryYear";
 
 export { occurrenceDate, isOnOrBeforeDate, firstOccurrenceFrom } from "./recurringSchedule";
+
+export type { AdoptionTemplate, AdoptionRow } from "./recurringSchedule";
+export {
+  ADOPTION_WINDOW_DAYS,
+  RECURRING_START_MAX_YEARS,
+  firstOccurrenceOnOrAfter,
+  isWithinYearsOf,
+  bookFromPeriodFor,
+  isBeforeBookFromPeriod,
+  calendarDaysBetween,
+  isAdoptionCandidate,
+  pickAdoptionCandidate
+} from "./recurringSchedule";

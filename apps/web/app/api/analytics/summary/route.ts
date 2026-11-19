@@ -43,6 +43,11 @@
  * `recurringTransactionId` und der Periode des Monats existiert — auch wenn sie gelöscht oder
  * in einen anderen Monat verschoben wurde (siehe lib/recurringPeriods.ts).
  *
+ * Vor dem Rechnen bucht die Route fällige Vorkommen abgeschlossener Monate nach und
+ * verknüpft im laufenden Monat von Hand erfasste Zahlungen mit dem Vorkommen, für das sie
+ * stehen (siehe lib/recurringBooking.ts) — eine von Hand erfasste Miete zählt dann nicht
+ * zusätzlich als "geplant". Dieses GET kann also schreiben.
+ *
  * 404, wenn der Haushalt kein Konto hat.
  */
 import {
@@ -64,7 +69,7 @@ export const dynamic = "force-dynamic"; // Kein Build-Time-Prerendering — Date
 import { getSessionUser } from "../../../../lib/auth";
 import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
-import { catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
+import { adoptManualBookingsForCurrentMonth, catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
 import { loadBookedOccurrenceKeys, occurrenceKey } from "../../../../lib/recurringPeriods";
 import { loadSavingsCategoryIds } from "../../../../lib/savingsCategory";
 
@@ -87,6 +92,11 @@ export async function GET() {
   // Selbstheilung: fällige, nie gebuchte Daueraufträge abgeschlossener Monate
   // nachbuchen, bevor gerechnet wird (siehe catchUpPastRecurringForHousehold).
   await catchUpPastRecurringForHousehold(householdId, now);
+
+  // Von Hand erfasste Zahlungen des laufenden Monats als das Vorkommen ihres
+  // Dauerauftrags erkennen, bevor "geplant" bestimmt wird — sonst zählte die
+  // Zahlung bis zum Fälligkeitstag einmal als gebucht und einmal als geplant.
+  await adoptManualBookingsForCurrentMonth(householdId, now);
 
   // Laufender Monat im App-Kalender (Europe/Berlin), halboffen [start, end).
   const { year, month } = zonedMonth(now);

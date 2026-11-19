@@ -36,6 +36,7 @@ let recurringIncomeId: string;
 let recurringExpenseId: string;
 let recurringSkippedId: string;
 let recurringAlreadyManuallyBookedId: string;
+let manualRentId: string;
 let recurringDemoId: string;
 
 beforeAll(async () => {
@@ -103,10 +104,10 @@ beforeAll(async () => {
   recurringSkippedId = skipped.id;
   await prisma.recurringTransactionSkip.create({ data: { recurringId: skipped.id, year: 2024, month: 11 } });
 
-  // Documents a known limitation: a transaction booked by hand BEFORE this
-  // feature existed has no recurringTransactionId, so it is invisible to the
-  // "already booked?" check. Rolling this out on real data therefore needs a
-  // dry-run reviewed by a human first — see the dry-run test above.
+  // A payment entered by hand has no recurringTransactionId. The run recognises
+  // it as November's occurrence (same account and amount, no category and the
+  // same description ignoring case and whitespace, within 7 days of the due
+  // day) and adopts it instead of booking November a second time.
   const rentRecurring = await prisma.recurringTransaction.create({
     data: {
       accountId: testAccountId,
@@ -119,15 +120,18 @@ beforeAll(async () => {
     }
   });
   recurringAlreadyManuallyBookedId = rentRecurring.id;
-  await prisma.transaction.create({
-    data: {
-      accountId: testAccountId,
-      amountCents: -12000,
-      description: "Rent (booked by hand)",
-      occurredAt: new Date("2024-11-01T11:00:00.000Z")
-      // no recurringTransactionId — this is the pre-existing-data case
-    }
-  });
+  manualRentId = (
+    await prisma.transaction.create({
+      data: {
+        accountId: testAccountId,
+        amountCents: -12000,
+        description: " rent ",
+        // 2 Nov 2024, 09:15 in Berlin — the day after the due day
+        occurredAt: new Date("2024-11-02T08:15:00.000Z")
+        // no recurringTransactionId — entered by hand
+      }
+    })
+  ).id;
 
   // The public demo account (re-seeded by /api/demo/seed) must never get real
   // bookings from this cron — same exclusion convention as admin/usage/route.ts.
@@ -196,11 +200,7 @@ describe("POST /api/cron/materialize-recurring", () => {
     expect(income).toHaveLength(0); // nothing actually written yet
   }, 30000);
 
-  it("KNOWN LIMITATION: a pre-existing manual booking with no recurringTransactionId link is not recognized as already booked", async () => {
-    // This is exactly why the dry-run above must be reviewed by a human before
-    // the real run on production data: "Rent" was already booked by hand this
-    // month (no recurringTransactionId), yet the recurring "Rent" template
-    // still shows up as due — running for real here would double-book it.
+  it("dry-run reports a payment entered by hand as adopted instead of as a new booking, and links nothing", async () => {
     const routes = await import("../app/api/cron/materialize-recurring/route");
     const res = await routes.POST(
       new Request("http://localhost/api/cron/materialize-recurring?dryRun=true", {
@@ -212,7 +212,18 @@ describe("POST /api/cron/materialize-recurring", () => {
     const rentOccurrences = data.occurrences.filter(
       (o: { recurringId: string }) => o.recurringId === recurringAlreadyManuallyBookedId
     );
-    expect(rentOccurrences).toHaveLength(4); // still lists all 4 — including the already-manually-booked month
+    // Aug, Sep and Oct would be booked; November's payment is already there.
+    expect(rentOccurrences.map((o: { month: number; adopted: boolean }) => [o.month, o.adopted])).toEqual([
+      [8, false],
+      [9, false],
+      [10, false],
+      [11, true]
+    ]);
+    expect(data.adopted).toBeGreaterThanOrEqual(1);
+
+    const manual = await prisma.transaction.findUniqueOrThrow({ where: { id: manualRentId } });
+    expect(manual.recurringTransactionId).toBeNull();
+    expect(manual.recurringPeriod).toBeNull();
   }, 30000);
 
   it("backfills every missed month (anchor to now) as real transactions in one run", async () => {
@@ -246,6 +257,36 @@ describe("POST /api/cron/materialize-recurring", () => {
       "2024-11-01T11:00:00.000Z"
     ]);
     expect(skippedTxs.map((t) => t.recurringPeriod)).toEqual(["2024-08", "2024-09", "2024-10"]);
+
+    // The rent entered by hand on 2 November stands for November's occurrence:
+    // it is linked, not booked a second time, and the response says so.
+    const rent = await prisma.transaction.findMany({
+      where: { recurringTransactionId: recurringAlreadyManuallyBookedId },
+      ...byPeriod
+    });
+    expect(rent.map((t) => t.recurringPeriod)).toEqual(["2024-08", "2024-09", "2024-10", "2024-11"]);
+    expect(rent[3].id).toBe(manualRentId);
+    expect(rent[3].description).toBe(" rent ");
+    expect(rent[3].occurredAt.toISOString()).toBe("2024-11-02T08:15:00.000Z");
+    expect(await prisma.transaction.count({ where: { accountId: testAccountId, amountCents: -12000 } })).toBe(4);
+
+    const rentOccurrences = data.occurrences.filter(
+      (o: { recurringId: string }) => o.recurringId === recurringAlreadyManuallyBookedId
+    );
+    expect(
+      rentOccurrences.map((o: { month: number; adopted: boolean; transactionId: string }) => [
+        o.month,
+        o.adopted,
+        o.transactionId === manualRentId
+      ])
+    ).toEqual([
+      [8, false, false],
+      [9, false, false],
+      [10, false, false],
+      [11, true, true]
+    ]);
+    expect(data.adopted).toBe(data.occurrences.filter((o: { adopted: boolean }) => o.adopted).length);
+    expect(data.booked).toBe(data.occurrences.length);
 
     // The public demo account is reseeded on every /api/demo/seed call and must
     // never receive real bookings from this cron (same exclusion convention as

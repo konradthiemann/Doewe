@@ -16,10 +16,30 @@
  * Zahlung nicht zusätzlich vom Cron gebucht, wenn danach der Dauerauftrag angelegt wird.
  * Alternativ kann ein `startDate` (yyyy-mm-dd) übergeben werden — dann ist dieses Datum die
  * erste Buchung, z.B. für ein Abo, dessen erste Zahlung erst in einigen Monaten fällig wird.
+ * Gebucht wird am `dayOfMonth`: liegt dieser Tag (auf die Monatslänge begrenzt) im Monat des
+ * Startdatums VOR dem Startdatum, beginnt die Serie im Folgemonat (Start 20. November, Tag 5
+ * → erste Buchung 5. Dezember) — nie vor dem Datum, das als erste Buchung eingegeben wurde.
+ * `startDate` darf höchstens 10 Jahre vor oder nach heute liegen (400 sonst).
  *
- * POST Body: { accountId, categoryId?, amountCents, description, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd) }
+ * Kein ungefragtes Nachbuchen: Liegt die erste Buchung in einem Monat vor dem laufenden
+ * Berliner Monat, wird `bookFromPeriod` auf den laufenden Monat gesetzt — die Monate davor
+ * bucht der Lauf nicht. Mit `backfill: true` bleibt `bookFromPeriod` leer und jeder fällige
+ * Monat seit dem Start wird nachgebucht.
+ *
+ * POST Body: { accountId, categoryId?, amountCents, description, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd), backfill? (boolean) }
  */
-import { firstOccurrenceFrom, parseDayKey, zonedDate, zonedTimeToUtc } from "@doewe/shared";
+import {
+  RECURRING_START_MAX_YEARS,
+  bookFromPeriodFor,
+  firstOccurrenceFrom,
+  firstOccurrenceOnOrAfter,
+  isWithinYearsOf,
+  parseDayKey,
+  zonedDate,
+  zonedMonth,
+  zonedTimeToUtc,
+  type CalendarDate
+} from "@doewe/shared";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -38,7 +58,8 @@ const RecurringInput = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .refine((value) => parseDayKey(value) !== null, "Ungültiges Datum")
-    .optional()
+    .optional(),
+  backfill: z.boolean().optional()
 });
 
 export async function GET() {
@@ -63,6 +84,21 @@ export async function POST(req: Request) {
   }
   const data = parsed.data;
 
+  const now = new Date();
+  const today = zonedDate(now);
+  const startDay = data.startDate ? parseDayKey(data.startDate) : null;
+  if (startDay && !isWithinYearsOf(startDay, today)) {
+    return NextResponse.json(
+      {
+        error: {
+          formErrors: [],
+          fieldErrors: { startDate: [`Start date must be within ${RECURRING_START_MAX_YEARS} years of today`] }
+        }
+      },
+      { status: 400 }
+    );
+  }
+
   const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId: user.householdId } });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
@@ -74,11 +110,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
     }
   }
-  // Startdatum (falls angegeben) legt die erste Buchung direkt fest; ansonsten wird
+  // Startdatum (falls angegeben) legt die erste Buchung fest; ansonsten wird
   // sie aus dayOfMonth und dem heutigen Berliner Kalendertag berechnet.
-  const startDay = data.startDate ? parseDayKey(data.startDate) : null;
   const day = data.dayOfMonth ?? startDay?.day ?? 1;
-  const firstDay = startDay ?? firstOccurrenceFrom(zonedDate(new Date()), day);
+  let firstDay: CalendarDate;
+  if (startDay) {
+    // Booked on `day`: if that day lies before the start date in its month, the
+    // series begins in the following month. Otherwise the anchor stays the
+    // start date itself (the schedule reads only its month).
+    const firstBooking = firstOccurrenceOnOrAfter(startDay, day);
+    firstDay = firstBooking.month === startDay.month ? startDay : firstBooking;
+  } else {
+    firstDay = firstOccurrenceFrom(today, day);
+  }
   // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
   const nextDate = zonedTimeToUtc({ ...firstDay, hour: 12 });
 
@@ -90,7 +134,10 @@ export async function POST(req: Request) {
     frequency: "MONTHLY",
     intervalMonths: data.intervalMonths ?? 1,
     dayOfMonth: day,
-    nextOccurrence: nextDate
+    nextOccurrence: nextDate,
+    // A series that starts before the current month is booked from the current
+    // month on, unless the user asked for the months in between.
+    bookFromPeriod: bookFromPeriodFor(firstDay, zonedMonth(now), data.backfill ?? false)
   } as Prisma.RecurringTransactionUncheckedCreateInput;
 
   const created = await prisma.recurringTransaction.create({
