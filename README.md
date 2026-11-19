@@ -35,6 +35,7 @@ Full documentation is hosted at <https://konradthiemann.github.io/Doewe/>. The s
 - [Project Requirements](docs/project-requirements-document.md) — goals and requirements
 - [Data Model](docs/data-model.md) — Prisma schema and domain entities
 - [API Reference](docs/api-reference.md) — route handlers and contracts
+- [Calculation Rules](docs/calculations/00-grundregeln.md) — one calendar, one classification, and which figures must agree across screens
 - [User Flows](docs/flows.md) — core application flows
 - [Data Analysis Findings](docs/data-analysis-findings.md) — findings and improvement proposals
 - [Database Management](docs/DATABASE_MANAGEMENT.md) — migrations and operations
