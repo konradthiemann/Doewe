@@ -628,7 +628,7 @@ export const en: Record<string, string> = {
   "dashboard.wizard.errorNoAccount": "No account found. Please reload the page.",
   "dashboard.upcomingTitle": "Still due this month",
   "dashboard.upcomingNone": "Nothing else is due for the rest of the month.",
-  "dashboard.recurringShowAll": "Show all recurring transactions of this month ({count})",
+  "dashboard.recurringShowAll": "Totals of this month's recurring transactions ({count})",
   "offline.banner": "You're offline — showing the last loaded data.",
   "transactionForm.savedOffline": "Saved offline — will sync as soon as you're back online.",
   "transactionForm.attachmentsOfflineSkipped": "Receipts can't be uploaded while offline — please add them later via “Edit”.",
@@ -921,5 +921,6 @@ export const en: Record<string, string> = {
   "dashboard.recurringSuggestionLinked": "Done – the standing order won't be booked again this month.",
   "dashboard.recurringSuggestionStale": "That booking no longer matches the standing order. The overview has been refreshed.",
   "dashboard.recurringSuggestionError": "That didn't work. Please try again in a moment.",
-  "receiptScanner.unitPriceInvalid": "Please enter a price, for example 1.29, or -0.50 for a discount."
+  "receiptScanner.unitPriceInvalid": "Please enter a price, for example 1.29, or -0.50 for a discount.",
+  "dashboard.recurringDueHint": "All recurring transactions due this month – booked and still planned. The planned ones are listed individually above."
 };

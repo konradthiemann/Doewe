@@ -628,7 +628,7 @@ export const de: Record<string, string> = {
   "dashboard.wizard.errorNoAccount": "Kein Konto gefunden. Bitte lade die Seite neu.",
   "dashboard.upcomingTitle": "Steht diesen Monat noch an",
   "dashboard.upcomingNone": "Für den Rest des Monats steht nichts mehr an.",
-  "dashboard.recurringShowAll": "Alle Daueraufträge dieses Monats anzeigen ({count})",
+  "dashboard.recurringShowAll": "Summen der Daueraufträge dieses Monats ({count})",
   "offline.banner": "Du bist offline — du siehst den letzten geladenen Stand.",
   "transactionForm.savedOffline": "Offline gespeichert — wird synchronisiert, sobald du wieder online bist.",
   "transactionForm.attachmentsOfflineSkipped": "Belege können offline nicht hochgeladen werden — bitte später über „Bearbeiten“ nachreichen.",
@@ -921,5 +921,6 @@ export const de: Record<string, string> = {
   "dashboard.recurringSuggestionLinked": "Erledigt – der Dauerauftrag wird diesen Monat nicht noch einmal gebucht.",
   "dashboard.recurringSuggestionStale": "Diese Buchung passt nicht mehr zum Dauerauftrag. Die Übersicht ist jetzt aktualisiert.",
   "dashboard.recurringSuggestionError": "Das hat nicht geklappt. Bitte versuch es gleich noch einmal.",
-  "receiptScanner.unitPriceInvalid": "Bitte einen Preis eingeben, zum Beispiel 1,29 oder -0,50 für einen Rabatt."
+  "receiptScanner.unitPriceInvalid": "Bitte einen Preis eingeben, zum Beispiel 1,29 oder -0,50 für einen Rabatt.",
+  "dashboard.recurringDueHint": "Alle Daueraufträge, die diesen Monat fällig sind – schon gebuchte und noch geplante. Die noch geplanten stehen oben einzeln."
 };

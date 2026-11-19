@@ -100,8 +100,9 @@ interface Props {
   onComplete: () => void;
 }
 
+/** Signed: a discount or deposit-return line shows its minus. */
 function formatCents(cents: number): string {
-  return (Math.abs(cents) / 100).toFixed(2).replace(".", ",");
+  return (cents / 100).toFixed(2).replace(".", ",");
 }
 
 /**

@@ -17,11 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Bar } from "react-chartjs-2";
 
 import { SavingsOverviewCard } from "../components/dashboard/SavingsOverviewCard";
-import {
-  RecurringItem,
-  UpcomingRecurringList,
-  type RecurringSuggestion
-} from "../components/dashboard/UpcomingRecurring";
+import { UpcomingRecurringList, type RecurringSuggestion } from "../components/dashboard/UpcomingRecurring";
 import OnboardingWizard from "../components/OnboardingWizard";
 import PageContainer from "../components/PageContainer";
 import { CategoryBreakdown } from "../components/review/CategoryBreakdown";
@@ -578,11 +574,7 @@ export default function HomePage() {
                       </p>
                     </div>
                   </div>
-                  <ul className="space-y-2">
-                    {recurringTransactions.map((rec) => (
-                      <RecurringItem key={rec.id} rec={rec} formatCurrency={formatCurrency} />
-                    ))}
-                  </ul>
+                  <p className="text-xs text-ink-muted">{t("dashboard.recurringDueHint")}</p>
                 </div>
               </details>
             </>
