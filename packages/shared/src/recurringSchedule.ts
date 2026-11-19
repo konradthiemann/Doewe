@@ -100,12 +100,14 @@ export function isOnOrBeforeDate(date: CalendarDate, other: CalendarDate): boole
 
 /**
  * First occurrence of a recurring transaction created `today` without an
- * explicit start date: this month if its (clamped) day is today or still
- * ahead, otherwise next month. The decision uses the clamped day, so on
- * 30 November both day 30 and day 31 are due today.
+ * explicit start date: this month only if its (clamped) day is still ahead,
+ * i.e. strictly after today; otherwise next month. A day that is today counts
+ * as passed: whoever entered today's payment by hand and then creates the
+ * template must not get it booked a second time. The decision uses the
+ * clamped day, so on 30 November both day 30 and day 31 start in December.
  */
 export function firstOccurrenceFrom(today: CalendarDate, dayOfMonth: number): CalendarDate {
   const thisMonth = occurrenceDate(today, dayOfMonth);
-  if (thisMonth.day >= today.day) return thisMonth;
+  if (thisMonth.day > today.day) return thisMonth;
   return occurrenceDate(shiftMonth(today, 1), dayOfMonth);
 }

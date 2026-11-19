@@ -10,8 +10,10 @@
  *
  * `nextOccurrence` ist der Anker der Serie (erste Buchung) und wird als 12:00 Uhr Berliner
  * Zeit des gemeinten Kalendertags gespeichert. Ohne `startDate` wird er aus `dayOfMonth`
- * berechnet: laufender Monat, falls der (auf die Monatslänge begrenzte) Tag heute ist oder
- * noch bevorsteht, sonst nächster Monat — "heute" ist der Kalendertag in Europe/Berlin.
+ * berechnet: laufender Monat nur, falls der (auf die Monatslänge begrenzte) Tag noch
+ * bevorsteht, also nach heute liegt; ist er heute oder schon vorbei, nächster Monat —
+ * "heute" ist der Kalendertag in Europe/Berlin. So wird eine heute von Hand erfasste
+ * Zahlung nicht zusätzlich vom Cron gebucht, wenn danach der Dauerauftrag angelegt wird.
  * Alternativ kann ein `startDate` (yyyy-mm-dd) übergeben werden — dann ist dieses Datum die
  * erste Buchung, z.B. für ein Abo, dessen erste Zahlung erst in einigen Monaten fällig wird.
  *

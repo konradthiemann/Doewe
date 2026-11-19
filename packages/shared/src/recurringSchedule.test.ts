@@ -163,18 +163,22 @@ describe("firstOccurrenceFrom", () => {
     expect(firstOccurrenceFrom({ year: 2026, month: 11, day: 19 }, 25)).toEqual({ year: 2026, month: 11, day: 25 });
   });
 
-  it("is this month when the day is today", () => {
-    expect(firstOccurrenceFrom({ year: 2026, month: 11, day: 19 }, 19)).toEqual({ year: 2026, month: 11, day: 19 });
+  it("is next month when the day is today", () => {
+    expect(firstOccurrenceFrom({ year: 2026, month: 11, day: 19 }, 19)).toEqual({ year: 2026, month: 12, day: 19 });
   });
 
   it("is next month when the day has passed", () => {
     expect(firstOccurrenceFrom({ year: 2026, month: 11, day: 19 }, 18)).toEqual({ year: 2026, month: 12, day: 18 });
   });
 
-  it("treats day 30 and day 31 the same on 30 November: both are due today", () => {
+  it("treats day 30 and day 31 the same on 30 November: both start in December", () => {
     const today = { year: 2026, month: 11, day: 30 };
-    expect(firstOccurrenceFrom(today, 30)).toEqual({ year: 2026, month: 11, day: 30 });
-    expect(firstOccurrenceFrom(today, 31)).toEqual({ year: 2026, month: 11, day: 30 });
+    expect(firstOccurrenceFrom(today, 30)).toEqual({ year: 2026, month: 12, day: 30 });
+    expect(firstOccurrenceFrom(today, 31)).toEqual({ year: 2026, month: 12, day: 31 });
+  });
+
+  it("is this month for day 31 on 29 November: the clamped day 30 is still ahead", () => {
+    expect(firstOccurrenceFrom({ year: 2026, month: 11, day: 29 }, 31)).toEqual({ year: 2026, month: 11, day: 30 });
   });
 
   it("clamps in the following month and rolls over the year", () => {
