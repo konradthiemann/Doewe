@@ -1,10 +1,11 @@
 "use client";
 
-import { parseCents } from "@doewe/shared";
+import { parseCents, shiftMonth, zonedMonth } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { useApiQuery } from "../lib/api/useApiQuery";
+import { firstDayOfCurrentMonth } from "../lib/dateInput";
 import { useI18n } from "../lib/i18n";
 
 import { Button } from "./ui/Button";
@@ -19,6 +20,11 @@ import { useToast } from "./ui/Toast";
  *   1. Monatseinkommen  → Dauerauftrag (positiv, Tag 1)
  *   2. Größte Fixkosten → bis zu 3 Daueraufträge (negativ, Tag 1)
  *   3. Optional 1 Sparziel → datiertes Sparziel (nächster Monat)
+ *
+ * Die Daueraufträge starten am 1. des laufenden Monats (`startDate`). Ohne
+ * Startdatum würde der Server sie erst auf den 1. des Folgemonats legen und das
+ * Dashboard bliebe für den Rest des Monats leer. "Laufender Monat" und
+ * "nächster Monat" sind Kalendermonate in Europe/Berlin.
  *
  * Analytics klassifiziert Einnahme/Ausgabe nach Betrags-VORZEICHEN, daher braucht
  * der Wizard keine Kategorie-Auswahl. Leere Felder werden nicht angelegt.
@@ -37,9 +43,7 @@ type Props = {
 const MAX_FIXED_COSTS = 3;
 
 function nextMonth(now = new Date()): { month: number; year: number } {
-  const month = now.getMonth() + 2; // 1-based next month
-  if (month > 12) return { month: 1, year: now.getFullYear() + 1 };
-  return { month, year: now.getFullYear() };
+  return shiftMonth(zonedMonth(now), 1);
 }
 
 const inputClass =
@@ -109,6 +113,7 @@ export default function OnboardingWizard({ open, onOpenChange, onComplete }: Pro
         description: payload.description,
         intervalMonths: 1,
         dayOfMonth: 1,
+        startDate: firstDayOfCurrentMonth(),
       }),
     });
     return res.ok;

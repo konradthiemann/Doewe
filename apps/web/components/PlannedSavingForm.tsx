@@ -1,15 +1,15 @@
 "use client";
 
-import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
+import { fromCents, monthKey, parseCents, shiftMonth, toDecimalString, zonedMonth } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { addMonths, format, parse } from "date-fns";
-import { de, enUS } from "date-fns/locale";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { useApiQuery } from "../lib/api/useApiQuery";
+import { formatMonth } from "../lib/bookingDate";
 import { appConfig } from "../lib/config";
+import { parseMonthKey } from "../lib/dateInput";
 import { useI18n } from "../lib/i18n";
 import { plannedSavingFormSchema, type PlannedSavingFormValues } from "../lib/schemas/forms";
 
@@ -39,12 +39,13 @@ type Props = {
   initialScheduled?: boolean;
 };
 
+/** Default target month of a new goal: the month after the current one in the app's time zone. */
 function nextMonthValue() {
-  return format(addMonths(new Date(), 1), "yyyy-MM");
+  return monthKey(shiftMonth(zonedMonth(new Date()), 1));
 }
 
 function monthYearToValue(month: number, year: number) {
-  return format(new Date(year, month - 1, 1), "yyyy-MM");
+  return monthKey({ year, month });
 }
 
 export default function PlannedSavingForm({ headingId, onClose, onSuccess, editGoal, initialScheduled }: Props) {
@@ -56,7 +57,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   const loadError = accountsQuery.isError ? t("savingPlan.form.errorLoadAccountsFallback") : null;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
-  const dfLocale = locale === "de" ? de : enUS;
+  const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
   const editIsScheduled = !!editGoal && editGoal.month != null && editGoal.year != null;
 
@@ -99,10 +100,10 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   }, []);
 
   const dueLabel = useMemo(() => {
-    if (!targetMonth || targetMonth.length < 7) return t("savingPlan.form.plannedDate");
-    const date = parse(targetMonth, "yyyy-MM", new Date());
-    return format(date, "LLLL yyyy", { locale: dfLocale });
-  }, [dfLocale, targetMonth, t]);
+    const ref = targetMonth ? parseMonthKey(targetMonth) : null;
+    if (!ref) return t("savingPlan.form.plannedDate");
+    return formatMonth(ref, dateLocale);
+  }, [dateLocale, targetMonth, t]);
 
   async function onSubmit(values: PlannedSavingFormValues) {
     setSubmitError(null);
