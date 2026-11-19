@@ -1,6 +1,6 @@
 import type { CategoryYearGroup, CategoryYearMatrix, CategoryYearRow } from "@doewe/shared";
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../../lib/i18n";
 
@@ -229,6 +229,25 @@ describe("CategoryYearTable", () => {
     setup(matrix({ expenses: [food] }));
     expect(cells(screen.getAllByRole("row")[0]!)[0]!.className).toContain("sticky");
     expect(cells(rowOf("Lebensmittel"))[0]!.className).toContain("sticky");
+  });
+
+  it("renders a category that appears in two groups once per group, with unique React keys", () => {
+    // A refund booked into an expense category is income: the same category id
+    // then has a row in the expense group and one in the income group.
+    const spent = row({ id: "cat-food", name: "Lebensmittel", monthlyCents: at({ 3: 12000 }) });
+    const refunded = row({ id: "cat-food", name: "Lebensmittel", kind: "income", monthlyCents: at({ 3: 1500 }) });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      setup(matrix({ expenses: [spent], income: [refunded] }));
+      const rows = screen.getAllByText("Lebensmittel").map((el) => el.closest("tr"));
+      expect(rows).toHaveLength(2);
+      expect(within(monthCell(rows[0]!, 3)).getByText("EUR 120.00")).toBeInTheDocument();
+      expect(within(monthCell(rows[1]!, 3)).getByText("EUR 15.00")).toBeInTheDocument();
+      const keyWarnings = errorSpy.mock.calls.filter((call) => String(call[0]).includes("same key"));
+      expect(keyWarnings).toEqual([]);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("renders a textual budget legend", () => {

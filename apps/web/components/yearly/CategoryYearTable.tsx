@@ -125,8 +125,10 @@ export function CategoryYearTable({ matrix, formatCurrency, monthLabels, uncateg
                   {group.rows.map((row) => {
                     const name = row.id === "uncategorized" ? uncategorizedLabel : row.name;
                     const totalStatus = yearStatus(row);
+                    // A category can appear in more than one group (e.g. a refund in an
+                    // expense category is income): the key carries the group.
                     return (
-                      <tr key={row.id} className="border-b border-line/60">
+                      <tr key={`${key}:${row.id}`} className="border-b border-line/60">
                         <th scope="row" className={`${stickyCell} max-w-[14rem] px-3 py-2 text-left font-medium`}>
                           <span className="block truncate" title={name}>
                             {name}

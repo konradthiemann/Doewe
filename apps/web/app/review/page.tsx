@@ -11,6 +11,7 @@ import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
 import { Dialog } from "../../components/ui/Dialog";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
+import { formatBookingDayMonth, formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
 
 type ReviewData = {
@@ -182,11 +183,7 @@ function ReviewPage() {
   );
 
   const formatMonthLabel = useCallback(
-    (month: number, year: number) =>
-      new Date(year, month - 1, 1).toLocaleDateString(dateLocale, {
-        month: "long",
-        year: "numeric"
-      }),
+    (month: number, year: number) => formatMonth({ year, month }, dateLocale),
     [dateLocale]
   );
 
@@ -482,10 +479,7 @@ function ReviewPage() {
                       <p className="truncate text-xs text-ink-muted">
                         {exp.categoryName ?? "—"}
                         {" · "}
-                        {new Date(exp.occurredAt).toLocaleDateString(dateLocale, {
-                          day: "numeric",
-                          month: "short"
-                        })}
+                        {formatBookingDayMonth(exp.occurredAt, dateLocale)}
                       </p>
                     </div>
                     <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-expense">

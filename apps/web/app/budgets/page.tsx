@@ -1,5 +1,6 @@
 "use client";
 
+import { zonedMonth } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { parseAsInteger, useQueryState } from "nuqs";
@@ -9,6 +10,7 @@ import { BUDGET_EDITOR_COLS, BudgetPlanEditor } from "../../components/budgets/B
 import PageContainer from "../../components/PageContainer";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
+import { formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
 
 import type { BudgetPeriod } from "@doewe/shared";
@@ -33,7 +35,7 @@ function BudgetsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
-  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const currentYear = useMemo(() => zonedMonth(new Date()).year, []);
   const [rawYear, setYear] = useQueryState("year", parseAsInteger.withDefault(currentYear));
   const year = Math.min(MAX_YEAR, Math.max(MIN_YEAR, rawYear));
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
@@ -53,7 +55,7 @@ function BudgetsPage() {
   const monthLabels = useMemo(
     () =>
       Array.from({ length: 12 }, (_, index) =>
-        new Date(2000, index, 1).toLocaleDateString(dateLocale, { month: "short" })
+        formatMonth({ year: 2000, month: index + 1 }, dateLocale, { month: "short", year: false })
       ),
     [dateLocale]
   );
