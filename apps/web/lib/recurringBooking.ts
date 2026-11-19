@@ -12,22 +12,48 @@
  * auch ein einmaliges Nachbuchen der Vergangenheit ab (alle bisher
  * verpassten Monate werden im selben Lauf erkannt und gebucht).
  *
- * Idempotent: ein Monat gilt als bereits gebucht, sobald irgendeine
- * Transaction mit `recurringTransactionId` in diesem Monat existiert.
+ * Vorkommen = (Dauerauftrag, Periode). Die Periode ist der Monat ("JJJJ-MM",
+ * Europe/Berlin), FÜR den gebucht wird; sie steht als `recurringPeriod` auf
+ * der Buchung. Idempotent: ein Monat gilt als gebucht, sobald eine Transaction
+ * mit dieser `recurringTransactionId` und dieser Periode existiert — auch eine
+ * gelöschte (Tombstone). Der Monat von `occurredAt` spielt keine Rolle mehr:
+ * Verschiebt der Nutzer die Buchung in einen anderen Monat oder löscht sie,
+ * bleibt die Periode belegt und wird nicht erneut gebucht (siehe
+ * lib/recurringPeriods.ts; Altzeilen ohne Periode zählen für den Berliner
+ * Monat ihres Datums). Soll ein Monat entfallen, bevor er gebucht ist, ist
+ * "Überspringen" (Skip) der Weg.
  *
- * WICHTIG — bekannte Grenze: Eine VOR dieser Funktion von Hand angelegte
- * Transaktion hat kein `recurringTransactionId` und wird deshalb vom
- * "schon gebucht?"-Check nicht erkannt. Beim ersten Rollout auf echten Daten
- * (Nachbuchen der Vergangenheit) kann das zu Doppelbuchungen führen, wenn
- * bereits von Hand gebucht wurde, was ein Dauerauftrag jetzt automatisch
- * bucht. Deshalb: `dryRun: true` zeigt vorher genau, was gebucht würde —
- * das gehört von Menschen gegen die bestehenden Buchungen gegengeprüft, bevor
- * der echte (nicht-dryRun) Lauf passiert.
+ * Kalender (docs/calculations/00-grundregeln.md §1): Anker-Monat, "heute" und
+ * Fälligkeit sind Berliner Kalenderwerte. Fällig ist ein Vorkommen, sobald der
+ * Berliner Kalendertag von `now` den Fälligkeitstag (`dayOfMonth`, auf die
+ * Monatslänge begrenzt) erreicht hat; gebucht wird auf 12:00 Uhr Berliner Zeit
+ * dieses Tages. Die Buchung erbt die Steuer-Markierung ihrer Kategorie, wie
+ * eine von Hand angelegte.
+ *
+ * WICHTIG — bekannte Grenze: Eine von Hand angelegte Transaktion hat kein
+ * `recurringTransactionId` und wird deshalb vom "schon gebucht?"-Check nicht
+ * erkannt. Beim ersten Rollout auf echten Daten (Nachbuchen der
+ * Vergangenheit) kann das zu Doppelbuchungen führen, wenn bereits von Hand
+ * gebucht wurde, was ein Dauerauftrag jetzt automatisch bucht. Deshalb:
+ * `dryRun: true` zeigt vorher genau, was gebucht würde — das gehört von
+ * Menschen gegen die bestehenden Buchungen gegengeprüft, bevor der echte
+ * (nicht-dryRun) Lauf passiert.
  */
-import { dueMonthsBetween } from "@doewe/shared";
+import {
+  dueMonthsBetween,
+  isOnOrBeforeDate,
+  monthKey,
+  occurrenceDate,
+  shiftMonth,
+  zonedDate,
+  zonedMonth,
+  zonedTimeToUtc,
+  type CalendarDate
+} from "@doewe/shared";
 
 import { DEMO_ACCOUNT_ID } from "./demoConstants";
 import { prisma } from "./prisma";
+import { loadBookedOccurrenceKeys, occurrenceKey } from "./recurringPeriods";
 
 export type BookedOccurrence = {
   recurringId: string;
@@ -40,9 +66,27 @@ export type BookedOccurrence = {
   description: string;
 };
 
+type DueRecurring = {
+  id: string;
+  accountId: string;
+  categoryId: string | null;
+  amountCents: number;
+  description: string;
+  taxRelevant: boolean;
+};
+
+/** Books every occurrence that is due on the Berlin calendar day of `now`. */
 export async function materializeDueRecurringTransactions(
   now: Date = new Date(),
   options: { dryRun?: boolean; householdId?: string } = {}
+): Promise<BookedOccurrence[]> {
+  return bookOccurrencesDueBy(zonedDate(now), options);
+}
+
+/** Books every unbooked, unskipped occurrence whose due day is `today` or earlier. */
+async function bookOccurrencesDueBy(
+  today: CalendarDate,
+  options: { dryRun?: boolean; householdId?: string }
 ): Promise<BookedOccurrence[]> {
   const recurringTransactions = await prisma.recurringTransaction.findMany({
     // The public demo account is reseeded by /api/demo/seed and must never
@@ -60,51 +104,53 @@ export async function materializeDueRecurringTransactions(
       description: true,
       intervalMonths: true,
       dayOfMonth: true,
-      nextOccurrence: true
+      nextOccurrence: true,
+      // Nested reads bypass the soft-delete filter: a deleted category must
+      // not pass its tax flag on (a manual booking could not use it either).
+      category: { select: { isTaxRelevant: true, deletedAt: true } }
     }
   });
 
-  // Prefetch skips and already-booked months in two queries instead of one
+  // Prefetch skips and already-booked periods in a few queries instead of one
   // round trip per recurring x month — this runs on every dashboard load now
   // (catchUpPastRecurringForHousehold), so the steady state must stay cheap.
   const recurringIds = recurringTransactions.map((r) => r.id);
-  const monthKey = (recurringId: string, year: number, month: number) => `${recurringId}:${year}-${month}`;
-  const [skipRows, bookedRows] = await Promise.all([
+  const [skipRows, alreadyBooked] = await Promise.all([
     prisma.recurringTransactionSkip.findMany({
       where: { recurringId: { in: recurringIds } },
       select: { recurringId: true, year: true, month: true }
     }),
-    prisma.transaction.findMany({
-      where: { recurringTransactionId: { in: recurringIds } },
-      select: { recurringTransactionId: true, occurredAt: true }
-    })
+    loadBookedOccurrenceKeys(recurringIds)
   ]);
-  const skipped = new Set(skipRows.map((s) => monthKey(s.recurringId, s.year, s.month)));
-  const alreadyBooked = new Set(
-    bookedRows.map((t) => monthKey(t.recurringTransactionId ?? "", t.occurredAt.getFullYear(), t.occurredAt.getMonth() + 1))
-  );
+  const skipped = new Set(skipRows.map((s) => occurrenceKey(s.recurringId, s)));
 
   const booked: BookedOccurrence[] = [];
 
   for (const rec of recurringTransactions) {
-    const anchor = new Date(rec.nextOccurrence);
+    const anchor = zonedMonth(rec.nextOccurrence);
     const dueMonths = dueMonthsBetween({
-      nextYear: anchor.getFullYear(),
-      nextMonth: anchor.getMonth() + 1,
+      nextYear: anchor.year,
+      nextMonth: anchor.month,
       intervalMonths: rec.intervalMonths,
-      untilYear: now.getFullYear(),
-      untilMonth: now.getMonth() + 1
+      untilYear: today.year,
+      untilMonth: today.month
     });
+    const due: DueRecurring = {
+      id: rec.id,
+      accountId: rec.accountId,
+      categoryId: rec.categoryId,
+      amountCents: rec.amountCents,
+      description: rec.description,
+      taxRelevant: rec.category !== null && rec.category.deletedAt === null && rec.category.isTaxRelevant
+    };
 
     for (const { year, month } of dueMonths) {
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const day = Math.min(rec.dayOfMonth || 1, daysInMonth);
-      const occurredAt = new Date(year, month - 1, day);
+      const dueDay = occurrenceDate({ year, month }, rec.dayOfMonth || 1);
 
       // Don't book an occurrence whose day hasn't arrived yet this month.
-      if (occurredAt.getTime() > now.getTime()) continue;
+      if (!isOnOrBeforeDate(dueDay, today)) continue;
 
-      const key = monthKey(rec.id, year, month);
+      const key = occurrenceKey(rec.id, { year, month });
       if (skipped.has(key) || alreadyBooked.has(key)) continue;
 
       if (options.dryRun) {
@@ -124,7 +170,7 @@ export async function materializeDueRecurringTransactions(
       // abort the bookings of every other recurring/household in this run.
       let created: { id: string } | null;
       try {
-        created = await bookOccurrenceOnce(rec, year, month, occurredAt);
+        created = await bookOccurrenceOnce(due, dueDay);
       } catch (error) {
         // eslint-disable-next-line no-console -- surfaces in Railway logs, run continues
         console.error("Failed to book recurring occurrence", { recurringId: rec.id, year, month }, error);
@@ -152,30 +198,26 @@ export async function materializeDueRecurringTransactions(
  * (siehe catchUpPastRecurringForHousehold) können gleichzeitig laufen — der
  * transaktionsgebundene Advisory-Lock je Dauerauftrag serialisiert das
  * "schon gebucht?"-Prüfen und Anlegen, sonst entstünden Doppelbuchungen.
+ * Geprüft wird unter dem Lock dieselbe Vorkommens-Identität wie im Prefetch
+ * (Dauerauftrag + Periode, Tombstones eingeschlossen).
  */
-async function bookOccurrenceOnce(
-  rec: { id: string; accountId: string; categoryId: string | null; amountCents: number; description: string },
-  year: number,
-  month: number,
-  occurredAt: Date
-): Promise<{ id: string } | null> {
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1);
+async function bookOccurrenceOnce(rec: DueRecurring, dueDay: CalendarDate): Promise<{ id: string } | null> {
+  const period = monthKey(dueDay);
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${rec.id}))`;
-    const existing = await tx.transaction.findFirst({
-      where: { recurringTransactionId: rec.id, occurredAt: { gte: monthStart, lt: monthEnd } },
-      select: { id: true }
-    });
-    if (existing) return null;
+    const bookedKeys = await loadBookedOccurrenceKeys([rec.id], tx);
+    if (bookedKeys.has(occurrenceKey(rec.id, period))) return null;
     return tx.transaction.create({
       data: {
         accountId: rec.accountId,
         categoryId: rec.categoryId,
         amountCents: rec.amountCents,
         description: rec.description,
-        occurredAt,
-        recurringTransactionId: rec.id
+        // Noon in Berlin: the same calendar day in Berlin and in UTC.
+        occurredAt: zonedTimeToUtc({ ...dueDay, hour: 12 }),
+        taxRelevant: rec.taxRelevant,
+        recurringTransactionId: rec.id,
+        recurringPeriod: period
       },
       select: { id: true }
     });
@@ -188,12 +230,15 @@ async function bookOccurrenceOnce(
  * Sache des täglichen Crons — bis dahin zeigt das Dashboard ihn als "geplant".
  * So kann ein ausgefallener Cron Rückblick und Übertrag nie mehr still
  * verfälschen (Vorfall: Cron war nie eingerichtet, Okt. 2026 fehlten alle
- * Daueraufträge im Rückblick).
+ * Daueraufträge im Rückblick). "Abgeschlossen" und "laufend" sind Berliner
+ * Monate: um 00:30 Uhr am 1. (in UTC noch der Vormonat) ist der alte Monat
+ * abgeschlossen.
  */
 export async function catchUpPastRecurringForHousehold(
   householdId: string,
   now: Date = new Date()
 ): Promise<BookedOccurrence[]> {
-  const endOfPreviousMonth = new Date(new Date(now.getFullYear(), now.getMonth(), 1).getTime() - 1);
-  return materializeDueRecurringTransactions(endOfPreviousMonth, { householdId });
+  // Day 31 is clamped to the last day of the previous month by `occurrenceDate`.
+  const endOfPreviousMonth = occurrenceDate(shiftMonth(zonedMonth(now), -1), 31);
+  return bookOccurrencesDueBy(endOfPreviousMonth, { householdId });
 }

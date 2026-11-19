@@ -121,3 +121,5 @@ export type {
   CategoryYearMatrix
 } from "./categoryYear";
 export { buildCategoryYearMatrix } from "./categoryYear";
+
+export { occurrenceDate, isOnOrBeforeDate, firstOccurrenceFrom } from "./recurringSchedule";

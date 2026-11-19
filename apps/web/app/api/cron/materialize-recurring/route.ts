@@ -8,6 +8,11 @@
  * bisher verpasster Monate in der Vergangenheit (einmaliges Nachbuchen läuft
  * über denselben Code-Pfad wie der laufende Tagesbetrieb).
  *
+ * Fällig ist ein Vorkommen, sobald der Kalendertag des Laufs in Europe/Berlin
+ * den Fälligkeitstag erreicht hat — unabhängig von der Zeitzone des Servers.
+ * Ein Monat gilt als gebucht, sobald eine Buchung des Dauerauftrags für diese
+ * Periode existiert (`recurringPeriod`), auch eine verschobene oder gelöschte.
+ *
  * `?dryRun=true` schreibt nichts, sondern listet nur, was gebucht würde —
  * vor dem ersten Rollout auf echten Daten Pflicht (siehe recurringBooking.ts,
  * bekannte Grenze bei bereits von Hand gebuchten Monaten).

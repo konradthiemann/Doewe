@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { DEMO_ACCOUNT_ID } from "../lib/demoConstants";
 
@@ -8,6 +8,18 @@ const TEST_USER_ID = "test-user-materialize";
 const CRON_SECRET = "test-cron-secret-materialize";
 process.env.TEST_USER_ID_BYPASS = TEST_USER_ID;
 process.env.CRON_SECRET = CRON_SECRET;
+
+// Fixed instants and a pinned clock: the run must give the same result whether
+// the process runs in UTC (production, CI) or in Europe/Berlin (dev machines).
+//
+// The clock is pinned to 2024 on purpose: the cron books globally, across all
+// households of the shared test database. With "now" before every other test
+// file's fixtures (anchored in 2026 or later), nothing of theirs is due here,
+// so this file cannot book into the tests that run in parallel.
+/** 19 Nov 2024, 11:00 in Berlin. */
+const NOW = new Date("2024-11-19T10:00:00.000Z");
+/** 1 Aug 2024 the way production stored anchors so far: UTC midnight. Three months back. */
+const ANCHOR = new Date("2024-08-01T00:00:00.000Z");
 
 function authedRequest(): Request {
   return new Request("http://localhost/api/cron/materialize-recurring", {
@@ -49,11 +61,8 @@ beforeAll(async () => {
   await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
   await prisma.recurringTransaction.deleteMany({ where: { accountId: testAccountId } });
 
-  const now = new Date();
-  // Anchor 3 months back, dayOfMonth=1 so "today" always qualifies as due,
-  // regardless of which day of the month the test suite runs on.
-  const anchor = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-
+  // Anchor 3 months back, dayOfMonth=1: on 19 Nov the occurrences of Aug, Sep,
+  // Oct and Nov are all due.
   const income = await prisma.recurringTransaction.create({
     data: {
       accountId: testAccountId,
@@ -62,7 +71,7 @@ beforeAll(async () => {
       frequency: "MONTHLY",
       intervalMonths: 1,
       dayOfMonth: 1,
-      nextOccurrence: anchor
+      nextOccurrence: ANCHOR
     }
   });
   recurringIncomeId = income.id;
@@ -75,7 +84,7 @@ beforeAll(async () => {
       frequency: "MONTHLY",
       intervalMonths: 1,
       dayOfMonth: 1,
-      nextOccurrence: anchor
+      nextOccurrence: ANCHOR
     }
   });
   recurringExpenseId = expense.id;
@@ -88,13 +97,11 @@ beforeAll(async () => {
       frequency: "MONTHLY",
       intervalMonths: 1,
       dayOfMonth: 1,
-      nextOccurrence: anchor
+      nextOccurrence: ANCHOR
     }
   });
   recurringSkippedId = skipped.id;
-  await prisma.recurringTransactionSkip.create({
-    data: { recurringId: skipped.id, year: now.getFullYear(), month: now.getMonth() + 1 }
-  });
+  await prisma.recurringTransactionSkip.create({ data: { recurringId: skipped.id, year: 2024, month: 11 } });
 
   // Documents a known limitation: a transaction booked by hand BEFORE this
   // feature existed has no recurringTransactionId, so it is invisible to the
@@ -108,7 +115,7 @@ beforeAll(async () => {
       frequency: "MONTHLY",
       intervalMonths: 1,
       dayOfMonth: 1,
-      nextOccurrence: anchor
+      nextOccurrence: ANCHOR
     }
   });
   recurringAlreadyManuallyBookedId = rentRecurring.id;
@@ -117,7 +124,7 @@ beforeAll(async () => {
       accountId: testAccountId,
       amountCents: -12000,
       description: "Rent (booked by hand)",
-      occurredAt: new Date(now.getFullYear(), now.getMonth(), 1)
+      occurredAt: new Date("2024-11-01T11:00:00.000Z")
       // no recurringTransactionId — this is the pre-existing-data case
     }
   });
@@ -135,13 +142,16 @@ beforeAll(async () => {
       frequency: "MONTHLY",
       intervalMonths: 1,
       dayOfMonth: 1,
-      nextOccurrence: anchor
+      nextOccurrence: ANCHOR
     }
   });
   recurringDemoId = demoRecurring.id;
+
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
 });
 
 afterAll(async () => {
+  vi.useRealTimers();
   if (prisma) {
     await prisma.transaction.deleteMany({ where: { accountId: testAccountId } });
     await prisma.recurringTransactionSkip.deleteMany({ where: { recurring: { accountId: testAccountId } } });
@@ -214,9 +224,10 @@ describe("POST /api/cron/materialize-recurring", () => {
 
     // 3 months back + the current month = 4 occurrences per recurring transaction,
     // minus the 1 skipped occurrence for the skipped recurring.
-    const income = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringIncomeId } });
-    const expense = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringExpenseId } });
-    const skippedTxs = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringSkippedId } });
+    const byPeriod = { orderBy: { recurringPeriod: "asc" } } as const;
+    const income = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringIncomeId }, ...byPeriod });
+    const expense = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringExpenseId }, ...byPeriod });
+    const skippedTxs = await prisma.transaction.findMany({ where: { recurringTransactionId: recurringSkippedId }, ...byPeriod });
 
     expect(income).toHaveLength(4);
     expect(expense).toHaveLength(4);
@@ -224,6 +235,17 @@ describe("POST /api/cron/materialize-recurring", () => {
 
     expect(income.every((t) => t.amountCents === 150000)).toBe(true);
     expect(expense.every((t) => t.amountCents === -8000)).toBe(true);
+
+    // Each booking records the month it was booked for and is dated at noon in
+    // Berlin on the due day (10:00 UTC in summer time, 11:00 UTC in winter time).
+    expect(income.map((t) => t.recurringPeriod)).toEqual(["2024-08", "2024-09", "2024-10", "2024-11"]);
+    expect(income.map((t) => t.occurredAt.toISOString())).toEqual([
+      "2024-08-01T10:00:00.000Z",
+      "2024-09-01T10:00:00.000Z",
+      "2024-10-01T10:00:00.000Z",
+      "2024-11-01T11:00:00.000Z"
+    ]);
+    expect(skippedTxs.map((t) => t.recurringPeriod)).toEqual(["2024-08", "2024-09", "2024-10"]);
 
     // The public demo account is reseeded on every /api/demo/seed call and must
     // never receive real bookings from this cron (same exclusion convention as
@@ -264,5 +286,58 @@ describe("POST /api/cron/materialize-recurring", () => {
     const stillPlannedExpense = data.recurringTransactions.some((r: { id: string }) => r.id === recurringExpenseId);
     expect(stillPlannedIncome).toBe(false);
     expect(stillPlannedExpense).toBe(false);
+  }, 30000);
+
+  it("does not book a deleted occurrence again", async () => {
+    const november = await prisma.transaction.findFirstOrThrow({
+      where: { recurringTransactionId: recurringExpenseId, recurringPeriod: "2024-11" }
+    });
+    // Soft delete, as DELETE /api/transactions/[id] does.
+    await prisma.transaction.update({ where: { id: november.id }, data: { deletedAt: NOW } });
+
+    const routes = await import("../app/api/cron/materialize-recurring/route");
+    const data = await (await routes.POST(authedRequest())).json();
+    expect(data.occurrences.filter((o: { recurringId: string }) => o.recurringId === recurringExpenseId)).toEqual([]);
+    expect(await prisma.transaction.count({ where: { recurringTransactionId: recurringExpenseId } })).toBe(4);
+  }, 30000);
+
+  // Last on purpose: it moves the clock into December, which makes the
+  // December occurrences of the fixtures above due as well.
+  it("decides what is due by the Berlin calendar day of the run, not the UTC day", async () => {
+    const routes = await import("../app/api/cron/materialize-recurring/route");
+    const insurance = await prisma.recurringTransaction.create({
+      data: {
+        accountId: testAccountId,
+        amountCents: -4500,
+        description: "Insurance from December",
+        frequency: "MONTHLY",
+        intervalMonths: 1,
+        dayOfMonth: 1,
+        nextOccurrence: new Date("2024-12-01T11:00:00.000Z")
+      }
+    });
+    const ownOccurrences = async () => {
+      const data = await (await routes.POST(authedRequest())).json();
+      return data.occurrences
+        .filter((o: { recurringId: string }) => o.recurringId === insurance.id)
+        .map((o: { year: number; month: number }) => [o.year, o.month]);
+    };
+
+    try {
+      // 30 Nov 23:30 in Berlin: December has not begun.
+      vi.setSystemTime(new Date("2024-11-30T22:30:00.000Z"));
+      expect(await ownOccurrences()).toEqual([]);
+
+      // 1 Dec 00:30 in Berlin — still 30 Nov in UTC.
+      vi.setSystemTime(new Date("2024-11-30T23:30:00.000Z"));
+      expect(await ownOccurrences()).toEqual([[2024, 12]]);
+    } finally {
+      vi.setSystemTime(NOW);
+    }
+
+    const booked = await prisma.transaction.findMany({ where: { recurringTransactionId: insurance.id } });
+    expect(booked.map((t) => [t.recurringPeriod, t.occurredAt.toISOString()])).toEqual([
+      ["2024-12", "2024-12-01T11:00:00.000Z"]
+    ]);
   }, 30000);
 });
