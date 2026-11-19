@@ -57,8 +57,8 @@ model Category {
 
 // Standing budget per category: MONTHLY (same amount each month) or YEARLY
 // (distributed over the months by net availability, see budgetDistribution.ts).
-// A legacy per-month Budget row overrides the plan. period is validated in the
-// API (MONTHLY | YEARLY). Soft-delete via deletedAt; a re-created plan revives
+// The plan wins over a legacy per-month Budget row, which only applies to
+// categories without a plan. period is validated in the API (MONTHLY | YEARLY). Soft-delete via deletedAt; a re-created plan revives
 // the tombstone (categoryId is unique).
 model CategoryBudgetPlan {
   id          String    @id @default(cuid())
