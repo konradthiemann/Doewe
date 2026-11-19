@@ -793,5 +793,10 @@ export const de: Record<string, string> = {
   "budgets.nextYear": "Nächstes Jahr",
   "budgets.colCategory": "Kategorie",
   "budgets.colPeriod": "Zeitraum",
-  "budgets.colAmount": "Betrag"
+  "budgets.colAmount": "Betrag",
+  "transactions.filterTypeSavings": "Sparen",
+  "transactions.savingsLabel": "Gespart",
+  "transactions.filterMonthLabel": "Monat",
+  "transactions.filterMonthAll": "Alle Monate",
+  "transactions.filterMonthCustom": "Eigener Zeitraum"
 };

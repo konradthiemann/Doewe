@@ -1,18 +1,22 @@
 "use client";
 
-import { fromCents, toDecimalString } from "@doewe/shared";
-import { useQueryClient } from "@tanstack/react-query";
 import {
-  addMonths,
-  format,
-  getMonth,
-  getYear,
-  isAfter,
-  isBefore,
-  parseISO,
-  startOfDay,
-} from "date-fns";
-import { de, enUS } from "date-fns/locale";
+  filterTransactions,
+  fromCents,
+  listTotals,
+  monthDayRange,
+  monthKey,
+  monthOfDayRange,
+  monthsWithTransactions,
+  savingsCategoryIds,
+  shiftMonth,
+  toDecimalString,
+  zonedDate,
+  zonedDayKey,
+  zonedMonth,
+  type TransactionTypeFilter
+} from "@doewe/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   parseAsBoolean,
   parseAsString,
@@ -27,8 +31,18 @@ import TransactionForm from "../../components/TransactionForm";
 import { Dialog } from "../../components/ui/Dialog";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
+import { formatBookingDateTime, formatCalendarDate, formatMonth } from "../../lib/bookingDate";
+import { parseMonthKey } from "../../lib/dateInput";
 import { useI18n } from "../../lib/i18n";
 import { useOutboxEntries } from "../../lib/offline/useOutbox";
+import {
+  amountSearchForms,
+  isRecurringDueIn,
+  matchesSearch,
+  monthPickerOptions,
+  nextDueDate,
+  totalsBarParts
+} from "../../lib/transactionList";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
@@ -38,10 +52,13 @@ type Tx = {
   amountCents: number;
   description: string;
   occurredAt: string;
-  categoryId?: string | null;
+  categoryId: string | null;
   taxRelevant?: boolean;
   recurringTransactionId?: string | null;
 };
+
+/** As delivered by the API or the offline outbox: `categoryId` may be missing. */
+type TxResponse = Omit<Tx, "categoryId"> & { categoryId?: string | null };
 
 type RecurringTx = {
   id: string;
@@ -63,7 +80,10 @@ type RecurringSkip = {
 
 type ActiveTab = "transactions" | "recurring";
 type SortOption = "newest" | "oldest" | "amountDesc" | "amountAsc" | "description";
-type FilterType = "all" | "income" | "outcome";
+type FilterType = TransactionTypeFilter;
+
+/** Value of the month picker while `from`/`to` hold a range that is not exactly one month. */
+const CUSTOM_RANGE = "custom";
 
 // getJson (useApiQuery) wirft "GET <url> failed with status <n>" — für die
 // bestehenden {status}-Fehlertexte den HTTP-Status wieder herausziehen.
@@ -83,7 +103,7 @@ function TransactionsPage() {
   async function handleRecurringCsvExport() {
     setExportingCsv(true);
     try {
-      const year = new Date().getFullYear();
+      const year = zonedMonth(new Date()).year;
       const res = await fetch(`/api/recurring-transactions/export?year=${year}`);
       if (!res.ok) {
         toast.error(t("transactions.recurringExportError", { status: res.status }));
@@ -118,7 +138,7 @@ function TransactionsPage() {
   const [query, setQuery] = useQueryState("q", parseAsString.withDefault(""));
   const [filterType, setFilterType] = useQueryState(
     "filter",
-    parseAsStringEnum<FilterType>(["all", "income", "outcome"]).withDefault("all")
+    parseAsStringEnum<FilterType>(["all", "income", "outcome", "savings"]).withDefault("all")
   );
   const [sortOption, setSortOption] = useQueryState(
     "sort",
@@ -132,7 +152,7 @@ function TransactionsPage() {
   const [dateFrom, setDateFrom] = useQueryState("from", parseAsString.withDefault(""));
   const [dateTo, setDateTo] = useQueryState("to", parseAsString.withDefault(""));
   const [creating, setCreating] = useQueryState("new", parseAsBoolean.withDefault(false));
-  const dfLocale = locale === "de" ? de : enUS;
+  const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
   const tabs: Array<{ id: ActiveTab; label: string }> = useMemo(() => (
     [
@@ -155,28 +175,21 @@ function TransactionsPage() {
     tabRefs.current[nextIndex]?.focus();
   };
 
-  const now = useMemo(() => new Date(), []);
-  const currentYear = useMemo(() => getYear(now), [now]);
-  const currentMonth = useMemo(() => getMonth(now) + 1, [now]);
-  const nextDate = useMemo(() => addMonths(now, 1), [now]);
-  const nextYear = useMemo(() => getYear(nextDate), [nextDate]);
-  const nextMonth = useMemo(() => getMonth(nextDate) + 1, [nextDate]);
-
-  const monthIndex = useCallback((year: number, month: number) => year * 12 + (month - 1), []);
-
-  const occursInMonth = useCallback((recurring: RecurringTx, year: number, month: number) => {
-    const base = parseISO(recurring.nextOccurrence);
-    const baseIndex = monthIndex(getYear(base), getMonth(base) + 1);
-    const targetIndex = monthIndex(year, month);
-    const interval = recurring.intervalMonths ?? 1;
-    const diff = targetIndex - baseIndex;
-    return diff >= 0 && diff % interval === 0;
-  }, [monthIndex]);
+  // "Today", the current and the next month are the app's calendar
+  // (Europe/Berlin), not the device's — the same months the server books and
+  // projects recurring transactions for.
+  const today = useMemo(() => zonedDate(new Date()), []);
+  const currentYear = today.year;
+  const currentMonth = today.month;
+  const { year: nextYear, month: nextMonth } = useMemo(
+    () => shiftMonth({ year: today.year, month: today.month }, 1),
+    [today]
+  );
 
   // Phase 2 „Offline lesen": GETs laufen über den persistierten Query-Cache —
   // offline zeigt die Seite den letzten geladenen Stand. Die Skip-Keys tragen
   // Jahr/Monat, ein Monatswechsel refetcht damit automatisch.
-  const transactionsQuery = useApiQuery<Tx[]>(["transactions"], "/api/transactions");
+  const transactionsQuery = useApiQuery<TxResponse[]>(["transactions"], "/api/transactions");
   const recurringListQuery = useApiQuery<RecurringTx[]>(["recurring"], "/api/recurring-transactions");
   const skipsCurrentQuery = useApiQuery<RecurringSkip[]>(
     ["recurring", "skips", currentYear, currentMonth],
@@ -188,7 +201,10 @@ function TransactionsPage() {
   );
   const categoriesQuery = useApiQuery<Array<{ id: string; name: string }>>(["categories"], "/api/categories");
 
-  const items = useMemo<Tx[]>(() => transactionsQuery.data ?? [], [transactionsQuery.data]);
+  const items = useMemo<Tx[]>(
+    () => (transactionsQuery.data ?? []).map((tx) => ({ ...tx, categoryId: tx.categoryId ?? null })),
+    [transactionsQuery.data]
+  );
   const recurringItems = useMemo<RecurringTx[]>(
     () => recurringListQuery.data ?? [],
     [recurringListQuery.data]
@@ -209,6 +225,9 @@ function TransactionsPage() {
     () => Object.fromEntries(categories.map(({ id, name }) => [id, name] as const)),
     [categories]
   );
+  // Savings categories decide the type of a row before its sign does — the
+  // same classification every analytics screen uses.
+  const savingsIds = useMemo(() => savingsCategoryIds(categories), [categories]);
 
   // Offline erfasste, noch nicht synchronisierte Buchungen (Outbox):
   // bekommen ein Pending-Badge und sind bis zum Sync nicht editierbar.
@@ -320,35 +339,33 @@ function TransactionsPage() {
   const createDialogTitleId = creating ? "create-transaction" : undefined;
 
   const normalizedQuery = query.trim().toLowerCase();
+  // Type, category and date range come from the shared list filter: filtering
+  // a month here and summing a type gives the review's figure for that month.
+  // The text search narrows those rows further.
   const filteredItems = useMemo(() => {
-    const fromDate = dateFrom ? startOfDay(new Date(dateFrom)) : null;
-    const toDate = dateTo ? startOfDay(new Date(dateTo)) : null;
-
-    return items.filter((t) => {
-      if (filterType === "income" && t.amountCents < 0) return false;
-      if (filterType === "outcome" && t.amountCents >= 0) return false;
-      if (categoryFilter && t.categoryId !== categoryFilter) return false;
-
-      const occurredDate = parseISO(t.occurredAt);
-      if (fromDate && isBefore(occurredDate, fromDate)) return false;
-      if (toDate && isAfter(occurredDate, startOfDay(new Date(toDate.getTime() + 86_400_000 - 1)))) return false;
-
-      if (!normalizedQuery) return true;
-
-      const description = t.description?.toLowerCase?.() ?? "";
-      const account = t.accountId?.toLowerCase?.() ?? "";
-      const categoryName = t.categoryId ? (categoriesById[t.categoryId]?.toLowerCase?.() ?? "") : "";
-      const amount = toDecimalString(fromCents(t.amountCents)).toLowerCase();
-      const occurred = format(parseISO(t.occurredAt), "Pp", { locale: dfLocale }).toLowerCase();
-
-      return [description, account, categoryName, amount, occurred].some((value) => value.includes(normalizedQuery));
-    });
-  }, [categoryFilter, categoriesById, dateFrom, dateTo, dfLocale, filterType, items, normalizedQuery]);
+    const rows = filterTransactions(
+      items,
+      { type: filterType, categoryId: categoryFilter, fromDay: dateFrom, toDay: dateTo },
+      savingsIds
+    );
+    if (!normalizedQuery) return rows;
+    return rows.filter((tx) =>
+      matchesSearch(
+        [
+          tx.description,
+          tx.categoryId ? categoriesById[tx.categoryId] : null,
+          ...amountSearchForms(tx.amountCents, locale),
+          formatBookingDateTime(tx.occurredAt, locale)
+        ],
+        normalizedQuery
+      )
+    );
+  }, [categoryFilter, categoriesById, dateFrom, dateTo, filterType, items, locale, normalizedQuery, savingsIds]);
   const sortedItems = useMemo(() => {
     const copy = [...filteredItems];
     switch (sortOption) {
       case "oldest":
-        return copy.sort((a, b) => parseISO(a.occurredAt).getTime() - parseISO(b.occurredAt).getTime());
+        return copy.sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
       case "amountDesc":
         return copy.sort((a, b) => b.amountCents - a.amountCents);
       case "amountAsc":
@@ -357,27 +374,36 @@ function TransactionsPage() {
         return copy.sort((a, b) => (a.description || "").localeCompare(b.description || ""));
       case "newest":
       default:
-        return copy.sort((a, b) => parseISO(b.occurredAt).getTime() - parseISO(a.occurredAt).getTime());
+        return copy.sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
     }
   }, [filteredItems, sortOption]);
   const hasFilters = Boolean(normalizedQuery || categoryFilter || dateFrom || dateTo || filterType !== "all");
 
-  // Totals for the currently filtered list (income, outcome, net) — shown above the list
+  // Totals for the currently filtered list (income, outcome, savings, net) — shown above the list
   // to give immediate context to any search/filter (e.g. "Konni" inside Clothing category).
-  const filteredTotals = useMemo(() => {
-    let incomeCents = 0;
-    let outcomeCents = 0;
-    for (const t of filteredItems) {
-      if (t.amountCents >= 0) incomeCents += t.amountCents;
-      else outcomeCents += -t.amountCents;
+  const filteredTotals = useMemo(() => listTotals(filteredItems, savingsIds), [filteredItems, savingsIds]);
+  const totalsParts = totalsBarParts(filteredTotals);
+
+  // Month picker: the months that have bookings; it mirrors `from`/`to`
+  // whenever they span exactly one calendar month.
+  const selectedMonth = useMemo(() => monthOfDayRange(dateFrom, dateTo), [dateFrom, dateTo]);
+  const monthOptions = useMemo(
+    () => monthPickerOptions(monthsWithTransactions(items), selectedMonth),
+    [items, selectedMonth]
+  );
+  const monthPickerValue = selectedMonth ? monthKey(selectedMonth) : dateFrom || dateTo ? CUSTOM_RANGE : "";
+  const handleMonthChange = (value: string) => {
+    if (value === "") {
+      void setDateFrom(null);
+      void setDateTo(null);
+      return;
     }
-    return {
-      count: filteredItems.length,
-      incomeCents,
-      outcomeCents,
-      netCents: incomeCents - outcomeCents,
-    };
-  }, [filteredItems]);
+    const ref = parseMonthKey(value);
+    if (!ref) return;
+    const range = monthDayRange(ref);
+    void setDateFrom(range.fromDay);
+    void setDateTo(range.toDay);
+  };
 
   const normalizedRecurringQuery = recurringQuery.trim().toLowerCase();
   const filteredRecurringItems = useMemo(() => {
@@ -385,32 +411,33 @@ function TransactionsPage() {
       return recurringItems;
     }
 
-    return recurringItems.filter((rec) => {
-      const description = rec.description?.toLowerCase?.() ?? "";
-      const account = rec.accountId?.toLowerCase?.() ?? "";
-      const categoryName = rec.categoryId ? (categoriesById[rec.categoryId]?.toLowerCase?.() ?? "") : "";
-      const amount = toDecimalString(fromCents(rec.amountCents)).toLowerCase();
-      const nextOccurrence = format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }).toLowerCase();
-      const interval = String(rec.intervalMonths ?? 1);
-
-      return [description, account, categoryName, amount, nextOccurrence, interval]
-        .some((value) => value.includes(normalizedRecurringQuery));
-    });
-  }, [categoriesById, dfLocale, normalizedRecurringQuery, recurringItems]);
+    return recurringItems.filter((rec) =>
+      matchesSearch(
+        [
+          rec.description,
+          rec.categoryId ? categoriesById[rec.categoryId] : null,
+          ...amountSearchForms(rec.amountCents, locale),
+          formatCalendarDate(nextDueDate(rec, today), locale),
+          String(rec.intervalMonths ?? 1)
+        ],
+        normalizedRecurringQuery
+      )
+    );
+  }, [categoriesById, locale, normalizedRecurringQuery, recurringItems, today]);
   const recurringTotalCents = useMemo(() => {
     return filteredRecurringItems.reduce((total, rec) => total + rec.amountCents, 0);
   }, [filteredRecurringItems]);
 
   const currentRecurring = useMemo(() => {
     return recurringItems.filter((rec) => {
-      if (!occursInMonth(rec, currentYear, currentMonth)) return false;
+      if (!isRecurringDueIn(rec, { year: currentYear, month: currentMonth })) return false;
       return !skipsCurrent.has(rec.id);
     });
-  }, [currentMonth, currentYear, occursInMonth, recurringItems, skipsCurrent]);
+  }, [currentMonth, currentYear, recurringItems, skipsCurrent]);
 
   const nextRecurring = useMemo(() => {
-    return recurringItems.filter((rec) => occursInMonth(rec, nextYear, nextMonth));
-  }, [nextMonth, nextYear, occursInMonth, recurringItems]);
+    return recurringItems.filter((rec) => isRecurringDueIn(rec, { year: nextYear, month: nextMonth }));
+  }, [nextMonth, nextYear, recurringItems]);
 
   const currentRecurringTotalCents = useMemo(() => {
     return currentRecurring.reduce((total, rec) => total + rec.amountCents, 0);
@@ -610,7 +637,7 @@ function TransactionsPage() {
 
           <div
             className={`overflow-hidden transition-all duration-300 ease-in-out ${
-              showFilters ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+              showFilters ? "max-h-[760px] opacity-100" : "max-h-0 opacity-0"
             }`}
           >
           <div className="rounded-card border border-line bg-surface p-5 shadow-card">
@@ -678,10 +705,45 @@ function TransactionsPage() {
                 </svg>
                 {t("transactions.filterTypeOutcome")}
               </button>
+              <button
+                type="button"
+                onClick={() => void setFilterType("savings")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
+                  filterType === "savings"
+                    ? "bg-savings text-brand-on shadow-card"
+                    : "bg-surface-2 text-ink hover:opacity-80"
+                }`}
+              >
+                <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 9H20M20 9L16 5M20 15H4M4 15L8 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t("transactions.filterTypeSavings")}
+              </button>
             </div>
 
             {/* Filter Controls Grid */}
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="filter-month" className="text-xs font-medium text-ink-muted">
+                  {t("transactions.filterMonthLabel")}
+                </label>
+                <select
+                  id="filter-month"
+                  value={monthPickerValue}
+                  onChange={(event) => handleMonthChange(event.target.value)}
+                  className="w-full rounded-field border border-line bg-surface px-3 py-2 text-base md:text-sm text-ink transition-colors focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                >
+                  <option value="">{t("transactions.filterMonthAll")}</option>
+                  {monthPickerValue === CUSTOM_RANGE && (
+                    <option value={CUSTOM_RANGE}>{t("transactions.filterMonthCustom")}</option>
+                  )}
+                  {monthOptions.map((ref) => (
+                    <option key={monthKey(ref)} value={monthKey(ref)}>
+                      {formatMonth(ref, dateLocale)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="filter-category" className="text-xs font-medium text-ink-muted">
                   {t("transactions.filterCategoryLabel")}
@@ -820,7 +882,7 @@ function TransactionsPage() {
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <p className="text-xs font-normal text-ink-muted">{t("transactions.upcomingRecurring")}</p>
               <span className="flex items-center gap-2 text-xs text-ink-muted">
-                {format(nextDate, "LLLL yyyy", { locale: dfLocale })}
+                {formatMonth({ year: nextYear, month: nextMonth }, dateLocale)}
                 <svg
                   aria-hidden="true"
                   className="h-3.5 w-3.5 text-ink-faint transition-transform duration-200 group-open:rotate-90"
@@ -871,17 +933,24 @@ function TransactionsPage() {
                   : t("transactions.allTotalLabel", { count: filteredTotals.count })}
               </span>
               <span className="flex flex-wrap items-center gap-2 font-semibold tabular-nums">
-                {filteredTotals.incomeCents > 0 && (
+                {totalsParts.income && (
                   <span className="inline-flex items-center rounded-full bg-income-soft px-2.5 py-0.5 text-income">
+                    <span className="sr-only">{t("transactions.filterTypeIncome")}: </span>
                     +{toDecimalString(fromCents(filteredTotals.incomeCents))} €
                   </span>
                 )}
-                {filteredTotals.outcomeCents > 0 && (
+                {totalsParts.outcome && (
                   <span className="inline-flex items-center rounded-full bg-expense-soft px-2.5 py-0.5 text-expense">
+                    <span className="sr-only">{t("transactions.filterTypeOutcome")}: </span>
                     -{toDecimalString(fromCents(filteredTotals.outcomeCents))} €
                   </span>
                 )}
-                {filteredTotals.incomeCents > 0 && filteredTotals.outcomeCents > 0 && (
+                {totalsParts.savings && (
+                  <span className="inline-flex items-center rounded-full bg-savings-soft px-2.5 py-0.5 text-savings">
+                    {t("transactions.savingsLabel")}: {toDecimalString(fromCents(filteredTotals.savingsCents))} €
+                  </span>
+                )}
+                {totalsParts.net && (
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 ${
                       filteredTotals.netCents >= 0
@@ -923,7 +992,7 @@ function TransactionsPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:contents">
                       <span className="contents lg:col-start-1 lg:row-start-1 lg:flex lg:flex-col lg:items-start lg:gap-1">
                         <time dateTime={tx.occurredAt} className="lg:whitespace-nowrap">
-                          {format(parseISO(tx.occurredAt), "Pp", { locale: dfLocale })}
+                          {formatBookingDateTime(tx.occurredAt, locale)}
                         </time>
                         {pendingTxIds.has(tx.id) && (
                           <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning">
@@ -1034,7 +1103,7 @@ function TransactionsPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted lg:contents">
                       <span className="lg:col-start-2 lg:row-start-1 lg:whitespace-nowrap">{t("transactions.everyMonths", { count: rec.intervalMonths ?? 1 })}</span>
                       <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted lg:col-start-3 lg:row-start-1 lg:justify-self-start lg:whitespace-nowrap">
-                        {t("transactions.nextLabel", { date: format(parseISO(rec.nextOccurrence), "P", { locale: dfLocale }) })}
+                        {t("transactions.nextLabel", { date: formatCalendarDate(nextDueDate(rec, today), locale) })}
                       </span>
                       {rec.categoryId && (
                         <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted lg:col-start-4 lg:row-start-1 lg:min-w-0 lg:justify-self-start lg:truncate">
@@ -1130,7 +1199,7 @@ function TransactionsPage() {
               categoryId: editingRecurring.categoryId ?? null,
               intervalMonths: editingRecurring.intervalMonths ?? 1,
               dayOfMonth: editingRecurring.dayOfMonth ?? 1,
-              startDate: format(parseISO(editingRecurring.nextOccurrence), "yyyy-MM-dd"),
+              startDate: zonedDayKey(new Date(editingRecurring.nextOccurrence)),
             }}
             headingId={`edit-recurring-${editingRecurring.id}`}
             onSuccess={handleRecurringEditSuccess}
