@@ -108,8 +108,11 @@ jeden Monat `M`:
   und auf Wunsch den Kauf als Ausgabe. Wieder öffnen nimmt die Entnahme zurück. Der Spartopf lässt
   sich deshalb immer aus den Buchungen nachrechnen.
 - Das Budget einer Kategorie ist der Budget-Plan, sonst die Monats-Budgets des Haushalts zusammen.
-  Für einen abgeschlossenen Monat gilt der Stand, der beim ersten Lesen nach Monatsende festgehalten
-  wurde (`BudgetMonthSnapshot`); spätere Änderungen an Plänen oder Daueraufträgen wirken nur auf den
-  laufenden und künftige Monate.
-- Budget-Warnungen vergleichen „Ausgegeben" (gebucht und geplant) mit diesem Budget und gehen an alle
-  Mitglieder des Haushalts, die sie eingeschaltet haben.
+  Für einen abgeschlossenen Monat gilt der Stand, der festgehalten wurde (`BudgetMonthSnapshot`) — beim
+  ersten Lesen nach Monatsende oder spätestens vor der ersten Änderung an Plänen, Monats-Budgets oder
+  Daueraufträgen. Spätere Änderungen wirken nur auf den laufenden und künftige Monate.
+- Budget-Warnungen gibt es nur für den laufenden Monat. Sie vergleichen „Ausgegeben" (gebucht und
+  geplant) mit diesem Budget und gehen an alle Mitglieder des Haushalts, die sie eingeschaltet haben.
+- **Empfohlene Monatsrate:** der kleinste gleichbleibende Monatsbetrag, mit dem jedes datierte Ziel zu
+  seinem Termin gedeckt ist; der laufende Monat zählt mit. Als bereits gedeckt gilt der Spartopf ohne
+  die Einzahlungen dieses Monats, damit die Rate nicht sinkt, sobald man spart.
