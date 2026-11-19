@@ -10,7 +10,9 @@ import PlannedSavingForm from "../../components/PlannedSavingForm";
 import { Spinner } from "../../components/ui/Spinner";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
+import { formatBookingDayMonth, formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
+import { cascadeGoalProgress, type GoalProgress } from "../../lib/savingGoalProgress";
 
 type SavingGoal = {
   id: string;
@@ -40,16 +42,7 @@ type SavingPlanResponse = {
   };
 };
 
-type GoalWithProgress = SavingGoal & {
-  percent: number;
-  status: "complete" | "current" | "upcoming";
-  achievedCents: number;
-  cumulativeTargetCents: number;
-};
-
-function formatCurrency(cents: number) {
-  return `${toDecimalString(fromCents(cents))} €`;
-}
+type GoalWithProgress = SavingGoal & GoalProgress;
 
 function SavingPlanPage() {
   const { locale, t } = useI18n();
@@ -80,6 +73,13 @@ function SavingPlanPage() {
   const searchParams = useSearchParams();
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
 
+  // Same localized currency format as the dashboard ("1.234,56 €" in de).
+  const formatCurrency = useCallback(
+    (cents: number) =>
+      `${(cents / 100).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`,
+    [dateLocale]
+  );
+
   // Phase 2 „Offline lesen": Plan kommt aus dem persistierten Query-Cache —
   // offline zeigt die Seite den letzten geladenen Stand.
   const planQuery = useApiQuery<SavingPlanResponse>(["saving-plan"], "/api/saving-plan");
@@ -109,29 +109,11 @@ function SavingPlanPage() {
     return Math.max(plan?.totals.availableCents ?? 0, 0);
   }, [plan]);
 
-  const goalsWithProgress: GoalWithProgress[] = useMemo(() => {
-    if (!plan) return [];
-    let cumulative = 0;
-    return plan.goals.map((goal): GoalWithProgress => {
-      const amount = goal.amountCents ?? 0;
-      const start = cumulative;
-      const end = cumulative + amount;
-      const achieved = Math.min(Math.max(availableCents - start, 0), amount);
-      const percent = amount > 0 ? Math.round((achieved / amount) * 100) : 100;
-      let status: GoalWithProgress["status"];
-      if (percent >= 100) status = "complete";
-      else if (achieved > 0) status = "current";
-      else status = "upcoming";
-      cumulative = end;
-      return {
-        ...goal,
-        achievedCents: achieved,
-        percent,
-        status,
-        cumulativeTargetCents: end
-      };
-    });
-  }, [availableCents, plan]);
+  // A goal is complete only when its target is fully covered (see cascadeGoalProgress).
+  const goalsWithProgress: GoalWithProgress[] = useMemo(
+    () => (plan ? cascadeGoalProgress(plan.goals, availableCents) : []),
+    [availableCents, plan]
+  );
 
   const lastTarget = goalsWithProgress.length ? goalsWithProgress[goalsWithProgress.length - 1].cumulativeTargetCents : 0;
   const remainingAfterGoals = Math.max(availableCents - lastTarget, 0);
@@ -306,7 +288,7 @@ function SavingPlanPage() {
     } finally {
       setWithdrawing(false);
     }
-  }, [availableCents, closeWithdrawDialog, invalidatePlan, t, toast, withdrawAmount]);
+  }, [availableCents, closeWithdrawDialog, formatCurrency, invalidatePlan, t, toast, withdrawAmount]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -448,10 +430,7 @@ function SavingPlanPage() {
               const isLast = index === goalsWithProgress.length - 1;
               const dueDate =
                 goal.month != null && goal.year != null
-                  ? new Date(goal.year, goal.month - 1, 1).toLocaleDateString(dateLocale, {
-                      month: "long",
-                      year: "numeric"
-                    })
+                  ? formatMonth({ year: goal.year, month: goal.month }, dateLocale)
                   : "";
               const percentClamped = Math.min(goal.percent, 100);
               const statusClasses = {
@@ -655,17 +634,10 @@ function SavingPlanPage() {
               {completedGoals.map((goal) => {
                 const dueDate =
                   goal.month != null && goal.year != null
-                    ? new Date(goal.year, goal.month - 1, 1).toLocaleDateString(dateLocale, {
-                        month: "long",
-                        year: "numeric"
-                      })
+                    ? formatMonth({ year: goal.year, month: goal.month }, dateLocale)
                     : "";
                 const completedDate = goal.completedAt
-                  ? new Date(goal.completedAt).toLocaleDateString(dateLocale, {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric"
-                    })
+                  ? formatBookingDayMonth(goal.completedAt, dateLocale, { month: "long", year: true })
                   : null;
                 const spent = goal.spentCents ?? 0;
                 const diff = goal.amountCents != null ? spent - goal.amountCents : 0;
