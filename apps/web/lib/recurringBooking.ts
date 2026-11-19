@@ -37,21 +37,21 @@
  * dieses Tages. Die Buchung erbt die Steuer-Markierung ihrer Kategorie, wie
  * eine von Hand angelegte.
  *
- * Von Hand erfasste Zahlung: Bevor ein Vorkommen gebucht wird, sucht der Lauf
- * unter dem Lock eine von Hand angelegte Buchung, die für dieses Vorkommen
- * steht (`pickAdoptionCandidate` in @doewe/shared: gleiches Konto, gleicher
- * Betrag, gleiche Kategorie bzw. ohne Kategorie gleiche Beschreibung, höchstens
- * 7 Kalendertage vor oder nach dem Fälligkeitstag, nicht gelöscht, mit keinem
- * Dauerauftrag verknüpft). Gibt es eine, wird sie übernommen: sie bekommt
- * `recurringTransactionId` und `recurringPeriod`, sonst ändert sich nichts an
- * ihr, und es wird nichts gebucht. Jede Buchung steht nur für ein Vorkommen.
- * `adoptManualBookingsForCurrentMonth` übernimmt auf dieselbe Weise für die
- * Vorkommen des laufenden Monats, auch wenn ihr Tag noch nicht erreicht ist,
- * und legt nie etwas an — sonst zählte das Dashboard die Zahlung bis zum
- * Fälligkeitstag einmal als gebucht und einmal als geplant.
+ * Von Hand erfasste Zahlung — Vorschlag und Bestätigung: Der Lauf verknüpft
+ * nie von sich aus eine von Hand angelegte Buchung mit einem Vorkommen. Die
+ * Regel kann "früher bezahlt" nicht von "zusätzlich bezahlt" unterscheiden,
+ * und eine still fehlende Buchung ist schlimmer als eine sichtbare doppelte,
+ * die der Nutzer löschen kann. `loadRecurringSuggestions` schlägt für die
+ * offenen Vorkommen des laufenden Monats eine passende Buchung vor
+ * (`pickAdoptionCandidate` in @doewe/shared: gleiches Konto, gleicher Betrag,
+ * gleiche Kategorie bzw. ohne Kategorie gleiche Beschreibung, höchstens 7
+ * Kalendertage um den Fälligkeitstag, nicht gelöscht, mit keinem Dauerauftrag
+ * verknüpft) und schreibt dabei nichts. Verknüpft wird erst, wenn der Nutzer
+ * bestätigt (`linkBookingToOccurrence`, POST
+ * /api/recurring-transactions/[id]/link-booking).
  */
 import {
-  ADOPTION_WINDOW_DAYS,
+  adoptionMismatch,
   dueMonthsBetween,
   isBeforeBookFromPeriod,
   isOnOrBeforeDate,
@@ -63,6 +63,8 @@ import {
   zonedDate,
   zonedMonth,
   zonedTimeToUtc,
+  ADOPTION_WINDOW_DAYS,
+  type AdoptionMismatch,
   type AdoptionRow,
   type CalendarDate,
   type MonthRef,
@@ -73,25 +75,29 @@ import { DEMO_ACCOUNT_ID } from "./demoConstants";
 import { prisma } from "./prisma";
 import { loadBookedOccurrenceKeys, occurrenceKey } from "./recurringPeriods";
 
-import type { Prisma } from "@prisma/client";
-
 export type BookedOccurrence = {
   recurringId: string;
   accountId: string;
-  /**
-   * The booking that now stands for the occurrence: the created one, or the
-   * hand-entered one that was adopted. null when dryRun — nothing was written.
-   */
+  /** null when dryRun — nothing was actually written. */
   transactionId: string | null;
   year: number;
   month: number;
   amountCents: number;
   description: string;
-  /**
-   * true: nothing was created — an existing hand-entered booking was linked
-   * to the occurrence (in a dry run: would be linked).
-   */
-  adopted: boolean;
+};
+
+/** A hand-entered booking that looks like an open occurrence of a standing order. */
+export type RecurringSuggestion = {
+  recurringId: string;
+  /** The occurrence's month, "YYYY-MM" (Europe/Berlin). */
+  period: string;
+  /** The occurrence's due day, "yyyy-mm-dd" (Europe/Berlin). */
+  dueDay: string;
+  transactionId: string;
+  transactionDescription: string;
+  /** ISO instant of the booking. */
+  transactionOccurredAt: string;
+  amountCents: number;
 };
 
 type DueRecurring = {
@@ -137,7 +143,39 @@ async function bookOccurrencesDueBy(
     // Don't book an occurrence whose day hasn't arrived yet this month.
     (dueDay) => isOnOrBeforeDate(dueDay, today)
   );
-  return settleOccurrences(open, { create: true, dryRun: options.dryRun ?? false });
+
+  const booked: BookedOccurrence[] = [];
+  for (const { rec, dueDay } of open) {
+    let transactionId: string | null = null;
+    if (!options.dryRun) {
+      // One failing occurrence (e.g. its account vanished mid-run) must not
+      // abort the bookings of every other recurring/household in this run.
+      let created: { id: string } | null;
+      try {
+        created = await bookOccurrenceOnce(rec, dueDay);
+      } catch (error) {
+        // eslint-disable-next-line no-console -- surfaces in Railway logs, run continues
+        console.error(
+          "Failed to book recurring occurrence",
+          { recurringId: rec.id, year: dueDay.year, month: dueDay.month },
+          error
+        );
+        continue;
+      }
+      if (!created) continue;
+      transactionId = created.id;
+    }
+    booked.push({
+      recurringId: rec.id,
+      accountId: rec.accountId,
+      transactionId,
+      year: dueDay.year,
+      month: dueDay.month,
+      amountCents: rec.amountCents,
+      description: rec.description
+    });
+  }
+  return booked;
 }
 
 /**
@@ -177,8 +215,8 @@ async function loadOpenOccurrences(
 
   // Prefetch skips and already-booked periods in a few queries instead of one
   // round trip per recurring x month — this runs on every dashboard load
-  // (catchUpPastRecurringForHousehold, adoptManualBookingsForCurrentMonth), so
-  // the steady state must stay cheap.
+  // (catchUpPastRecurringForHousehold, loadRecurringSuggestions), so the
+  // steady state must stay cheap.
   const recurringIds = recurringTransactions.map((r) => r.id);
   const [skipRows, alreadyBooked] = await Promise.all([
     prisma.recurringTransactionSkip.findMany({
@@ -219,65 +257,55 @@ async function loadOpenOccurrences(
 }
 
 /**
- * Settles each open occurrence: adopts a hand-entered booking that stands for
- * it, otherwise — only with `create` — books it. A dry run writes nothing and
- * reports what a real run would do.
+ * Bucht ein Vorkommen genau einmal. Cron und die Selbstheilung beim Lesen
+ * (catchUpPastRecurringForHousehold) können gleichzeitig laufen, ebenso eine
+ * Bestätigung (linkBookingToOccurrence) — der transaktionsgebundene
+ * Advisory-Lock je Dauerauftrag serialisiert "schon gebucht?"-Prüfen und
+ * Anlegen bzw. Verknüpfen, sonst entstünden Doppelbuchungen. Geprüft wird
+ * unter dem Lock dieselbe Vorkommens-Identität wie im Prefetch (Dauerauftrag +
+ * Periode, Tombstones eingeschlossen).
  */
-async function settleOccurrences(
-  open: OpenOccurrence[],
-  mode: { create: boolean; dryRun?: boolean }
-): Promise<BookedOccurrence[]> {
-  const settled: BookedOccurrence[] = [];
-  const report = (occurrence: OpenOccurrence, transactionId: string | null, adopted: boolean) => {
-    settled.push({
-      recurringId: occurrence.rec.id,
-      accountId: occurrence.rec.accountId,
-      transactionId,
-      year: occurrence.dueDay.year,
-      month: occurrence.dueDay.month,
-      amountCents: occurrence.rec.amountCents,
-      description: occurrence.rec.description,
-      adopted
+async function bookOccurrenceOnce(rec: DueRecurring, dueDay: CalendarDate): Promise<{ id: string } | null> {
+  const period = monthKey(dueDay);
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${rec.id}))`;
+    const bookedKeys = await loadBookedOccurrenceKeys([rec.id], tx);
+    if (bookedKeys.has(occurrenceKey(rec.id, period))) return null;
+
+    return tx.transaction.create({
+      data: {
+        accountId: rec.accountId,
+        categoryId: rec.categoryId,
+        amountCents: rec.amountCents,
+        description: rec.description,
+        // Noon in Berlin: the same calendar day in Berlin and in UTC.
+        occurredAt: zonedTimeToUtc({ ...dueDay, hour: 12 }),
+        taxRelevant: rec.taxRelevant,
+        recurringTransactionId: rec.id,
+        recurringPeriod: period
+      },
+      select: { id: true }
     });
-  };
+  });
+}
 
-  // Without the intent to create (or to write at all) most occurrences end
-  // without a write. One read of the possible hand-entered bookings decides
-  // which occurrences are worth a lock; the lock repeats the check.
-  const preview = mode.dryRun || !mode.create ? await loadAdoptionRowsFor(open) : null;
-  const claimed = new Set<string>();
-
-  for (const occurrence of open) {
-    const { rec, dueDay } = occurrence;
-
-    if (preview) {
-      const candidate = pickAdoptionCandidate(preview, rec, dueDay, claimed);
-      if (candidate) claimed.add(candidate.id);
-      if (mode.dryRun) {
-        if (candidate || mode.create) report(occurrence, null, candidate !== null);
-        continue;
-      }
-      if (!candidate) continue;
-    }
-
-    // One failing occurrence (e.g. its account vanished mid-run) must not
-    // abort the bookings of every other recurring/household in this run.
-    let result: { id: string; adopted: boolean } | null;
-    try {
-      result = await settleOccurrenceOnce(rec, dueDay, mode.create);
-    } catch (error) {
-      // eslint-disable-next-line no-console -- surfaces in Railway logs, run continues
-      console.error(
-        "Failed to book recurring occurrence",
-        { recurringId: rec.id, year: dueDay.year, month: dueDay.month },
-        error
-      );
-      continue;
-    }
-    if (result) report(occurrence, result.id, result.adopted);
-  }
-
-  return settled;
+/**
+ * Selbstheilung beim Lesen: bucht für einen Haushalt alle fälligen, noch nicht
+ * gebuchten Vorkommen ABGESCHLOSSENER Monate nach. Der laufende Monat bleibt
+ * Sache des täglichen Crons — bis dahin zeigt das Dashboard ihn als "geplant".
+ * So kann ein ausgefallener Cron Rückblick und Übertrag nie mehr still
+ * verfälschen (Vorfall: Cron war nie eingerichtet, Okt. 2026 fehlten alle
+ * Daueraufträge im Rückblick). "Abgeschlossen" und "laufend" sind Berliner
+ * Monate: um 00:30 Uhr am 1. (in UTC noch der Vormonat) ist der alte Monat
+ * abgeschlossen.
+ */
+export async function catchUpPastRecurringForHousehold(
+  householdId: string,
+  now: Date = new Date()
+): Promise<BookedOccurrence[]> {
+  // Day 31 is clamped to the last day of the previous month by `occurrenceDate`.
+  const endOfPreviousMonth = occurrenceDate(shiftMonth(zonedMonth(now), -1), 31);
+  return bookOccurrencesDueBy(endOfPreviousMonth, { householdId });
 }
 
 /** The half-open instant range of the calendar days within the adoption window around `dueDay`. */
@@ -310,133 +338,147 @@ async function loadAdoptionRowsFor(open: OpenOccurrence[]): Promise<AdoptionRow[
   });
 }
 
-/**
- * Links the hand-entered booking that stands for the occurrence, if there is
- * one, and returns its id. Only the two link columns are written (and, as on
- * every update, `updatedAt` by Prisma). The
- * update repeats the conditions that matter under concurrency: a booking that
- * another template adopted, "make recurring" linked or the user deleted or
- * changed in the meantime is not taken — the next best candidate is tried
- * instead.
- */
-async function adoptManualBooking(
-  tx: Prisma.TransactionClient,
-  rec: DueRecurring,
-  dueDay: CalendarDate,
-  period: string
-): Promise<string | null> {
-  const rows = await tx.transaction.findMany({
-    where: {
-      deletedAt: null,
-      recurringTransactionId: null,
-      accountId: rec.accountId,
-      amountCents: rec.amountCents,
-      occurredAt: adoptionWindow(dueDay)
-    },
-    select: ADOPTION_ROW_SELECT
-  });
-
-  const lost = new Set<string>();
-  for (;;) {
-    const candidate = pickAdoptionCandidate(rows, rec, dueDay, lost);
-    if (!candidate) return null;
-    const linked = await tx.transaction.updateMany({
-      where: {
-        id: candidate.id,
-        deletedAt: null,
-        recurringTransactionId: null,
-        accountId: rec.accountId,
-        amountCents: rec.amountCents,
-        categoryId: rec.categoryId,
-        occurredAt: adoptionWindow(dueDay)
-      },
-      data: { recurringTransactionId: rec.id, recurringPeriod: period }
-    });
-    if (linked.count === 1) return candidate.id;
-    lost.add(candidate.id);
-  }
-}
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const dayKey = (d: CalendarDate) => `${d.year}-${pad2(d.month)}-${pad2(d.day)}`;
 
 /**
- * Erledigt ein Vorkommen genau einmal: übernimmt eine von Hand erfasste
- * Buchung oder legt — nur mit `create` — die Buchung an. Cron, die
- * Selbstheilung beim Lesen (catchUpPastRecurringForHousehold) und die Übernahme
- * im Dashboard können gleichzeitig laufen — der transaktionsgebundene
- * Advisory-Lock je Dauerauftrag serialisiert "schon gebucht?"-Prüfen, Übernehmen
- * und Anlegen, sonst entstünden Doppelbuchungen. Geprüft wird unter dem Lock
- * dieselbe Vorkommens-Identität wie im Prefetch (Dauerauftrag + Periode,
- * Tombstones eingeschlossen).
+ * Vorschläge für den laufenden Berliner Monat: Für jedes Vorkommen, das in
+ * diesem Monat fällig, weder gebucht noch übersprungen ist und nicht vor
+ * `bookFromPeriod` liegt — auch wenn sein Tag noch nicht erreicht ist —, die
+ * von Hand erfasste Buchung, die am besten dafür steht (`pickAdoptionCandidate`).
+ * Jede Buchung wird für höchstens ein Vorkommen vorgeschlagen; die Vorkommen
+ * kommen in der Reihenfolge ihres Fälligkeitstags zum Zug.
+ *
+ * Schreibt nichts. Bis der Nutzer bestätigt, zählt die Buchung als gebucht und
+ * das Vorkommen als geplant — der Vorschlag ist es, der darauf hinweist.
  */
-async function settleOccurrenceOnce(
-  rec: DueRecurring,
-  dueDay: CalendarDate,
-  create: boolean
-): Promise<{ id: string; adopted: boolean } | null> {
-  const period = monthKey(dueDay);
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${rec.id}))`;
-    const bookedKeys = await loadBookedOccurrenceKeys([rec.id], tx);
-    if (bookedKeys.has(occurrenceKey(rec.id, period))) return null;
-
-    const adoptedId = await adoptManualBooking(tx, rec, dueDay, period);
-    if (adoptedId) return { id: adoptedId, adopted: true };
-    if (!create) return null;
-
-    const created = await tx.transaction.create({
-      data: {
-        accountId: rec.accountId,
-        categoryId: rec.categoryId,
-        amountCents: rec.amountCents,
-        description: rec.description,
-        // Noon in Berlin: the same calendar day in Berlin and in UTC.
-        occurredAt: zonedTimeToUtc({ ...dueDay, hour: 12 }),
-        taxRelevant: rec.taxRelevant,
-        recurringTransactionId: rec.id,
-        recurringPeriod: period
-      },
-      select: { id: true }
-    });
-    return { id: created.id, adopted: false };
-  });
-}
-
-/**
- * Selbstheilung beim Lesen: bucht für einen Haushalt alle fälligen, noch nicht
- * gebuchten Vorkommen ABGESCHLOSSENER Monate nach. Der laufende Monat bleibt
- * Sache des täglichen Crons — bis dahin zeigt das Dashboard ihn als "geplant".
- * So kann ein ausgefallener Cron Rückblick und Übertrag nie mehr still
- * verfälschen (Vorfall: Cron war nie eingerichtet, Okt. 2026 fehlten alle
- * Daueraufträge im Rückblick). "Abgeschlossen" und "laufend" sind Berliner
- * Monate: um 00:30 Uhr am 1. (in UTC noch der Vormonat) ist der alte Monat
- * abgeschlossen.
- */
-export async function catchUpPastRecurringForHousehold(
+export async function loadRecurringSuggestions(
   householdId: string,
   now: Date = new Date()
-): Promise<BookedOccurrence[]> {
-  // Day 31 is clamped to the last day of the previous month by `occurrenceDate`.
-  const endOfPreviousMonth = occurrenceDate(shiftMonth(zonedMonth(now), -1), 31);
-  return bookOccurrencesDueBy(endOfPreviousMonth, { householdId });
-}
-
-/**
- * Übernahme im laufenden Monat: Für einen Haushalt versucht jedes Vorkommen,
- * das im laufenden Berliner Monat fällig, weder gebucht noch übersprungen ist
- * und nicht vor `bookFromPeriod` liegt, eine von Hand erfasste Buchung zu
- * übernehmen — auch wenn sein Tag noch nicht erreicht ist. Angelegt wird hier
- * nie etwas; das Buchen bleibt Sache des Crons. Das Dashboard ruft dies vor
- * dem Rechnen auf, damit eine von Hand erfasste Zahlung nicht zusätzlich als
- * "geplant" zählt. Jeder Eintrag der Rückgabe hat `adopted: true`.
- */
-export async function adoptManualBookingsForCurrentMonth(
-  householdId: string,
-  now: Date = new Date()
-): Promise<BookedOccurrence[]> {
+): Promise<RecurringSuggestion[]> {
   const current = zonedMonth(now);
   const open = await loadOpenOccurrences(
     { householdId },
     (schedule) => (isRecurringDueInMonth({ ...schedule, ...current }) ? [current] : []),
     () => true
   );
-  return settleOccurrences(open, { create: false });
+  open.sort((a, b) => a.dueDay.day - b.dueDay.day || (a.rec.id < b.rec.id ? -1 : a.rec.id > b.rec.id ? 1 : 0));
+
+  const rows = await loadAdoptionRowsFor(open);
+  const claimed = new Set<string>();
+  const suggestions: RecurringSuggestion[] = [];
+  for (const { rec, dueDay } of open) {
+    const candidate = pickAdoptionCandidate(rows, rec, dueDay, claimed);
+    if (!candidate) continue;
+    claimed.add(candidate.id);
+    suggestions.push({
+      recurringId: rec.id,
+      period: monthKey(dueDay),
+      dueDay: dayKey(dueDay),
+      transactionId: candidate.id,
+      transactionDescription: candidate.description,
+      transactionOccurredAt: candidate.occurredAt.toISOString(),
+      amountCents: candidate.amountCents
+    });
+  }
+  return suggestions;
+}
+
+export type LinkBookingResult =
+  | { status: "linked"; id: string; recurringTransactionId: string; recurringPeriod: string }
+  | { status: "not_found"; error: string }
+  | { status: "conflict"; error: string };
+
+const MISMATCH_ERRORS: Record<AdoptionMismatch, string> = {
+  deleted: "The booking has been deleted",
+  linked: "The booking already belongs to a recurring transaction",
+  account: "The booking is on another account than the recurring transaction",
+  amount: "The booking's amount differs from the recurring transaction's",
+  category: "The booking's category differs from the recurring transaction's",
+  description: "The booking's description differs from the recurring transaction's",
+  date: `The booking is more than ${ADOPTION_WINDOW_DAYS} days away from the due day`
+};
+
+/**
+ * Bestätigung eines Vorschlags: verknüpft die Buchung `transactionId` als das
+ * Vorkommen `period` ("JJJJ-MM") des Dauerauftrags `recurringId`. Unter
+ * demselben Advisory-Lock wie das Buchen (und einer Zeilensperre auf der
+ * Buchung, damit ein anderer Dauerauftrag oder ein Löschen nicht dazwischen
+ * kommt) wird alles erneut geprüft: Dauerauftrag und Buchung im Haushalt
+ * (sonst not_found), Periode ein fälliger Monat und nicht vor `bookFromPeriod`,
+ * Vorkommen weder übersprungen noch gebucht, Buchung ein Kandidat nach
+ * `adoptionMismatch` (sonst conflict). Geschrieben werden nur
+ * `recurringTransactionId` und `recurringPeriod` (und von Prisma `updatedAt`).
+ */
+export async function linkBookingToOccurrence(params: {
+  householdId: string;
+  recurringId: string;
+  transactionId: string;
+  period: string;
+}): Promise<LinkBookingResult> {
+  const { householdId, recurringId, transactionId, period } = params;
+  const ref: MonthRef = { year: Number(period.slice(0, 4)), month: Number(period.slice(5, 7)) };
+
+  return prisma.$transaction(async (tx): Promise<LinkBookingResult> => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${recurringId}))`;
+    await tx.$queryRaw`SELECT id FROM "Transaction" WHERE id = ${transactionId} FOR UPDATE`;
+
+    const rec = await tx.recurringTransaction.findFirst({
+      where: { id: recurringId, deletedAt: null, account: { householdId } },
+      select: {
+        id: true,
+        accountId: true,
+        categoryId: true,
+        amountCents: true,
+        description: true,
+        intervalMonths: true,
+        dayOfMonth: true,
+        nextOccurrence: true,
+        bookFromPeriod: true
+      }
+    });
+    if (!rec) return { status: "not_found", error: "Recurring transaction not found" };
+
+    // findUnique sees tombstones: a deleted booking is refused as deleted below.
+    const booking = await tx.transaction.findUnique({
+      where: { id: transactionId },
+      select: {
+        ...ADOPTION_ROW_SELECT,
+        deletedAt: true,
+        recurringTransactionId: true,
+        account: { select: { householdId: true } }
+      }
+    });
+    if (!booking || booking.account.householdId !== householdId) {
+      return { status: "not_found", error: "Transaction not found" };
+    }
+
+    const anchor = zonedMonth(rec.nextOccurrence);
+    if (!isRecurringDueInMonth({ nextYear: anchor.year, nextMonth: anchor.month, intervalMonths: rec.intervalMonths, ...ref })) {
+      return { status: "conflict", error: "The recurring transaction is not due in this month" };
+    }
+    if (isBeforeBookFromPeriod(ref, rec.bookFromPeriod)) {
+      return { status: "conflict", error: "The recurring transaction is not booked for months before it starts booking" };
+    }
+    const skip = await tx.recurringTransactionSkip.findUnique({
+      where: { recurringId_year_month: { recurringId, year: ref.year, month: ref.month } },
+      select: { recurringId: true }
+    });
+    if (skip) return { status: "conflict", error: "This month of the recurring transaction is skipped" };
+
+    const bookedKeys = await loadBookedOccurrenceKeys([recurringId], tx);
+    if (bookedKeys.has(occurrenceKey(recurringId, period))) {
+      return { status: "conflict", error: "This month of the recurring transaction is already booked" };
+    }
+
+    const mismatch = adoptionMismatch(booking, rec, occurrenceDate(ref, rec.dayOfMonth || 1));
+    if (mismatch) return { status: "conflict", error: MISMATCH_ERRORS[mismatch] };
+
+    const linked = await tx.transaction.update({
+      where: { id: transactionId },
+      data: { recurringTransactionId: recurringId, recurringPeriod: period },
+      select: { id: true }
+    });
+    return { status: "linked", id: linked.id, recurringTransactionId: recurringId, recurringPeriod: period };
+  });
 }

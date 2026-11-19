@@ -33,6 +33,14 @@
  *                             konstant — Grundlage der Fixkostenquote
  * - `recurringDueCount`     — Anzahl dieser fälligen Daueraufträge (inkl. Spar-Daueraufträge)
  * - `daily`                 — Tagesweise kumulierte Linien für das Chart (income, outcome, savings)
+ * - `recurringSuggestions`  — Vorschläge: je offenem Vorkommen dieses Monats (fällig, nicht
+ *                             gebucht, nicht übersprungen, nicht vor `bookFromPeriod`) die von
+ *                             Hand erfasste Buchung, die dafür stehen könnte
+ *                             ({ recurringId, period, dueDay, transactionId,
+ *                             transactionDescription, transactionOccurredAt, amountCents });
+ *                             leer, wenn es keine gibt. Verknüpft wird erst auf Bestätigung
+ *                             (POST /api/recurring-transactions/[id]/link-booking); bis dahin
+ *                             zählt die Buchung als gebucht und das Vorkommen als geplant
  *
  * Einordnung (classifyFlow): Buchungen in einer Spar-Kategorie — jede Kategorie des Haushalts,
  * deren Name getrimmt und ohne Beachtung der Groß-/Kleinschreibung "savings" oder "sparen"
@@ -43,10 +51,9 @@
  * `recurringTransactionId` und der Periode des Monats existiert — auch wenn sie gelöscht oder
  * in einen anderen Monat verschoben wurde (siehe lib/recurringPeriods.ts).
  *
- * Vor dem Rechnen bucht die Route fällige Vorkommen abgeschlossener Monate nach und
- * verknüpft im laufenden Monat von Hand erfasste Zahlungen mit dem Vorkommen, für das sie
- * stehen (siehe lib/recurringBooking.ts) — eine von Hand erfasste Miete zählt dann nicht
- * zusätzlich als "geplant". Dieses GET kann also schreiben.
+ * Vor dem Rechnen bucht die Route fällige, noch nicht gebuchte Vorkommen abgeschlossener
+ * Monate nach (siehe lib/recurringBooking.ts). Dieses GET kann also schreiben — aber nur das;
+ * die Vorschläge werden nur gelesen, nichts wird automatisch verknüpft.
  *
  * 404, wenn der Haushalt kein Konto hat.
  */
@@ -69,7 +76,7 @@ export const dynamic = "force-dynamic"; // Kein Build-Time-Prerendering — Date
 import { getSessionUser } from "../../../../lib/auth";
 import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
-import { adoptManualBookingsForCurrentMonth, catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
+import { catchUpPastRecurringForHousehold, loadRecurringSuggestions } from "../../../../lib/recurringBooking";
 import { loadBookedOccurrenceKeys, occurrenceKey } from "../../../../lib/recurringPeriods";
 import { loadSavingsCategoryIds } from "../../../../lib/savingsCategory";
 
@@ -92,11 +99,6 @@ export async function GET() {
   // Selbstheilung: fällige, nie gebuchte Daueraufträge abgeschlossener Monate
   // nachbuchen, bevor gerechnet wird (siehe catchUpPastRecurringForHousehold).
   await catchUpPastRecurringForHousehold(householdId, now);
-
-  // Von Hand erfasste Zahlungen des laufenden Monats als das Vorkommen ihres
-  // Dauerauftrags erkennen, bevor "geplant" bestimmt wird — sonst zählte die
-  // Zahlung bis zum Fälligkeitstag einmal als gebucht und einmal als geplant.
-  await adoptManualBookingsForCurrentMonth(householdId, now);
 
   // Laufender Monat im App-Kalender (Europe/Berlin), halboffen [start, end).
   const { year, month } = zonedMonth(now);
@@ -259,6 +261,10 @@ export async function GET() {
     savingsDaily[i] = adjustedSavings / 100;
   }
 
+  // Von Hand erfasste Buchungen, die wie ein offenes Vorkommen aussehen — nur
+  // vorgeschlagen, nicht verknüpft (das entscheidet der Nutzer).
+  const recurringSuggestions = await loadRecurringSuggestions(householdId, now);
+
   const projectedIncomeTotalCents = booked.incomeCents + planned.incomeCents;
   const projectedOutcomeTotalCents = booked.outcomeCents + planned.outcomeCents;
   const projectedSavingsTotalCents = booked.savingsCents + planned.savingsCents;
@@ -325,6 +331,7 @@ export async function GET() {
     recurringDueOutcomeTotal: due.outcomeCents / 100,
     recurringDueCount: dueRecurring.length,
     projectedSavingsTotal: projectedSavingsTotalCents / 100,
+    recurringSuggestions,
     daily: {
       labels: Array.from({ length: dayCount }, (_, i) => `${i + 1}`),
       income: incomeDaily,

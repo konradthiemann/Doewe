@@ -167,7 +167,7 @@ export function calendarDaysBetween(from: CalendarDate, to: CalendarDate): numbe
   return Math.round(dayNumber(to) - dayNumber(from));
 }
 
-/** A hand-entered booking this many calendar days before or after the due day can stand for the occurrence. */
+/** A hand-entered booking this many calendar days before or after the due day can be suggested for the occurrence. */
 export const ADOPTION_WINDOW_DAYS = 7;
 
 export type AdoptionTemplate = {
@@ -192,6 +192,32 @@ export type AdoptionRow = {
 
 const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/** Why a booking cannot stand for an occurrence; see `adoptionMismatch`. */
+export type AdoptionMismatch = "deleted" | "linked" | "account" | "amount" | "category" | "description" | "date";
+
+/**
+ * The first rule of `isAdoptionCandidate` the booking breaks, or null if it
+ * can stand for the occurrence. Lets a caller say why a booking was refused.
+ */
+export function adoptionMismatch(
+  row: AdoptionRow,
+  template: AdoptionTemplate,
+  dueDay: CalendarDate
+): AdoptionMismatch | null {
+  if (row.deletedAt != null) return "deleted";
+  if (row.recurringTransactionId != null) return "linked";
+  if (row.accountId !== template.accountId) return "account";
+  if (row.amountCents !== template.amountCents) return "amount";
+  if (template.categoryId !== null) {
+    if (row.categoryId !== template.categoryId) return "category";
+  } else {
+    if (row.categoryId !== null) return "category";
+    if (!sameText(row.description, template.description)) return "description";
+  }
+  if (Math.abs(calendarDaysBetween(dueDay, zonedDate(row.occurredAt))) > ADOPTION_WINDOW_DAYS) return "date";
+  return null;
+}
+
 /**
  * Whether a hand-entered booking can stand for the occurrence of `template`
  * that is due on `dueDay`: same account, not deleted, not linked to any
@@ -199,23 +225,19 @@ const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().t
  * a template without category, no category and the same description (ignoring
  * case and surrounding whitespace) — and dated, as a calendar day in the app's
  * time zone, at most ADOPTION_WINDOW_DAYS before or after the due day.
+ *
+ * Such a booking is only ever suggested; it is linked to the occurrence when
+ * the user confirms (docs/calculations/03-wiederkehrende-transaktionen.md).
  */
 export function isAdoptionCandidate(row: AdoptionRow, template: AdoptionTemplate, dueDay: CalendarDate): boolean {
-  if (row.deletedAt != null || row.recurringTransactionId != null) return false;
-  if (row.accountId !== template.accountId || row.amountCents !== template.amountCents) return false;
-  if (template.categoryId !== null) {
-    if (row.categoryId !== template.categoryId) return false;
-  } else if (row.categoryId !== null || !sameText(row.description, template.description)) {
-    return false;
-  }
-  return Math.abs(calendarDaysBetween(dueDay, zonedDate(row.occurredAt))) <= ADOPTION_WINDOW_DAYS;
+  return adoptionMismatch(row, template, dueDay) === null;
 }
 
 /**
- * The hand-entered booking that stands for the occurrence due on `dueDay`, or
+ * The hand-entered booking to suggest for the occurrence due on `dueDay`, or
  * null: of all candidates (`isAdoptionCandidate`) the one closest to the due
  * day; among equally close ones the oldest — earliest date, then entered
- * first. `exclude` holds ids that already stand for another occurrence.
+ * first. `exclude` holds ids that are already suggested for another occurrence.
  */
 export function pickAdoptionCandidate<Row extends AdoptionRow>(
   rows: readonly Row[],

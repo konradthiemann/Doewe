@@ -776,8 +776,8 @@ A recurring transaction is a template. Its due occurrences are **booked automati
 - **Anchor:** `nextOccurrence` is the anchor of the series, **not** "the next" occurrence, and is not advanced after a booking. Scheduling reads only its month (in Europe/Berlin): the template is due in the anchor month and every `intervalMonths` months after it. The day of the booking is `dayOfMonth`, clamped to the length of the month. The anchor is always stored as 12:00 Europe/Berlin of the intended calendar day.
 - **Occurrence identity:** an occurrence is `(recurringTransactionId, recurringPeriod)`, where `recurringPeriod` (`"YYYY-MM"`) is the month it was booked for. A month counts as booked as soon as such a booking exists — also when it was later moved into another month or deleted.
 - **No unasked back-booking:** `bookFromPeriod` (`"YYYY-MM"` or `null`) is the first month that may be booked automatically; occurrences before it are never booked. It is set to the current Europe/Berlin month when a template is created with a first occurrence in an earlier month, when a `PATCH` changes the schedule of a template anchored in the past, and by `make-recurring` — unless the request carries `backfill: true`. `null` means no lower bound (every template created before the field existed). The yearly matrix and the CSV show the schedule and ignore it.
-- **Hand-entered payments:** before an occurrence is booked, the run looks for a booking the user entered by hand that stands for it and **adopts** it instead: same account, not deleted, not linked to any recurring transaction, exactly the same `amountCents`, the same category (for a template without category: no category and the same description, ignoring case and surrounding whitespace), and dated at most 7 calendar days (Europe/Berlin) before or after the due day. Of several, the one closest to the due day wins, then the oldest. Adopting sets `recurringTransactionId` and `recurringPeriod` on that booking and changes nothing else; each booking stands for one occurrence only. `GET /api/analytics/summary` does the same for every unbooked occurrence of the current month, also before its due day, without ever creating a booking.
-- **Known limitations:** a hand-entered payment outside that rule (other amount, more than 7 days away, or entered after the month was already auto-booked) is still there twice; a link made by adoption cannot be removed through the API; back-booked months use the template's current amount.
+- **Hand-entered payments — suggest, then confirm:** nothing is ever linked automatically; the booking run books every open occurrence, whatever the user entered by hand (no rule can tell "paid early" from "paid additionally", and a silently missing booking is worse than a visible duplicate the user can delete). A booking that looks like an open occurrence is a **look-alike**: same account, not deleted, not linked to any recurring transaction, exactly the same `amountCents`, the same category (for a template without category: no category and the same description, ignoring case and surrounding whitespace), and dated at most 7 calendar days (Europe/Berlin) before or after the due day. `GET /api/analytics/summary` returns the best look-alike per open occurrence of the current month in `recurringSuggestions` (closest to the due day, then the oldest; each booking suggested for one occurrence only) and writes nothing for it. The user confirms with `POST /api/recurring-transactions/[id]/link-booking`, which sets `recurringTransactionId` and `recurringPeriod` on that booking and changes nothing else; from then on the occurrence counts as booked.
+- **Known limitations:** until it is confirmed, a hand-entered payment for an occurrence is there twice (and once the due day is reached, the run books the occurrence next to it); payments outside the look-alike rule are never suggested; a confirmed link cannot be removed through the API; back-booked months use the template's current amount.
 
 ### `GET /api/recurring-transactions`
 
@@ -891,6 +891,46 @@ Occurrences that are already booked are left untouched in both cases. `categoryI
 
 ---
 
+### `POST /api/recurring-transactions/[id]/link-booking`
+
+Confirms a suggestion: links a booking the user entered by hand as the occurrence of one month of this recurring transaction (`[id]`). Suggestions come from `recurringSuggestions` in `GET /api/analytics/summary`; this endpoint is the only way such a link is made.
+
+Under the template's advisory lock (the same one the booking run takes) and a row lock on the booking, everything is checked again:
+
+- the template and the booking exist in the caller's household (template not deleted) — else `404`;
+- `period` is a month in which the template is due (anchor month + multiples of `intervalMonths`), not before `bookFromPeriod`, not skipped and not yet booked (a deleted booking of the template for that period counts as booked) — else `409`;
+- the booking is still a look-alike for the occurrence of that period: same account, exactly the same `amountCents`, same category (template without category: no category and the same description, ignoring case and surrounding whitespace), not deleted, not linked to any recurring transaction, and dated at most 7 calendar days (Europe/Berlin) before or after that period's due day — else `409`.
+
+Then `recurringTransactionId` and `recurringPeriod` are set on the booking — nothing else changes (amount, date, description, category, tax flag and receipts stay as entered). From then on the occurrence is booked: the dashboard no longer plans it and the booking run does not book it. Of two concurrent confirmations for the same occurrence, one wins and the other gets `409`.
+
+**Auth required:** Yes
+
+**Request body:**
+```json
+{ "transactionId": "txn_42", "period": "2026-11" }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `transactionId` | string | Required; non-empty |
+| `period` | string | Required; `YYYY-MM` (month `01`–`12`), the month of the occurrence — it may differ from the booking's own month (the rent paid on 28 November for the occurrence of 1 December) |
+
+**Success response — `200 OK`:**
+```json
+{ "id": "txn_42", "recurringTransactionId": "rec_01", "recurringPeriod": "2026-11" }
+```
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Body is not JSON or fails validation |
+| `401` | Not authenticated |
+| `404` | Template or booking not found / not in the household |
+| `409` | `{ "error": "…" }` — the booking is no longer a look-alike (other account, amount, category or description, deleted, already linked, more than 7 days from the due day), or the occurrence is already booked, skipped, before `bookFromPeriod` or not a due month |
+
+---
+
 ### `DELETE /api/recurring-transactions/[id]`
 
 Delete a recurring transaction template. This is a **soft delete** (`deletedAt`): the template no longer books or plans anything; transactions it already booked stay, and its skip records are not removed.
@@ -982,7 +1022,7 @@ Books every due, not yet booked and not skipped occurrence of every recurring tr
 
 An occurrence is due once the calendar day of the run **in Europe/Berlin** has reached its due day (`dayOfMonth`, clamped to the length of the month). The booking is dated 12:00 Europe/Berlin of the due day, carries `recurringTransactionId` and `recurringPeriod`, copies account, category, amount and description from the template (the template's **current** amount, also for past months) and inherits the tax flag of its category. A month counts as booked as soon as a booking of the template for that period exists — also a moved or deleted one — so a second run on the same day books nothing twice.
 
-If a booking the user entered by hand stands for the occurrence (see "Hand-entered payments" above), it is adopted instead: it gets `recurringTransactionId` and `recurringPeriod`, nothing else on it changes, and no booking is created.
+Bookings the user entered by hand are not looked at: the run never links one to an occurrence, even if it looks like it (see "Hand-entered payments" above). Linking happens only on confirmation through `POST /api/recurring-transactions/[id]/link-booking`.
 
 **Auth required:** No session. `Authorization: Bearer <CRON_SECRET>`; without a configured `CRON_SECRET` the endpoint always answers `401`.
 
@@ -990,7 +1030,7 @@ If a booking the user entered by hand stands for the occurrence (see "Hand-enter
 
 | Param | Type | Description |
 |---|---|---|
-| `dryRun` | `"true"` | Optional. Writes nothing and only lists what would be booked or adopted |
+| `dryRun` | `"true"` | Optional. Writes nothing and only lists what would be booked |
 
 **Success response — `200 OK`:**
 ```json
@@ -998,17 +1038,16 @@ If a booking the user entered by hand stands for the occurrence (see "Hand-enter
   "ok": true,
   "dryRun": false,
   "booked": 2,
-  "adopted": 1,
   "occurrences": [
-    { "recurringId": "rec_01", "accountId": "acc_01", "transactionId": "txn_31", "year": 2026, "month": 5, "amountCents": -85000, "description": "Miete", "adopted": false },
-    { "recurringId": "rec_02", "accountId": "acc_01", "transactionId": "txn_27", "year": 2026, "month": 5, "amountCents": -4999, "description": "Fitnessstudio", "adopted": true }
+    { "recurringId": "rec_01", "accountId": "acc_01", "transactionId": "txn_31", "year": 2026, "month": 5, "amountCents": -85000, "description": "Miete" },
+    { "recurringId": "rec_02", "accountId": "acc_01", "transactionId": "txn_32", "year": 2026, "month": 5, "amountCents": -4999, "description": "Fitnessstudio" }
   ]
 }
 ```
 
-`booked` is the number of entries in `occurrences`; `adopted` counts those among them where an existing hand-entered booking was linked instead of a new one created (`"adopted": true`, `transactionId` = that booking). `transactionId` is `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
+`booked` is the number of entries in `occurrences`. `transactionId` is the created booking, `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
 
-The analytics endpoints (`summary`, `quarterly`, `monthly-review`, `category-year`) run the same booking for the caller's household, limited to **completed** months, before they calculate — so a cron outage cannot silently distort review and carryover. The current month is left to the cron and shows up as "planned" on the dashboard until then; `summary` additionally adopts hand-entered payments for the current month's unbooked occurrences so that they are not counted as booked and planned at once.
+The analytics endpoints (`summary`, `quarterly`, `monthly-review`, `category-year`) run the same booking for the caller's household, limited to **completed** months, before they calculate — so a cron outage cannot silently distort review and carryover. The current month is left to the cron and shows up as "planned" on the dashboard until then.
 
 **Error responses:**
 
@@ -1547,7 +1586,7 @@ Withdraw money from the savings pool back into everyday spending. Creates a **po
 
 Current-month financial summary for the dashboard — what is booked, plus the recurring occurrences still **planned** for the month as a projection. **No query parameters** — the route always evaluates the current calendar month in Europe/Berlin, across **all accounts of the household**. Full field-by-field description: `docs/calculations/04-analytics-summary.md`.
 
-Before calculating, the route books due, never-booked recurring occurrences of **completed** months for the household (see `POST /api/cron/materialize-recurring`) — this `GET` can write.
+Before calculating, the route books due, never-booked recurring occurrences of **completed** months for the household (see `POST /api/cron/materialize-recurring`) — this `GET` can write. It never links a hand-entered booking to a recurring transaction; look-alikes are only returned as `recurringSuggestions`.
 
 **Auth required:** Yes
 
@@ -1587,6 +1626,17 @@ Before calculating, the route books due, never-booked recurring occurrences of *
   "recurringDueOutcomeTotal": 910,
   "recurringDueCount": 2,
   "projectedSavingsTotal": 500,
+  "recurringSuggestions": [
+    {
+      "recurringId": "rec_02",
+      "period": "2026-05",
+      "dueDay": "2026-05-20",
+      "transactionId": "txn_40",
+      "transactionDescription": "Strom Mai",
+      "transactionOccurredAt": "2026-05-18T10:00:00.000Z",
+      "amountCents": -6000
+    }
+  ],
   "daily": {
     "labels": ["1", "2", "3"],
     "income": [3200, 3200, 3200],
@@ -1596,7 +1646,7 @@ Before calculating, the route books due, never-booked recurring occurrences of *
 }
 ```
 
-(In this example the rent template was already booked on the 1st and the electricity template is due on the 20th.)
+(In this example the rent template was already booked on the 1st and the electricity template is due on the 20th; the bookings of the example are not all listed, `recurringSuggestions` only shows the shape.)
 
 Notable semantics:
 
@@ -1608,6 +1658,7 @@ Notable semantics:
 - `outgoingByCategory` is an array: booked outcome plus planned recurring outcome per category; bookings and planned templates without a category go to `id: "uncategorized"`. Its amounts add up to `projectedOutcomeTotal`. Savings and income (including refunds) are not part of it.
 - `categoryBudgets`: one entry per category with an effective budget (budget plan first; a per-month budget only for categories without a plan), also when `spent` is 0. `spent` is the same figure as in `outgoingByCategory` (booked plus planned). `diff` = `spent − budget` (positive = over budget).
 - `plannedSavings` is the sum of the target amounts of all active saving goals whose target month is the current month; `completedGoals` are the goals whose `completedAt` falls into the current month.
+- **Suggestions:** `recurringSuggestions` lists, for every occurrence that is due this month, not booked, not skipped and not before `bookFromPeriod` (also before its due day), the hand-entered booking that looks like it (see "Hand-entered payments" under Recurring Transactions), at most one occurrence per booking; empty array when there are none. `period` is `YYYY-MM`, `dueDay` `yyyy-mm-dd` (both Europe/Berlin), `transactionOccurredAt` an ISO instant, `amountCents` in cents. Computing them writes nothing. Until the user confirms (`POST /api/recurring-transactions/[id]/link-booking`), the figures are unchanged: the booking counts as booked and the occurrence as planned, so the projection holds the amount twice.
 - `daily` holds cumulative running totals per calendar day. It is still returned, but **no UI consumes it**.
 
 **Error responses:**

@@ -6,9 +6,10 @@
 - `apps/web/app/api/recurring-transactions/skips/route.ts`
 - `apps/web/app/api/recurring-transactions/yearly/route.ts`, `export/route.ts`
 - `apps/web/app/api/transactions/[id]/make-recurring/route.ts` (Buchung → Dauerauftrag)
-- `packages/shared/src/recurringSchedule.ts` (Fälligkeit, Anker, Tag im Monat, Untergrenze, Übernahme von Hand erfasster Zahlungen)
+- `apps/web/app/api/recurring-transactions/[id]/link-booking/route.ts` (Vorschlag bestätigen)
+- `packages/shared/src/recurringSchedule.ts` (Fälligkeit, Anker, Tag im Monat, Untergrenze, Regel für Vorschläge)
 - `packages/shared/src/recurringYear.ts`, `recurringExport.ts`, `apps/web/lib/recurringYear.ts` (Jahresmatrix, CSV)
-- `apps/web/lib/recurringBooking.ts` (automatisches Buchen)
+- `apps/web/lib/recurringBooking.ts` (automatisches Buchen, Vorschläge, Bestätigen)
 - `apps/web/lib/recurringPeriods.ts` (welche Vorkommen als gebucht gelten)
 - `apps/web/app/api/cron/materialize-recurring/route.ts` (täglicher Cron-Trigger)
 
@@ -31,8 +32,9 @@ Zwei Regeln schützen davor, dass dabei etwas doppelt in den Büchern landet:
 - **Kein ungefragtes Nachbuchen:** Ein Dauerauftrag, der in der Vergangenheit beginnt, wird erst ab
   dem laufenden Monat gebucht — außer der Nutzer verlangt das Nachbuchen ausdrücklich (siehe
   „Untergrenze").
-- **Von Hand erfasste Zahlung:** Wurde die Zahlung schon von Hand eingetragen, wird diese Buchung als
-  das Vorkommen übernommen, statt ein zweites Mal zu buchen (siehe „Übernahme").
+- **Von Hand erfasste Zahlung:** Sieht eine von Hand eingetragene Buchung aus wie ein offenes
+  Vorkommen, schlägt das Dashboard sie vor. Verknüpft wird sie erst, wenn der Nutzer bestätigt; dann
+  bucht der Dauerauftrag diesen Monat nicht mehr (siehe „Vorschlag und Bestätigung").
 
 ## Vorkommen: Dauerauftrag + Periode
 
@@ -67,9 +69,7 @@ flowchart TD
     SKIPPED -->|ja| SKIP["Überspringen"]
     SKIPPED -->|nein| BOOKED{"Vorkommen (Dauerauftrag, Periode)\nschon gebucht — auch gelöscht?"}
     BOOKED -->|ja| SKIP2["Überspringen — idempotent"]
-    BOOKED -->|nein| MANUAL{"Von Hand erfasste Buchung,\ndie für dieses Vorkommen steht?"}
-    MANUAL -->|ja| ADOPT["Übernehmen: recurringTransactionId + recurringPeriod\nauf der bestehenden Buchung setzen — nichts anlegen"]
-    MANUAL -->|nein| CREATE["Transaction anlegen:\noccurredAt = 12:00 Uhr Berliner Zeit des Fälligkeitstags\nrecurringTransactionId + recurringPeriod gesetzt"]
+    BOOKED -->|nein| CREATE["Transaction anlegen:\noccurredAt = 12:00 Uhr Berliner Zeit des Fälligkeitstags\nrecurringTransactionId + recurringPeriod gesetzt"]
 ```
 
 - **Fälligkeit nach Kalendertagen:** Verglichen werden Kalendertage, nicht Zeitpunkte
@@ -82,9 +82,11 @@ flowchart TD
 - **Felder der Buchung:** Konto, Kategorie, Betrag und Beschreibung des Dauerauftrags;
   `taxRelevant` erbt die Steuer-Markierung der Kategorie (wie eine von Hand angelegte Buchung; eine
   gelöschte Kategorie gibt nichts weiter).
-- **`?dryRun=true`** schreibt nichts und listet nur, was gebucht bzw. übernommen würde. Antwort in
-  beiden Fällen: `{ ok, dryRun, booked, adopted, occurrences }`. `booked` zählt alle Einträge von
-  `occurrences`, `adopted` die übernommenen darunter; jeder Eintrag trägt `adopted: true|false`.
+- **Von Hand erfasste Buchungen** sieht der Lauf nicht an. Er bucht jedes offene Vorkommen, auch wenn
+  eine gleich aussehende Buchung schon da ist — verknüpft wird nur auf Bestätigung (siehe „Vorschlag
+  und Bestätigung").
+- **`?dryRun=true`** schreibt nichts und listet nur, was gebucht würde. Antwort in beiden Fällen:
+  `{ ok, dryRun, booked, occurrences }`; `booked` zählt die Einträge von `occurrences`.
 
 **Dieselbe Funktion holt den Tagesbetrieb und die Vergangenheit nach:** `dueMonthsBetween` listet
 jeden fälligen Monat vom Anker (`nextOccurrence`) bis heute. Ein Dauerauftrag ohne Untergrenze, der
@@ -101,17 +103,14 @@ begrenzt). Diese GET-Anfragen können also schreiben. Der laufende Monat bleibt 
 erscheint bis dahin als „geplant". Hintergrund: Der Cron war in Produktion nie eingerichtet, dadurch
 fehlten ab Oktober 2026 alle Daueraufträge im Rückblick und im Übertrag, ohne dass es sichtbar wurde.
 
-**Nebenläufigkeit:** Cron, Selbstheilung und die Übernahme im Dashboard (z.B. zwei
-Haushaltsmitglieder öffnen gleichzeitig das Dashboard) können parallel laufen. Gebuchte Vorkommen und
-Skips werden vorab gesammelt geladen; für jedes fehlende Vorkommen wird je Dauerauftrag ein
-transaktionsgebundener Advisory-Lock (`pg_advisory_xact_lock`) genommen und unter dem Lock dieselbe
-Vorkommens-Identität erneut geprüft, sodass jeder Monat höchstens einmal gebucht oder übernommen
-wird. Zwei verschiedene Daueraufträge teilen keinen Lock; dass sie nicht dieselbe Buchung übernehmen,
-sichert die Übernahme selbst: Sie schreibt nur, wenn die Buchung in diesem Moment noch mit keinem
-Dauerauftrag verknüpft und nicht gelöscht ist, und nimmt sonst die nächstbeste. Schlägt ein einzelnes
+**Nebenläufigkeit:** Cron, Selbstheilung und eine Bestätigung (z.B. zwei Haushaltsmitglieder öffnen
+gleichzeitig das Dashboard) können parallel laufen. Gebuchte Vorkommen und Skips werden vorab
+gesammelt geladen; für jedes fehlende Vorkommen wird je Dauerauftrag ein transaktionsgebundener
+Advisory-Lock (`pg_advisory_xact_lock`) genommen und unter dem Lock dieselbe Vorkommens-Identität
+erneut geprüft, sodass jeder Monat höchstens einmal gebucht oder verknüpft wird. Schlägt ein einzelnes
 Vorkommen fehl, wird es geloggt und der Lauf läuft für alle anderen weiter.
 
-**Doppelzählung vermieden:** Sobald ein Vorkommen gebucht oder übernommen ist, zählt es nicht mehr
+**Doppelzählung vermieden:** Sobald ein Vorkommen gebucht oder verknüpft ist, zählt es nicht mehr
 als „geplant" in `recurringIncomeTotal`/`recurringOutcomeTotal`/`recurringPlannedSavings` (siehe
 [04-analytics-summary.md](./04-analytics-summary.md)).
 
@@ -150,13 +149,19 @@ Anfrage eintrifft, und die Zeit läuft nur vorwärts. Was das Dashboard für den
 und braucht sie nicht. Jahresmatrix und CSV zeigen den Plan aus der Vorlage und damit auch Monate vor
 der Untergrenze.
 
-### Übernahme: eine von Hand erfasste Zahlung ist das Vorkommen
+### Vorschlag und Bestätigung: eine von Hand erfasste Zahlung als Vorkommen
 
 Wer die Miete am 2. von Hand einträgt und einen Dauerauftrag für den 3. hat, soll sie nicht zweimal
-in den Büchern haben. Bevor der Lauf ein Vorkommen bucht (unter dem Lock, nach der Prüfung „schon
-gebucht?"), sucht er deshalb eine von Hand erfasste Buchung, die für dieses Vorkommen steht
-(`isAdoptionCandidate`, `pickAdoptionCandidate` in `recurringSchedule.ts`). Eine Buchung kommt in
-Frage, wenn **alles** zutrifft:
+in den Büchern haben. Ob eine von Hand erfasste Buchung aber **für** das Vorkommen steht oder
+**zusätzlich** gezahlt wurde, kann keine Regel entscheiden: 200 € extra in den Spartopf am 27.
+November sehen genauso aus wie die Sparrate vom 1. Dezember, ein zweites Taschengeld am 28. Oktober
+wie das vom 1. November. Würde die App selbst verknüpfen, fehlte in solchen Fällen eine Buchung — und
+niemand merkte es. Eine doppelte Buchung dagegen ist sichtbar und lässt sich löschen (das Löschen
+bleibt bestehen). Deshalb gilt: **Die App schlägt vor, der Nutzer bestätigt.** Automatisch verknüpft
+wird nie etwas, weder vom Buchungslauf noch beim Laden des Dashboards.
+
+**Welche Buchung vorgeschlagen wird** (`isAdoptionCandidate`, `pickAdoptionCandidate` in
+`recurringSchedule.ts`). Eine Buchung kommt in Frage, wenn **alles** zutrifft:
 
 - sie liegt auf demselben Konto wie der Dauerauftrag;
 - sie ist nicht gelöscht und mit **keinem** Dauerauftrag verknüpft (`recurringTransactionId` leer);
@@ -165,52 +170,69 @@ Frage, wenn **alles** zutrifft:
   dieselbe Beschreibung, ohne Beachtung von Groß-/Kleinschreibung und Leerraum am Rand;
 - ihr Berliner Kalendertag liegt höchstens **7 Tage vor oder nach** dem Fälligkeitstag
   (`ADOPTION_WINDOW_DAYS`). Das Fenster reicht über Monatsgrenzen: Die am 28. November überwiesene
-  Miete steht für das Vorkommen vom 1. Dezember.
+  Miete kann für das Vorkommen vom 1. Dezember stehen.
 
-Gibt es mehrere, gewinnt die Buchung, die dem Fälligkeitstag am nächsten liegt; bei gleichem Abstand
-die älteste (früheres Datum, dann früher erfasst).
+Gibt es mehrere, wird die Buchung vorgeschlagen, die dem Fälligkeitstag am nächsten liegt; bei
+gleichem Abstand die älteste (früheres Datum, dann früher erfasst).
 
-Übernehmen heißt: Auf der bestehenden Buchung werden `recurringTransactionId` und `recurringPeriod`
-(die Periode des Vorkommens, nicht der Monat ihres Datums) gesetzt. Betrag, Datum, Beschreibung,
-Kategorie, Steuer-Markierung und Belege bleiben, wie der Nutzer sie erfasst hat. Angelegt wird
-nichts. Von da an ist das Vorkommen gebucht, mit allen Folgen aus „Vorkommen: Dauerauftrag +
-Periode" — auch: Wird die übernommene Buchung gelöscht, bleibt der Monat gebucht.
+**Vorschläge** (`loadRecurringSuggestions`): `GET /api/analytics/summary` liefert in
+`recurringSuggestions` für jedes Vorkommen des Haushalts, das im laufenden Monat fällig, weder gebucht
+noch übersprungen ist und nicht vor der Untergrenze liegt — auch wenn sein Tag noch nicht erreicht ist
+—, die passende Buchung, sofern es eine gibt. Jede Buchung wird für höchstens ein Vorkommen
+vorgeschlagen; die Vorkommen kommen in der Reihenfolge ihres Fälligkeitstags zum Zug. Das Berechnen der
+Vorschläge schreibt nichts.
 
-- **Jede Buchung steht nur für ein Vorkommen.** Zwei Daueraufträge mit gleichem Betrag und gleicher
-  Kategorie und eine von Hand erfasste Zahlung: Einer übernimmt sie, der andere bucht regulär.
-- **Übersprungene Monate** und Monate vor der Untergrenze übernehmen nichts.
-- **Bereits gebuchte Monate** suchen nicht mehr. Eine Zahlung, die von Hand erfasst wurde, obwohl der
-  Monat schon automatisch gebucht war, bleibt als eigene Buchung stehen und wird nie nachträglich
-  verknüpft oder verändert.
-- **Im laufenden Monat schon vor dem Fälligkeitstag:** `GET /api/analytics/summary` ruft nach der
-  Selbstheilung `adoptManualBookingsForCurrentMonth` auf. Jedes Vorkommen des Haushalts, das im
-  laufenden Monat fällig, weder gebucht noch übersprungen ist und nicht vor der Untergrenze liegt,
-  versucht zu übernehmen — auch wenn sein Tag noch nicht erreicht ist. Angelegt wird dabei nie etwas.
-  Ohne diesen Schritt zählte das Dashboard die Zahlung bis zum Fälligkeitstag einmal als gebucht und
-  einmal als geplant.
-- **Antwort des Laufs:** Übernommene Vorkommen stehen mit `adopted: true` in `occurrences`;
-  `transactionId` ist die übernommene Buchung.
+Bis der Nutzer bestätigt, bleiben die Zahlen, wie sie sind: Die von Hand erfasste Buchung zählt als
+gebucht, das Vorkommen als geplant. Die Hochrechnung enthält den Betrag in dieser Zeit also zweimal —
+gewollt; der Vorschlag ist der Hinweis darauf.
+
+**Bestätigen** (`POST /api/recurring-transactions/[id]/link-booking`, Body
+`{ transactionId, period }`): Unter demselben Advisory-Lock wie das Buchen und mit einer Zeilensperre
+auf der Buchung prüft der Endpunkt alles erneut — die Regel oben für das Vorkommen der Periode, dazu:
+die Periode ist ein fälliger Monat des Dauerauftrags, liegt nicht vor der Untergrenze und ist weder
+übersprungen noch schon gebucht. Dann werden auf der Buchung `recurringTransactionId` und
+`recurringPeriod` (die Periode des Vorkommens, nicht der Monat ihres Datums) gesetzt. Betrag, Datum,
+Beschreibung, Kategorie, Steuer-Markierung und Belege bleiben, wie der Nutzer sie erfasst hat.
+Angelegt wird nichts. Von da an ist das Vorkommen gebucht, mit allen Folgen aus „Vorkommen:
+Dauerauftrag + Periode": Das Dashboard plant es nicht mehr, der Lauf bucht es nicht — und wird die
+verknüpfte Buchung später gelöscht, bleibt der Monat gebucht.
+
+| Antwort | Wann |
+|---|---|
+| `200 { id, recurringTransactionId, recurringPeriod }` | verknüpft |
+| `400` | Body fehlt oder ist fehlerhaft (`period` nicht `JJJJ-MM`) |
+| `404` | Dauerauftrag oder Buchung gibt es im Haushalt nicht |
+| `409 { error }` | die Buchung passt nicht (mehr) — anderes Konto, anderer Betrag, andere Kategorie bzw. Beschreibung, gelöscht, schon verknüpft, mehr als 7 Tage entfernt — oder das Vorkommen ist schon gebucht, übersprungen, liegt vor der Untergrenze oder ist kein fälliger Monat |
+
+Zwei gleichzeitige Bestätigungen für dasselbe Vorkommen verknüpfen eine Buchung; die zweite bekommt
+`409`. Dieselbe Buchung für zwei Daueraufträge gleichzeitig: Die Zeilensperre lässt nur einen
+gewinnen.
+
+Wer den Vorschlag nicht bestätigt, sondern die eigene Buchung löscht, überlässt den Monat dem
+Dauerauftrag: Er bucht am Fälligkeitstag wie immer.
 
 **Beispiel**, Dauerauftrag „Miete" −950,00 €, Kategorie Wohnen, fällig am 15.:
 
-| Von Hand erfasst | Übernommen? |
+| Von Hand erfasst | Vorgeschlagen? |
 |---|---|
 | −950,00 €, Wohnen, 8. des Monats | ja (7 Tage vorher) |
-| −950,00 €, Wohnen, 7. des Monats | nein (8 Tage vorher) — am 15. wird regulär gebucht |
+| −950,00 €, Wohnen, 7. des Monats | nein (8 Tage vorher) |
 | −949,99 €, Wohnen, 15. | nein (anderer Betrag) |
 | −950,00 €, Sonstiges, 15. | nein (andere Kategorie) |
 | −950,00 €, Wohnen, 15., anderes Konto | nein |
 
+Ohne Bestätigung wird am 15. in jedem Fall regulär gebucht.
+
 ### Bekannte Grenzen
 
-- **Von Hand erfasste Zahlung außerhalb der Regel:** Übernommen wird nur, was die Bedingungen oben
-  erfüllt. Weicht der Betrag ab (z.B. die Miete wurde erhöht, der Dauerauftrag noch nicht angepasst),
-  liegt die Zahlung mehr als 7 Tage vom Fälligkeitstag entfernt oder wurde sie erst erfasst, **nachdem**
-  der Monat schon automatisch gebucht war, steht sie doppelt in den Büchern. Abhilfe wie bisher: den
-  Monat überspringen (Skip), bevor er gebucht ist, oder die doppelte Buchung löschen.
-- **Übernahme ohne Rückfrage:** Eine Buchung mit gleichem Konto, Betrag und Kategorie, die zufällig
-  im Fenster liegt und etwas anderes meint, wird ebenfalls übernommen; der Dauerauftrag bucht in
-  diesem Monat dann nicht. Es gibt keinen Endpunkt, der eine Verknüpfung wieder löst.
+- **Doppelt, bis der Nutzer handelt:** Eine von Hand erfasste Zahlung für ein Vorkommen steht doppelt
+  in den Büchern, solange der Vorschlag nicht bestätigt ist; erreicht der Lauf den Fälligkeitstag
+  vorher, bucht er, und die eigene Buchung bleibt daneben stehen. Vorgeschlagen wird nur im laufenden
+  Monat und nur, was die Regel oben erfüllt — weicht der Betrag ab (z.B. die Miete wurde erhöht, der
+  Dauerauftrag noch nicht angepasst), liegt die Zahlung mehr als 7 Tage entfernt oder ist der Monat
+  schon gebucht, gibt es keinen Vorschlag. Abhilfe: den Monat überspringen (Skip), bevor er gebucht
+  ist, oder die doppelte Buchung löschen.
+- **Keine Verknüpfung lösen:** Es gibt keinen Endpunkt, der eine bestätigte Verknüpfung wieder löst.
 - **Kein Betrags-Snapshot:** siehe oben — nachgebucht wird mit dem heutigen Betrag.
 - **Überspringen wirkt nur vor dem Buchen:** Ein Skip verhindert das Buchen eines Monats. Ist der
   Monat schon gebucht, entfernt ein Skip die Buchung nicht; dafür wird die Buchung gelöscht (sie
@@ -330,8 +352,8 @@ verknüpft sie (`recurringTransactionId`), beides in einer DB-Transaktion.
 - `dayOfMonth` des Dauerauftrags ist der übergebene Wert, sonst der Tag der Buchung.
 - `bookFromPeriod` ist der laufende Berliner Monat: Die Serie läuft ab jetzt weiter. Aus einer zwei
   Monate alten Buchung entsteht so keine Buchung für den Monat dazwischen — der könnte längst von Hand
-  erfasst sein. Der laufende Monat wird gebucht, sobald sein Tag erreicht ist (oder eine von Hand
-  erfasste Zahlung übernommen, siehe „Übernahme").
+  erfasst sein. Der laufende Monat wird gebucht, sobald sein Tag erreicht ist, außer eine von Hand
+  erfasste Zahlung wurde vorher als Vorkommen bestätigt (siehe „Vorschlag und Bestätigung").
 - Bereits verknüpfte Buchungen → `409`.
 
 ## Fälligkeit in einem Monat
@@ -369,9 +391,10 @@ flowchart TD
 | fällig (`dueRecurring`) | im laufenden Monat fällig und nicht übersprungen — ob gebucht oder nicht | `recurringDueIncomeTotal`, `recurringDueOutcomeTotal`, `recurringDueCount` |
 | geplant (`plannedRecurring`) | fällig **und** für die Periode des laufenden Monats noch nicht gebucht | `recurringTransactions`, `recurringIncomeTotal`, `recurringOutcomeTotal`, `recurringPlannedSavings`, Hochrechnungen |
 
-Bevor die Route diese Mengen bildet, bucht sie abgeschlossene Monate nach und übernimmt im laufenden
-Monat von Hand erfasste Zahlungen (siehe „Übernahme"). Ein übernommenes Vorkommen ist gebucht: Es
-bleibt in „fällig" und fällt aus „geplant". Die Untergrenze `bookFromPeriod` spielt für beide Mengen
+Bevor die Route diese Mengen bildet, bucht sie abgeschlossene Monate nach. Von Hand erfasste
+Zahlungen verknüpft sie nicht; sie liefert sie nur als Vorschläge (`recurringSuggestions`, siehe
+„Vorschlag und Bestätigung"). Ein bestätigtes Vorkommen ist gebucht: Es bleibt in „fällig" und fällt
+aus „geplant". Die Untergrenze `bookFromPeriod` spielt für beide Mengen
 keine Rolle, weil der laufende Monat nie vor ihr liegt.
 
 Einzelheiten in [04-analytics-summary.md](./04-analytics-summary.md).
@@ -422,10 +445,11 @@ nach `Category.isIncome`.
 | POST | `/api/recurring-transactions` | Neuen Dauerauftrag anlegen (`backfill` für das Nachbuchen der Vergangenheit) |
 | POST | `/api/transactions/[id]/make-recurring` | Dauerauftrag aus bestehender Buchung anlegen + verknüpfen |
 | PATCH | `/api/recurring-transactions/[id]` | Dauerauftrag bearbeiten |
+| POST | `/api/recurring-transactions/[id]/link-booking` | Vorschlag bestätigen: von Hand erfasste Buchung als Vorkommen verknüpfen |
 | DELETE | `/api/recurring-transactions/[id]` | Dauerauftrag löschen (Soft-Delete) |
 | GET | `/api/recurring-transactions/skips?year=&month=` | Skips für einen Monat |
 | POST | `/api/recurring-transactions/skips` | Skip hinzufügen (upsert) |
 | DELETE | `/api/recurring-transactions/skips` | Skip entfernen |
 | GET | `/api/recurring-transactions/yearly?year=` | Jahresmatrix (Monatsbeträge, Gruppen, Saldo) |
 | GET | `/api/recurring-transactions/export?year=` | CSV der wiederkehrenden Ausgaben und Sparraten |
-| POST | `/api/cron/materialize-recurring` | Fällige Vorkommen buchen oder übernehmen (Cron, `?dryRun=true` möglich) |
+| POST | `/api/cron/materialize-recurring` | Fällige Vorkommen buchen (Cron, `?dryRun=true` möglich) |

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addMonthsClamped,
+  adoptionMismatch,
   bookFromPeriodFor,
   calendarDaysBetween,
   dueMonthsBetween,
@@ -292,7 +293,7 @@ describe("calendarDaysBetween", () => {
   });
 });
 
-describe("a hand-entered booking that stands for an occurrence", () => {
+describe("a hand-entered booking that can be suggested for an occurrence", () => {
   const rent: AdoptionTemplate = { accountId: "acc", categoryId: "cat_rent", amountCents: -95_000, description: "Miete" };
   /** Due on 15 November 2026. */
   const dueDay = { year: 2026, month: 11, day: 15 };
@@ -379,5 +380,22 @@ describe("a hand-entered booking that stands for an occurrence", () => {
     const rows = [row("late", "2026-11-20T11:00:00.000Z"), row("close", "2026-11-15T11:00:00.000Z")];
     pickAdoptionCandidate(rows, rent, dueDay);
     expect(rows.map((r) => r.id)).toEqual(["late", "close"]);
+  });
+
+  it("names the first rule a booking breaks", () => {
+    const at = "2026-11-15T11:00:00.000Z";
+    const plain: AdoptionTemplate = { ...rent, categoryId: null };
+    expect(adoptionMismatch(row("a", at), rent, dueDay)).toBeNull();
+    expect(adoptionMismatch(row("a", at, { deletedAt: new Date(at) }), rent, dueDay)).toBe("deleted");
+    expect(adoptionMismatch(row("a", at, { recurringTransactionId: "rec_other" }), rent, dueDay)).toBe("linked");
+    expect(adoptionMismatch(row("a", at, { accountId: "other" }), rent, dueDay)).toBe("account");
+    expect(adoptionMismatch(row("a", at, { amountCents: -1 }), rent, dueDay)).toBe("amount");
+    expect(adoptionMismatch(row("a", at, { categoryId: "cat_other" }), rent, dueDay)).toBe("category");
+    expect(adoptionMismatch(row("a", at, { categoryId: null }), rent, dueDay)).toBe("category");
+    expect(adoptionMismatch(row("a", at, { description: "Miete" }), plain, dueDay)).toBe("category");
+    expect(adoptionMismatch(row("a", at, { categoryId: null, description: "Garage" }), plain, dueDay)).toBe("description");
+    expect(adoptionMismatch(row("a", "2026-11-23T11:00:00.000Z"), rent, dueDay)).toBe("date");
+    // a deleted booking is reported as deleted even if it breaks other rules, too
+    expect(adoptionMismatch(row("a", at, { deletedAt: new Date(at), amountCents: -1 }), rent, dueDay)).toBe("deleted");
   });
 });

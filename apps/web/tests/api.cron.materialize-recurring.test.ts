@@ -104,10 +104,12 @@ beforeAll(async () => {
   recurringSkippedId = skipped.id;
   await prisma.recurringTransactionSkip.create({ data: { recurringId: skipped.id, year: 2024, month: 11 } });
 
-  // A payment entered by hand has no recurringTransactionId. The run recognises
-  // it as November's occurrence (same account and amount, no category and the
-  // same description ignoring case and whitespace, within 7 days of the due
-  // day) and adopts it instead of booking November a second time.
+  // A payment entered by hand has no recurringTransactionId. It looks like
+  // November's occurrence (same account and amount, no category and the same
+  // description ignoring case and whitespace, within 7 days of the due day),
+  // but the run never links it: it cannot tell "paid early" from "paid
+  // additionally". It books November and leaves the hand-entered row alone;
+  // linking is up to the user (POST .../link-booking).
   const rentRecurring = await prisma.recurringTransaction.create({
     data: {
       accountId: testAccountId,
@@ -200,7 +202,7 @@ describe("POST /api/cron/materialize-recurring", () => {
     expect(income).toHaveLength(0); // nothing actually written yet
   }, 30000);
 
-  it("dry-run reports a payment entered by hand as adopted instead of as a new booking, and links nothing", async () => {
+  it("dry-run reports the month of a payment entered by hand as a booking, and links nothing", async () => {
     const routes = await import("../app/api/cron/materialize-recurring/route");
     const res = await routes.POST(
       new Request("http://localhost/api/cron/materialize-recurring?dryRun=true", {
@@ -212,14 +214,10 @@ describe("POST /api/cron/materialize-recurring", () => {
     const rentOccurrences = data.occurrences.filter(
       (o: { recurringId: string }) => o.recurringId === recurringAlreadyManuallyBookedId
     );
-    // Aug, Sep and Oct would be booked; November's payment is already there.
-    expect(rentOccurrences.map((o: { month: number; adopted: boolean }) => [o.month, o.adopted])).toEqual([
-      [8, false],
-      [9, false],
-      [10, false],
-      [11, true]
-    ]);
-    expect(data.adopted).toBeGreaterThanOrEqual(1);
+    // Every due month would be booked, November included.
+    expect(rentOccurrences.map((o: { month: number }) => o.month)).toEqual([8, 9, 10, 11]);
+    expect(data).not.toHaveProperty("adopted");
+    expect(rentOccurrences.every((o: object) => !("adopted" in o))).toBe(true);
 
     const manual = await prisma.transaction.findUniqueOrThrow({ where: { id: manualRentId } });
     expect(manual.recurringTransactionId).toBeNull();
@@ -258,34 +256,25 @@ describe("POST /api/cron/materialize-recurring", () => {
     ]);
     expect(skippedTxs.map((t) => t.recurringPeriod)).toEqual(["2024-08", "2024-09", "2024-10"]);
 
-    // The rent entered by hand on 2 November stands for November's occurrence:
-    // it is linked, not booked a second time, and the response says so.
+    // The rent entered by hand on 2 November is not linked: November is booked
+    // like every other month and the hand-entered row stays as it was.
     const rent = await prisma.transaction.findMany({
       where: { recurringTransactionId: recurringAlreadyManuallyBookedId },
       ...byPeriod
     });
     expect(rent.map((t) => t.recurringPeriod)).toEqual(["2024-08", "2024-09", "2024-10", "2024-11"]);
-    expect(rent[3].id).toBe(manualRentId);
-    expect(rent[3].description).toBe(" rent ");
-    expect(rent[3].occurredAt.toISOString()).toBe("2024-11-02T08:15:00.000Z");
-    expect(await prisma.transaction.count({ where: { accountId: testAccountId, amountCents: -12000 } })).toBe(4);
+    expect(rent.map((t) => t.id)).not.toContain(manualRentId);
+    expect(rent[3].description).toBe("Rent");
+    const manual = await prisma.transaction.findUniqueOrThrow({ where: { id: manualRentId } });
+    expect([manual.recurringTransactionId, manual.recurringPeriod, manual.description]).toEqual([null, null, " rent "]);
+    expect(await prisma.transaction.count({ where: { accountId: testAccountId, amountCents: -12000 } })).toBe(5);
 
     const rentOccurrences = data.occurrences.filter(
       (o: { recurringId: string }) => o.recurringId === recurringAlreadyManuallyBookedId
     );
-    expect(
-      rentOccurrences.map((o: { month: number; adopted: boolean; transactionId: string }) => [
-        o.month,
-        o.adopted,
-        o.transactionId === manualRentId
-      ])
-    ).toEqual([
-      [8, false, false],
-      [9, false, false],
-      [10, false, false],
-      [11, true, true]
-    ]);
-    expect(data.adopted).toBe(data.occurrences.filter((o: { adopted: boolean }) => o.adopted).length);
+    expect(rentOccurrences.map((o: { month: number; transactionId: string }) => o.month)).toEqual([8, 9, 10, 11]);
+    expect(rentOccurrences.some((o: { transactionId: string }) => o.transactionId === manualRentId)).toBe(false);
+    expect(data).not.toHaveProperty("adopted");
     expect(data.booked).toBe(data.occurrences.length);
 
     // The public demo account is reseeded on every /api/demo/seed call and must

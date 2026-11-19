@@ -45,10 +45,15 @@ flowchart TD
 **Schreibender GET:** Der erste Schritt bucht fällige, nie gebuchte Vorkommen abgeschlossener Monate
 nach, bevor gerechnet wird (siehe
 [03-wiederkehrende-transaktionen.md](./03-wiederkehrende-transaktionen.md), „Selbstheilung beim
-Lesen"). Der laufende Monat wird hier nicht gebucht. Danach erkennt die Route von Hand erfasste
-Zahlungen des laufenden Monats als Vorkommen ihres Dauerauftrags (gleicher Betrag, gleiche Kategorie,
-bis zu 7 Tage um den Fälligkeitstag — siehe dort „Übernahme"), damit eine solche Zahlung nicht einmal
-als gebucht und einmal als geplant zählt.
+Lesen"). Der laufende Monat wird hier nicht gebucht. Sonst schreibt die Route nichts.
+
+**Von Hand erfasste Zahlungen:** Sieht eine von Hand erfasste Buchung aus wie ein offenes Vorkommen
+des laufenden Monats (gleiches Konto, gleicher Betrag, gleiche Kategorie, bis zu 7 Tage um den
+Fälligkeitstag — siehe dort „Vorschlag und Bestätigung"), steht sie in `recurringSuggestions`. Die
+Route verknüpft sie nicht; das tut erst der Nutzer mit
+`POST /api/recurring-transactions/[id]/link-booking`. Bis dahin zählt die Buchung als gebucht und das
+Vorkommen als geplant — die Hochrechnung enthält den Betrag zweimal, und der Vorschlag weist darauf
+hin. Nach der Bestätigung ist das Vorkommen gebucht und fällt aus „geplant".
 
 ## Alle Kennzahlen im Detail
 

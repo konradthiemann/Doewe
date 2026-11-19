@@ -137,3 +137,6 @@ export {
   isAdoptionCandidate,
   pickAdoptionCandidate
 } from "./recurringSchedule";
+
+export type { AdoptionMismatch } from "./recurringSchedule";
+export { adoptionMismatch } from "./recurringSchedule";

@@ -14,17 +14,16 @@
  * Ein Monat gilt als gebucht, sobald eine Buchung des Dauerauftrags für diese
  * Periode existiert (`recurringPeriod`), auch eine verschobene oder gelöschte.
  *
- * Von Hand erfasste Zahlung: Steht eine von Hand angelegte Buchung für das
- * Vorkommen (gleiches Konto, gleicher Betrag, gleiche Kategorie, höchstens 7
- * Tage um den Fälligkeitstag — siehe lib/recurringBooking.ts), wird sie
- * übernommen statt neu gebucht. Solche Einträge tragen in `occurrences`
- * `adopted: true`; `transactionId` ist dann die übernommene Buchung.
+ * Von Hand erfasste Zahlungen werden nicht erkannt und nicht verknüpft: Der Lauf bucht
+ * jedes offene Vorkommen. Ob eine von Hand angelegte Buchung für ein Vorkommen steht,
+ * entscheidet der Nutzer — das Dashboard schlägt sie vor (`recurringSuggestions` in
+ * GET /api/analytics/summary), POST /api/recurring-transactions/[id]/link-booking
+ * verknüpft sie auf Bestätigung.
  *
- * Antwort: { ok, dryRun, booked, adopted, occurrences } — `booked` zählt alle
- * Einträge von `occurrences`, `adopted` die übernommenen darunter.
+ * Antwort: { ok, dryRun, booked, occurrences } — `booked` zählt die Einträge von
+ * `occurrences`.
  *
- * `?dryRun=true` schreibt nichts, sondern listet nur, was gebucht bzw.
- * übernommen würde.
+ * `?dryRun=true` schreibt nichts, sondern listet nur, was gebucht würde.
  */
 import { NextResponse } from "next/server";
 
@@ -41,11 +40,5 @@ export async function POST(req: Request) {
   const dryRun = new URL(req.url).searchParams.get("dryRun") === "true";
   const booked = await materializeDueRecurringTransactions(new Date(), { dryRun });
 
-  return NextResponse.json({
-    ok: true,
-    dryRun,
-    booked: booked.length,
-    adopted: booked.filter((occurrence) => occurrence.adopted).length,
-    occurrences: booked
-  });
+  return NextResponse.json({ ok: true, dryRun, booked: booked.length, occurrences: booked });
 }

@@ -67,10 +67,12 @@ Folgerungen:
   `Transaction.recurringPeriod` (`JJJJ-MM`, der Monat, für den gebucht wurde) erkannt — nicht über den
   Monat von `occurredAt`. Verschieben oder Löschen der Buchung ändert deshalb nichts daran, dass der
   Monat als gebucht gilt.
-- Eine von Hand erfasste Zahlung gilt als das Vorkommen, wenn sie auf demselben Konto liegt, denselben
-  Betrag und dieselbe Kategorie hat (ohne Kategorie: dieselbe Beschreibung) und höchstens 7 Tage vor
-  oder nach dem Fälligkeitstag datiert ist. Sie wird dann mit dem Dauerauftrag verknüpft, statt dass
-  ein zweites Mal gebucht wird.
+- Eine von Hand erfasste Zahlung wird nie automatisch mit einem Dauerauftrag verknüpft. Liegt sie auf
+  demselben Konto, hat denselben Betrag und dieselbe Kategorie (ohne Kategorie: dieselbe Beschreibung)
+  und ist höchstens 7 Tage vor oder nach dem Fälligkeitstag eines offenen Vorkommens im laufenden
+  Monat datiert, schlägt die App sie als dieses Vorkommen vor. Erst wenn der Nutzer bestätigt, wird sie
+  verknüpft und der Monat gilt als gebucht; bis dahin zählt sie als gebucht und das Vorkommen als
+  geplant, und der Dauerauftrag bucht am Fälligkeitstag wie immer.
 - Monate vor `RecurringTransaction.bookFromPeriod` werden nie automatisch gebucht. Ein Dauerauftrag
   mit Startdatum in der Vergangenheit bucht deshalb erst ab dem laufenden Monat, außer das Nachbuchen
   wurde ausdrücklich verlangt.
