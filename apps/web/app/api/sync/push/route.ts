@@ -15,6 +15,12 @@
  *   - Feld-Merge + Last-Write-Wins pro Feld; verlorene Werte → ConflictLog.
  *   - Delete gewinnt: ein Update auf einen getombstoneten Datensatz wird verworfen.
  *   - Idempotenz je Operation über MutationLog (mutationId).
+ *
+ * `occurredAt` wird gelesen wie in POST /api/transactions (`parseOccurredAt`):
+ * ein reiner Kalendertag ist 12:00 Uhr Berliner Zeit, ein Zeitpunkt ohne Zone
+ * Berliner Uhrzeit. Ein nicht lesbares Datum beantwortet nur diese Operation
+ * mit `conflict` (leer), wie jedes andere ungültige Feld — die Batch läuft
+ * weiter.
  */
 import { detectFieldConflicts, updateBlockedByDelete } from "@doewe/shared";
 import { Prisma } from "@prisma/client";
@@ -22,6 +28,7 @@ import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
+import { parseOccurredAt } from "../../transactions/schema";
 
 import { PushBody, TransactionCreate, TransactionPatch } from "./schema";
 
@@ -98,6 +105,8 @@ async function createTransaction(op: PushOpInput, user: SessionUser): Promise<Pu
     return { mutationId: op.mutationId, status: "conflict", conflicts: [] };
   }
   const d = fields.data;
+  const occurredAt = parseOccurredAt(d.occurredAt);
+  if (!occurredAt) return { mutationId: op.mutationId, status: "conflict", conflicts: [] };
 
   const account = await prisma.account.findFirst({
     where: { id: d.accountId, householdId: user.householdId }
@@ -128,7 +137,7 @@ async function createTransaction(op: PushOpInput, user: SessionUser): Promise<Pu
           createdByUserId: user.id,
           amountCents: d.amountCents,
           description: d.description,
-          occurredAt: new Date(d.occurredAt),
+          occurredAt,
           taxRelevant: d.taxRelevant ?? false
         }
       });
@@ -153,6 +162,8 @@ async function updateTransaction(op: PushOpInput, user: SessionUser): Promise<Pu
     return { mutationId: op.mutationId, status: "conflict", conflicts: [] };
   }
   const patch = fields.data;
+  const occurredAt = patch.occurredAt === undefined ? undefined : parseOccurredAt(patch.occurredAt);
+  if (occurredAt === null) return { mutationId: op.mutationId, status: "conflict", conflicts: [] };
 
   // findUnique umgeht den Soft-Delete-Filter → wir sehen Tombstones (delete wins).
   const server = await prisma.transaction.findUnique({
@@ -196,7 +207,7 @@ async function updateTransaction(op: PushOpInput, user: SessionUser): Promise<Pu
   if (patch.savingGoalId !== undefined) data.savingGoalId = patch.savingGoalId;
   if (patch.amountCents !== undefined) data.amountCents = patch.amountCents;
   if (patch.description !== undefined) data.description = patch.description;
-  if (patch.occurredAt !== undefined) data.occurredAt = new Date(patch.occurredAt);
+  if (occurredAt !== undefined) data.occurredAt = occurredAt;
   if (patch.taxRelevant !== undefined) data.taxRelevant = patch.taxRelevant;
 
   const row = await prisma.$transaction(async (tx) => {
