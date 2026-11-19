@@ -111,9 +111,10 @@ beforeAll(async () => {
 afterEach(async () => {
   vi.setSystemTime(NOW);
   // Each test owns its templates; clear them so runs never depend on order.
+  // Templates first: once they are gone nothing can book for them any more.
   await prisma.recurringTransactionSkip.deleteMany({ where: { recurring: { accountId: ACCOUNT_ID } } });
-  await prisma.transaction.deleteMany({ where: { accountId: ACCOUNT_ID } });
   await prisma.recurringTransaction.deleteMany({ where: { accountId: ACCOUNT_ID } });
+  await prisma.transaction.deleteMany({ where: { accountId: ACCOUNT_ID } });
 });
 
 afterAll(async () => {
