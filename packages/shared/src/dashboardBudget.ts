@@ -11,6 +11,12 @@
  * (booked + recurring) consistently — a recurring savings withdrawal due
  * this month affects the available budget exactly like a recurring income
  * transaction does, even before either is booked as a real transaction.
+ *
+ * Inputs and outputs are euros, but the arithmetic runs in integer cents:
+ * every input is rounded to cents on entry and the results are divided by 100
+ * at the end. Adding and subtracting euro floats directly yields values like
+ * -5.7e-14 where the true result is exactly 0 (shown as "-0,00 €" with an
+ * overspend line).
  */
 
 export type DashboardBudgetInput = {
@@ -54,19 +60,32 @@ export type DashboardBudget = {
   budgetUnderwater: boolean;
 };
 
+/** Euros to integer cents; a missing or non-numeric value counts as 0. */
+function toCents(euros: number | undefined): number {
+  return Math.round((euros || 0) * 100) || 0;
+}
+
+/** `total` if the caller already computed it, else `booked + recurring` — all in cents. */
+function projectedCents(total: number | undefined, booked: number, recurring: number | undefined): number {
+  return typeof total === "number" ? toCents(total) : toCents(booked) + toCents(recurring);
+}
+
 export function computeAvailableBudget(input: DashboardBudgetInput): DashboardBudget {
-  const carryover = input.carryoverFromLastMonth || 0;
+  const carryover = toCents(input.carryoverFromLastMonth);
   const projectedIncome = Math.max(
     0,
-    input.projectedIncomeTotal ?? input.incomeTotal + (input.recurringIncomeTotal || 0)
+    projectedCents(input.projectedIncomeTotal, input.incomeTotal, input.recurringIncomeTotal)
   );
   const projectedOutcome = Math.max(
     0,
-    input.projectedOutcomeTotal ?? input.outcomeTotal + (input.recurringOutcomeTotal || 0)
+    projectedCents(input.projectedOutcomeTotal, input.outcomeTotal, input.recurringOutcomeTotal)
   );
 
-  const savingsNet =
-    input.projectedSavingsTotal ?? input.monthlySavingsActual + (input.recurringPlannedSavings || 0);
+  const savingsNet = projectedCents(
+    input.projectedSavingsTotal,
+    input.monthlySavingsActual,
+    input.recurringPlannedSavings
+  );
   const totalSavingsTransfer = Math.max(0, savingsNet);
   const savingsWithdrawn = Math.max(0, -savingsNet);
 
@@ -92,21 +111,22 @@ export function computeAvailableBudget(input: DashboardBudgetInput): DashboardBu
   const hasIncomeData = projectedIncome > 0 || carryover !== 0;
   const budgetUnderwater = availableBudget <= 0;
 
+  // All amounts above are integer cents; convert to euros only here.
   return {
-    carryover,
-    projectedIncome,
-    projectedOutcome,
-    savingsNet,
-    totalSavingsTransfer,
-    savingsWithdrawn,
-    projectedSpent,
-    projectedExpenses,
-    availableBudget,
-    projectedLeft,
+    carryover: carryover / 100,
+    projectedIncome: projectedIncome / 100,
+    projectedOutcome: projectedOutcome / 100,
+    savingsNet: savingsNet / 100,
+    totalSavingsTransfer: totalSavingsTransfer / 100,
+    savingsWithdrawn: savingsWithdrawn / 100,
+    projectedSpent: projectedSpent / 100,
+    projectedExpenses: projectedExpenses / 100,
+    availableBudget: availableBudget / 100,
+    projectedLeft: projectedLeft / 100,
     spentPercent,
     expensesPercent,
     savedPercent,
-    overspent,
+    overspent: overspent / 100,
     overspentPercent,
     hasIncomeData,
     budgetUnderwater

@@ -79,4 +79,57 @@ describe("computeAvailableBudget", () => {
     expect(result.overspentPercent).toBe(40);
     expect(result.budgetUnderwater).toBe(false);
   });
+
+  it("returns exactly 0 left when everything is spent (no float residue)", () => {
+    // In euro floats 399.20 - (299.22 + 99.98) is -5.7e-14: a red "-0,00 €" with an overspend line.
+    const result = computeAvailableBudget({
+      carryoverFromLastMonth: 0,
+      incomeTotal: 399.2,
+      outcomeTotal: 299.22,
+      monthlySavingsActual: 99.98
+    });
+
+    expect(result.availableBudget).toBe(399.2);
+    expect(result.projectedSpent).toBe(399.2);
+    expect(result.projectedLeft).toBe(0);
+    expect(result.overspent).toBe(0);
+    expect(result.overspentPercent).toBe(0);
+    expect(result.spentPercent).toBe(100);
+  });
+
+  it("sums booked and recurring amounts in cents", () => {
+    // 0.1 + 0.2 is 0.30000000000000004 as floats.
+    const result = computeAvailableBudget({
+      carryoverFromLastMonth: 0,
+      incomeTotal: 0.1,
+      recurringIncomeTotal: 0.2,
+      outcomeTotal: 0.3,
+      monthlySavingsActual: 0
+    });
+
+    expect(result.projectedIncome).toBe(0.3);
+    expect(result.projectedLeft).toBe(0);
+    expect(result.overspent).toBe(0);
+  });
+
+  it("treats a missing carryover as 0 and keeps a negative one", () => {
+    const missing = computeAvailableBudget({
+      carryoverFromLastMonth: Number.NaN,
+      incomeTotal: 100,
+      outcomeTotal: 0,
+      monthlySavingsActual: 0
+    });
+    expect(missing.carryover).toBe(0);
+    expect(missing.availableBudget).toBe(100);
+
+    const negative = computeAvailableBudget({
+      carryoverFromLastMonth: -250.5,
+      incomeTotal: 100,
+      outcomeTotal: 0,
+      monthlySavingsActual: 0
+    });
+    expect(negative.carryover).toBe(-250.5);
+    expect(negative.availableBudget).toBe(-150.5);
+    expect(negative.budgetUnderwater).toBe(true);
+  });
 });
