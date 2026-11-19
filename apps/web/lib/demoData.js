@@ -172,7 +172,10 @@ async function ensureUserAndAccount(prisma) {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const user = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
-    update: { password: passwordHash, name: DEMO_NAME },
+    // The demo account must always work: if it was suspended or soft-deleted
+    // (e.g. through the admin API), signing in would still succeed but every
+    // request would be rejected as unauthenticated. Seeding revives it.
+    update: { password: passwordHash, name: DEMO_NAME, suspendedAt: null, deletedAt: null },
     create: { email: DEMO_EMAIL, name: DEMO_NAME, password: passwordHash }
   });
 
@@ -181,7 +184,7 @@ async function ensureUserAndAccount(prisma) {
   const householdId = `hh_${user.id}`;
   await prisma.household.upsert({
     where: { id: householdId },
-    update: {},
+    update: { deletedAt: null },
     create: { id: householdId, name: DEMO_NAME }
   });
   await prisma.householdMember.upsert({
@@ -192,7 +195,7 @@ async function ensureUserAndAccount(prisma) {
 
   const account = await prisma.account.upsert({
     where: { id: DEMO_ACCOUNT_ID },
-    update: { userId: user.id, householdId },
+    update: { userId: user.id, householdId, deletedAt: null },
     create: { id: DEMO_ACCOUNT_ID, name: "Demo Account", userId: user.id, householdId }
   });
 
