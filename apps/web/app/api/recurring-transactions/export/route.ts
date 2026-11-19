@@ -2,22 +2,26 @@
  * GET /api/recurring-transactions/export?year=YYYY — CSV der wiederkehrenden Ausgaben
  *
  * Authentifizierung: Pflicht (401). Liefert pro Dauerauftrag die Monatsbeträge des
- * Jahres (Anker-Monat + Intervall, übersprungene Monate abgezogen). Einnahmen werden
- * ausgelassen; Sparen-Kategorien ("Sparen"/"Savings") stehen separat markiert und mit
- * eigener Summenzeile. Nur Daueraufträge des eigenen Haushalts, ohne Soft-Deletes.
+ * Jahres (Anker-Monat in Europe/Berlin + Intervall, übersprungene Monate abgezogen).
+ * Einordnung wie auf der Jahresseite (docs/calculations/00-grundregeln.md §2): erst die
+ * Spar-Kategorie ("Sparen"/"Savings"), dann das Vorzeichen — `Category.isIncome`
+ * entscheidet nichts. Einnahmen (Betrag >= 0 außerhalb einer Spar-Kategorie) werden
+ * ausgelassen; Sparen steht separat markiert und mit eigener Summenzeile. Nur
+ * Daueraufträge des eigenen Haushalts, ohne Soft-Deletes. Ohne `year` gilt das laufende
+ * Jahr in Europe/Berlin.
  */
-import { buildRecurringCsv, type RecurringExportItem } from "@doewe/shared";
+import { buildRecurringCsv, zonedDate } from "@doewe/shared";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
-import { prisma } from "../../../../lib/prisma";
-import { SAVINGS_CATEGORY_NAMES } from "../../saving-plan/savings";
+import { loadRecurringYearItems } from "../../../../lib/recurringYear";
 
 export const dynamic = "force-dynamic";
 
 const ExportQuery = z.object({
-  year: z.coerce.number().int().min(2000).max(2100).default(new Date().getFullYear())
+  // Evaluated per request: a module-level default would freeze the year at server start.
+  year: z.coerce.number().int().min(2000).max(2100).default(() => zonedDate(new Date()).year)
 });
 
 export async function GET(req: Request) {
@@ -28,26 +32,11 @@ export async function GET(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid query" }, { status: 400 });
   const { year } = parsed.data;
 
-  const rows = await prisma.recurringTransaction.findMany({
-    where: { deletedAt: null, account: { householdId: user.householdId } },
-    include: { category: true, skips: { where: { year } } },
-    orderBy: { description: "asc" }
-  });
-
-  const items: RecurringExportItem[] = rows.map((r) => ({
-    description: r.description,
-    category: r.category?.name ?? "",
-    isIncome: r.category?.isIncome ?? false,
-    isSavings: SAVINGS_CATEGORY_NAMES.includes((r.category?.name ?? "").toLowerCase().trim()),
-    amountCents: r.amountCents,
-    intervalMonths: r.intervalMonths,
-    skippedMonths: r.skips.map((s) => s.month),
-    nextYear: r.nextOccurrence.getFullYear(),
-    nextMonth: r.nextOccurrence.getMonth() + 1
-  }));
+  // Same loader as the yearly page, so CSV and page cannot classify differently.
+  const items = await loadRecurringYearItems(user.householdId, year);
 
   // BOM so Excel opens the UTF-8 file with correct umlauts.
-  return new Response("\uFEFF" + buildRecurringCsv(items, year), {
+  return new Response("﻿" + buildRecurringCsv(items, year), {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

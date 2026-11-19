@@ -5,8 +5,10 @@
  * @doewe/shared): pro Dauerauftrag die Monatsbeträge des Jahres (Anker-Monat +
  * Intervall, übersprungene Monate = 0), gruppiert in Einnahmen/Ausgaben/Sparen mit
  * Summen, Saldo und Monatsdurchschnitt. Haushaltsbezogen, ohne Soft-Deletes. Kein
- * DEMO-Ausschluss: der Demo-Nutzer sieht nur seine eigenen Daten.
+ * DEMO-Ausschluss: der Demo-Nutzer sieht nur seine eigenen Daten. Der Anker-Monat und
+ * das Standardjahr (ohne `year`) sind Kalenderwerte in Europe/Berlin.
  */
+import { zonedDate } from "@doewe/shared";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -16,7 +18,8 @@ import { loadRecurringYearMatrix } from "../../../../lib/recurringYear";
 export const dynamic = "force-dynamic";
 
 const YearlyQuery = z.object({
-  year: z.coerce.number().int().min(2000).max(2100).default(new Date().getFullYear())
+  // Evaluated per request: a module-level default would freeze the year at server start.
+  year: z.coerce.number().int().min(2000).max(2100).default(() => zonedDate(new Date()).year)
 });
 
 export async function GET(req: Request) {

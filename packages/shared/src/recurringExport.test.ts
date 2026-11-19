@@ -4,9 +4,8 @@ import { buildRecurringCsv, type RecurringExportItem } from "./recurringExport";
 
 const base: RecurringExportItem = {
   description: "Miete",
-  category: "Wohnen",
-  isIncome: false,
-  isSavings: false,
+  categoryName: "Wohnen",
+  kind: "expense",
   amountCents: -80000,
   intervalMonths: 1,
   skippedMonths: [],
@@ -43,7 +42,7 @@ describe("buildRecurringCsv", () => {
   });
 
   it("marks savings separately and keeps them out of the expense sum", () => {
-    const saving = { ...base, description: "ETF", category: "Sparen", isSavings: true, amountCents: -20000 };
+    const saving: RecurringExportItem = { ...base, description: "ETF", categoryName: "Sparen", kind: "savings", amountCents: -20000 };
     const lines = buildRecurringCsv([base, saving], 2026).split("\r\n").filter(Boolean);
     expect(lines[2].split(";")[2]).toBe("Sparen");
     const sumExpenses = lines.find((l) => l.startsWith("Summe Ausgaben"))!.split(";");
@@ -55,9 +54,24 @@ describe("buildRecurringCsv", () => {
   });
 
   it("excludes income items", () => {
-    const income = { ...base, description: "Gehalt", isIncome: true, amountCents: 300000 };
+    const income: RecurringExportItem = { ...base, description: "Gehalt", kind: "income", amountCents: 300000 };
     const csv = buildRecurringCsv([income], 2026);
     expect(csv).not.toContain("Gehalt");
+  });
+
+  it("writes an item without a category with an empty category column", () => {
+    const row = buildRecurringCsv([{ ...base, categoryName: null }], 2026).split("\r\n")[1].split(";");
+    expect(row.slice(0, 3)).toEqual(["Miete", "", "Ausgabe"]);
+  });
+
+  it("subtracts a recurring withdrawal from savings instead of adding it", () => {
+    const deposit: RecurringExportItem = { ...base, description: "ETF", categoryName: "Sparen", kind: "savings", amountCents: -20000 };
+    // A withdrawal is stored positive; it stays in the savings group whatever its sign.
+    const withdrawal: RecurringExportItem = { ...deposit, description: "Entnahme", amountCents: 5000 };
+    const lines = buildRecurringCsv([deposit, withdrawal], 2026).split("\r\n").filter(Boolean);
+    expect(lines[2].split(";").slice(0, 4)).toEqual(["Entnahme", "Sparen", "Sparen", "-50,00"]);
+    expect(lines.find((l) => l.startsWith("Summe Sparen"))!.split(";")[15]).toBe("1800,00");
+    expect(lines.find((l) => l.startsWith("Summe Ausgaben"))!.split(";")[15]).toBe("0,00");
   });
 
   it("escapes fields containing semicolons, quotes or newlines", () => {

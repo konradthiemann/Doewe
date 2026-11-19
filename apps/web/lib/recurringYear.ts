@@ -1,30 +1,38 @@
 /**
- * Loads the recurring-transaction year matrix of a household (shared by
- * GET /api/recurring-transactions/yearly and the budget-plan code, which derives
- * the monthly availability via `smoothedAvailablePerMonth`).
+ * Loads the recurring transactions of a household for a year view (shared by
+ * GET /api/recurring-transactions/yearly, the CSV export and the budget-plan
+ * code, which derives the monthly availability via `smoothedAvailablePerMonth`).
+ *
+ * One loader for the yearly page and the CSV, so both read the anchor month in
+ * Europe/Berlin and classify the same way: savings category first, then the
+ * sign — never `Category.isIncome` (docs/calculations/00-grundregeln.md §1, §2).
  *
  * Household-scoped; soft-deleted rows are hidden by the extension in prisma.ts.
  */
 import {
   buildRecurringYearMatrix,
   classifyRecurringKind,
+  zonedMonth,
   type RecurringYearItem,
   type RecurringYearMatrix
 } from "@doewe/shared";
 
-import { SAVINGS_CATEGORY_NAMES } from "../app/api/saving-plan/savings";
-
 import { prisma } from "./prisma";
+import { loadSavingsCategoryIds } from "./savingsCategory";
 
-export async function loadRecurringYearMatrix(householdId: string, year: number): Promise<RecurringYearMatrix> {
-  const rows = await prisma.recurringTransaction.findMany({
-    where: { account: { householdId } },
-    include: { category: true, skips: { where: { year } } },
-    orderBy: { description: "asc" }
-  });
+export async function loadRecurringYearItems(householdId: string, year: number): Promise<RecurringYearItem[]> {
+  const [rows, savingsIds] = await Promise.all([
+    prisma.recurringTransaction.findMany({
+      where: { account: { householdId } },
+      include: { category: true, skips: { where: { year } } },
+      orderBy: { description: "asc" }
+    }),
+    loadSavingsCategoryIds(householdId)
+  ]);
 
-  const items: RecurringYearItem[] = rows.map((r) => {
-    const isSavings = SAVINGS_CATEGORY_NAMES.includes((r.category?.name ?? "").toLowerCase().trim());
+  return rows.map((r) => {
+    const anchor = zonedMonth(r.nextOccurrence);
+    const isSavings = r.categoryId !== null && savingsIds.has(r.categoryId);
     return {
       id: r.id,
       description: r.description,
@@ -34,10 +42,12 @@ export async function loadRecurringYearMatrix(householdId: string, year: number)
       amountCents: r.amountCents,
       intervalMonths: r.intervalMonths,
       skippedMonths: r.skips.map((s) => s.month),
-      nextYear: r.nextOccurrence.getFullYear(),
-      nextMonth: r.nextOccurrence.getMonth() + 1
+      nextYear: anchor.year,
+      nextMonth: anchor.month
     };
   });
+}
 
-  return buildRecurringYearMatrix(items, year);
+export async function loadRecurringYearMatrix(householdId: string, year: number): Promise<RecurringYearMatrix> {
+  return buildRecurringYearMatrix(await loadRecurringYearItems(householdId, year), year);
 }
