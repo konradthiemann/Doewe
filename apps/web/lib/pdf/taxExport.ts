@@ -6,7 +6,13 @@
  * (transactions + receipt bytes) up front and passes it in, so this module
  * is unit-testable without a database and has no HTTP concerns either.
  */
-import { formatEuro, fromCents, groupTaxTransactionsByCategory, type TaxTransactionInput } from "@doewe/shared";
+import {
+  APP_TIME_ZONE,
+  formatEuro,
+  fromCents,
+  groupTaxTransactionsByCategory,
+  type TaxTransactionInput
+} from "@doewe/shared";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 import { type Locale, translate } from "../locales/translate";
@@ -70,9 +76,10 @@ function receiptRefsFor(number: number, attachmentCount: number): string[] {
   return Array.from({ length: attachmentCount }, (_, i) => `${number}${RECEIPT_SUFFIXES[i] ?? i}`);
 }
 
-function formatDate(date: Date | string, locale: Locale): string {
+/** Calendar day in the app time zone (Europe/Berlin) — the same day the tax page and the lists show. */
+export function formatDate(date: Date | string, locale: Locale): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-US", { timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat(locale === "de" ? "de-DE" : "en-US", { timeZone: APP_TIME_ZONE }).format(d);
 }
 
 export async function renderTaxExportPdf(input: RenderTaxExportPdfInput): Promise<Uint8Array> {

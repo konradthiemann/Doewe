@@ -3,8 +3,10 @@
  *
  * Authentifizierung: Pflicht (401). Liefert dasselbe steuerrelevante
  * Transaktions-Set wie GET /api/tax als PDF (Deckblatt + Kategorie-Tabelle +
- * optionaler Beleganhang). Belegbytes werden NUR aus diesem Haushalt geladen
- * und verlassen ihn nie (Cache-Control: private, no-store).
+ * optionaler Beleganhang): das Kalenderjahr in Europe/Berlin von occurredAt,
+ * Default = aktuelles Jahr in Berlin; das PDF druckt je Buchung den Berliner
+ * Kalendertag. Belegbytes werden NUR aus diesem Haushalt geladen und verlassen
+ * ihn nie (Cache-Control: private, no-store).
  *
  * Größenbudget (F2): Wenn `includeReceipts=1` und die Summe der
  * Beleg-`sizeBytes` das Budget von 50 MB überschreitet, antwortet der
@@ -14,6 +16,7 @@
  * pro Attachment), nicht per `findMany` mit `data` — das hält den
  * Speicher-Peak bei vielen/großen Belegen niedrig.
  */
+import { zonedYearRange } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { TAX_EXPORT_MAX_RECEIPT_BYTES } from "../../../../lib/attachments";
@@ -51,14 +54,12 @@ export async function GET(req: Request) {
   ]);
   const locale = parsed.data.locale ?? (sessionUserRecord?.locale === "en" ? "en" : "de");
 
+  const { start, end } = zonedYearRange(year);
   const transactions = await prisma.transaction.findMany({
     where: {
       account: { householdId: user.householdId },
       taxRelevant: true,
-      occurredAt: {
-        gte: new Date(Date.UTC(year, 0, 1)),
-        lt: new Date(Date.UTC(year + 1, 0, 1))
-      }
+      occurredAt: { gte: start, lt: end }
     },
     orderBy: { occurredAt: "desc" },
     select: {
