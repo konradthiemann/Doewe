@@ -46,6 +46,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
+import { freezePastMonths } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 
 const UpdateInput = z.object({
@@ -154,6 +155,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     bookFromPeriod
   } as Prisma.RecurringTransactionUncheckedUpdateInput;
 
+  // Freeze the budgets of past months first: a YEARLY plan is distributed by
+  // the standing orders, so changing one would otherwise change old months.
+  await freezePastMonths(user.householdId);
   const updated = await prisma.recurringTransaction.update({
     where: { id: params.id },
     data: updateData
@@ -174,6 +178,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   }
 
   // Soft-Delete (Phase 3b): Tombstone statt Hard-Delete für die Sync-Propagation.
+  // Freeze the budgets of past months first: a YEARLY plan is distributed by
+  // the standing orders, so changing one would otherwise change old months.
+  await freezePastMonths(user.householdId);
   await prisma.recurringTransaction.update({ where: { id: params.id }, data: { deletedAt: new Date() } });
   return new NextResponse(null, { status: 204 });
 }

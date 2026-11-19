@@ -2,14 +2,14 @@
 ### Added
 - **Erklärungen an jeder Zahl:** Ein „i" neben Kennzahlen und Funktionen öffnet eine kurze Erklärung in Alltagssprache, wo sinnvoll mit Rechenbeispiel — auf dem Dashboard, in Buchungen, Rückblick, Sparplan, Budgets, Jahresübersicht, Steuer, im Buchungs- und Dauerauftragsformular, beim Beleg-Scan und beim Haushalt.
 - **Sparziel abschließen bucht jetzt wirklich:** Der Betrag wird mit einer Buchung aus dem Spartopf genommen (höchstens so viel, wie im Topf ist), und der Kauf kann im selben Schritt als Ausgabe in einer Kategorie gebucht werden. Der Dialog fragt „Was hat es gekostet?", „Aus dem Spartopf nehmen?" und „Kauf als Ausgabe buchen?" und sagt in einem Satz, was passiert. „Wieder öffnen" nimmt die Entnahme zurück. Der Spartopf lässt sich damit immer aus den Buchungen nachrechnen.
-- **Budget-Warnungen für Budget-Pläne und für beide:** Die Push-Mitteilung bei 80 % und 100 % kommt jetzt auch für Budgets, die unter „Budgets" angelegt wurden (vorher nie), und geht an alle im Haushalt, die sie eingeschaltet haben — auch nach dem Bearbeiten einer Buchung und nach einem Beleg-Scan.
-- **Von Hand erfasste Zahlungen werden erkannt:** Trägst du eine Zahlung selbst ein, für die es einen Dauerauftrag gibt (gleicher Betrag, gleiche Kategorie, höchstens 7 Tage um den Fälligkeitstag), gilt sie als Buchung dieses Monats. Es wird nicht doppelt gebucht und auf dem Dashboard nicht doppelt gezählt. Buchungen eines Dauerauftrags sind in der Liste gekennzeichnet.
+- **Budget-Warnungen für Budget-Pläne und für beide:** Die Push-Mitteilung bei 80 % und 100 % im laufenden Monat kommt jetzt auch für Budgets, die unter „Budgets" angelegt wurden (vorher nie), und geht an alle im Haushalt, die sie eingeschaltet haben — auch nach dem Bearbeiten einer Buchung und nach einem Beleg-Scan.
+- **Von Hand erfasste Zahlungen — die App fragt nach:** Trägst du eine Zahlung selbst ein, für die es einen Dauerauftrag gibt (gleicher Betrag, gleiche Kategorie, höchstens 7 Tage um den Fälligkeitstag), fragt die Übersicht unter „Steht diesen Monat noch an": „Schon bezahlt? … Das war dieser Dauerauftrag". Bestätigst du, wird der Dauerauftrag diesen Monat nicht noch einmal gebucht und nicht doppelt gezählt. Ohne Bestätigung wird nichts verknüpft — eine zusätzliche Zahlung mit gleichem Betrag (zum Beispiel eine Extra-Einzahlung ins Sparen) bleibt so, wie sie ist. Buchungen eines Dauerauftrags sind in der Liste gekennzeichnet.
 - **Sparübersicht auf dem Dashboard:** „Diesen Monat gespart", „Empfohlene Monatsrate", ein Balken dazu und „Im Spartopf" — statt des vollen Zielbetrags der in diesem Monat fälligen Ziele.
 ### Changed
 - **Daueraufträge mit Startdatum in der Vergangenheit** buchen die vergangenen Monate nur noch, wenn „Vergangene Monate nachbuchen" angekreuzt ist (mit Angabe, wie viele Buchungen das wären). Das gilt auch, wenn der Rhythmus geändert oder eine ältere Buchung zum Dauerauftrag gemacht wird. Das Startdatum darf höchstens 10 Jahre vor oder nach heute liegen; Startdatum und „Tag des Monats" widersprechen sich beim Anlegen nicht mehr.
-- **Budgets vergangener Monate bleiben stehen:** Wird ein Budget oder ein Dauerauftrag geändert, wirkt das nur auf den laufenden und künftige Monate. Vorher konnte eine Kategorie im Rückblick nachträglich von „über Budget" auf „unter Budget" springen.
+- **Budgets vergangener Monate bleiben stehen:** Wird ein Budget oder ein Dauerauftrag geändert, wirkt das nur auf den laufenden und künftige Monate. Vorher konnte eine Kategorie im Rückblick nachträglich von „über Budget" auf „unter Budget" springen. Beim Zusammenlegen von Kategorien wandert das festgehaltene Budget mit.
 - Beträge in der Buchungsliste und in der Steuer-Übersicht im selben Format wie überall (`1.234,56 €`).
-- Sparplan: „Geplantes Sparen" heißt „Empfohlene Monatsrate"; „X ausgegeben" an einem Ziel zählt Ausgaben minus Erstattungen statt aller verknüpften Buchungen.
+- Sparplan: „Geplantes Sparen" heißt „Empfohlene Monatsrate" und sinkt nicht mehr in dem Monat, in dem ein Ziel abgeschlossen wird; „X ausgegeben" an einem Ziel zählt Ausgaben minus Erstattungen statt aller verknüpften Buchungen.
 ### Fixed
 - **Demo-Zugang:** Ein gesperrtes oder gelöschtes Demo-Konto meldete sich an, bekam dann aber bei jedem Aufruf „nicht angemeldet". Der Demo-Start belebt das Konto wieder.
 - Beleg-Scan: Die Vorschau-Summe ist die Summe dessen, was gebucht wird (ein Rabatt in eigener Kategorie zählte doppelt); die Menge lässt sich frei eintippen (`0,345`).
@@ -20,7 +20,7 @@
 ### How
 - Migration `20261119180000_goal_withdrawals_alert_scope_snapshots`: `Budget.withdrawalTransactionId` und `Budget.reservedCents` (für vorher abgeschlossene Ziele mit ihrem bisherigen Betrag befüllt, damit „Verfügbar" nicht springt), `RecurringTransaction.bookFromPeriod`, `BudgetAlertLog` nach Haushalt und Kategorie, neue Tabelle `BudgetMonthSnapshot`.
 - Regeln ergänzt in `docs/calculations/00-grundregeln.md` (§4 und §7); die Seiten 03, 04, 06, 07 und `docs/api-reference.md` sind angepasst.
-- Weiterhin so, und in den Erklärungen benannt: Eine Zahlung mit anderem Betrag oder mehr als 7 Tage vom Fälligkeitstag entfernt wird nicht als Dauerauftrag erkannt; löscht man die Buchung eines Monats, bleibt der Monat ohne Buchung.
+- Weiterhin so, und in den Erklärungen benannt: Eine Zahlung mit anderem Betrag oder mehr als 7 Tage vom Fälligkeitstag entfernt wird nicht vorgeschlagen; löscht man die Buchung eines Dauerauftrags (auch eine bestätigte), bleibt der Monat ohne Buchung.
 
 ## [0.1.8] - 2026-11-19
 ### Fixed

@@ -45,6 +45,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../lib/auth";
+import { freezePastMonths } from "../../../lib/categoryBudgets";
 import { prisma } from "../../../lib/prisma";
 
 const RecurringInput = z.object({
@@ -140,6 +141,9 @@ export async function POST(req: Request) {
     bookFromPeriod: bookFromPeriodFor(firstDay, zonedMonth(now), data.backfill ?? false)
   } as Prisma.RecurringTransactionUncheckedCreateInput;
 
+  // Freeze the budgets of past months first: a YEARLY plan is distributed by
+  // the standing orders, so changing one would otherwise change old months.
+  await freezePastMonths(user.householdId);
   const created = await prisma.recurringTransaction.create({
     data: createData
   });

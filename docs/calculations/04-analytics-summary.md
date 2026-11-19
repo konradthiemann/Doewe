@@ -219,12 +219,17 @@ nicht Teil des Abgleichs in Grundregeln §6.
   recurringDueIncomeTotal: number,
   recurringDueOutcomeTotal: number,
   recurringDueCount: number,
+  recurringSuggestions: {            // von Hand erfasste Zahlungen, die ein geplantes Vorkommen sein könnten
+    recurringId, period /* JJJJ-MM */, dueDay /* jjjj-mm-tt */,
+    transactionId, transactionDescription, transactionOccurredAt /* ISO */, amountCents
+  }[],
   projectedSavingsTotal: number,     // monthlySavingsActual + recurringPlannedSavings
   daily: { labels, income, outcome, savings }
 }
 ```
 
-Alle Geldfelder sind Euro, außer `recurringTransactions[].amountCents`.
+Alle Geldfelder sind Euro, außer `recurringTransactions[].amountCents` und
+`recurringSuggestions[].amountCents` (Cents).
 
 ## Simulationsbeispiel
 

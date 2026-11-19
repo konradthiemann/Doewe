@@ -22,6 +22,7 @@ import { addMonthsClamped, monthKey, zonedDate, zonedMonth, zonedTimeToUtc } fro
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../../lib/auth";
+import { freezePastMonths } from "../../../../../lib/categoryBudgets";
 import { prisma } from "../../../../../lib/prisma";
 
 import { MakeRecurringInput } from "./schema";
@@ -58,6 +59,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const next = addMonthsClamped(booking, intervalMonths, dayOfMonth);
   // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
   const nextOccurrence = zonedTimeToUtc({ ...next, hour: 12 });
+
+  // Freeze the budgets of past months first: a YEARLY plan is distributed by
+  // the standing orders, so changing one would otherwise change old months.
+  await freezePastMonths(user.householdId);
 
   try {
     const recurring = await prisma.$transaction(async (tx) => {
