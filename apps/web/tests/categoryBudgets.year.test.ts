@@ -1,7 +1,7 @@
 import { smoothedAvailablePerMonth, planMonthlyCents } from "@doewe/shared";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadEffectiveCategoryBudgetsForYear } from "../lib/categoryBudgets";
+import { loadEffectiveCategoryBudgets, loadEffectiveCategoryBudgetsForYear } from "../lib/categoryBudgets";
 import { loadRecurringYearMatrix } from "../lib/recurringYear";
 
 import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
@@ -9,11 +9,18 @@ import { cleanupTestHousehold, ensureTestHousehold } from "./testHousehold";
 // DB test for loadEffectiveCategoryBudgetsForYear. Recurring fixtures live in 2036 with
 // anchors in the future so the cron test (books all due items globally) is unaffected.
 // Legacy Budget rows are read for every account of the household (SECOND_ACCOUNT_ID).
+// The clock is pinned. For the first block it stands in 2035, so every month of 2036 is still
+// to come and is computed live; the second block moves it into 2036 and beyond, where the
+// months that are over come from their snapshots (BudgetMonthSnapshot).
 const USER_ID = "test-user-category-budgets-year";
 const ACCOUNT_ID = "acc_category_budgets_year";
 const SECOND_ACCOUNT_ID = "acc_category_budgets_year_second";
 const ACCOUNT_IDS = [ACCOUNT_ID, SECOND_ACCOUNT_ID];
 const YEAR = 2036;
+/** 15 Jun 2035, 12:00 in Berlin: all of 2036 is in the future. */
+const BEFORE_THE_YEAR = new Date("2035-06-15T10:00:00.000Z");
+/** 15 Jun 2036, 12:00 in Berlin: January to May are over, June is the current month. */
+const MID_YEAR = new Date("2036-06-15T10:00:00.000Z");
 
 let prisma: import("@prisma/client").PrismaClient;
 let householdId: string;
@@ -77,13 +84,21 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: BEFORE_THE_YEAR });
+  await prisma.budgetMonthSnapshot.deleteMany({ where: { householdId } });
   await prisma.categoryBudgetPlan.deleteMany({ where: { householdId } });
   await prisma.budget.deleteMany({ where: { accountId: { in: ACCOUNT_IDS } } });
   await prisma.category.updateMany({ where: { householdId }, data: { deletedAt: null } });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 afterAll(async () => {
+  vi.useRealTimers();
   if (!prisma) return;
+  await prisma.budgetMonthSnapshot.deleteMany({ where: { householdId } });
   await prisma.categoryBudgetPlan.deleteMany({ where: { householdId } });
   await prisma.budget.deleteMany({ where: { accountId: { in: ACCOUNT_IDS } } });
   await prisma.recurringTransaction.deleteMany({ where: { accountId: ACCOUNT_ID } });
@@ -175,5 +190,141 @@ describe("loadEffectiveCategoryBudgetsForYear", () => {
     const result = await load();
     expect(Object.keys(result)).toEqual([foodId]);
     expect(result[quietId]).toBeUndefined();
+  });
+});
+
+describe("loadEffectiveCategoryBudgetsForYear - completed months are frozen", () => {
+  const monthlyPlan = (categoryId: string, amountCents: number) =>
+    prisma.categoryBudgetPlan.create({ data: { householdId, categoryId, period: "MONTHLY", amountCents } });
+  const setPlan = (categoryId: string, amountCents: number) =>
+    prisma.categoryBudgetPlan.update({ where: { categoryId }, data: { amountCents } });
+  const snapshotMonths = async () =>
+    (await prisma.budgetMonthSnapshot.findMany({ where: { householdId, year: YEAR }, orderBy: { month: "asc" } })).map(
+      (row) => row.month
+    );
+  /** `past` for January to May, `open` for June to December. */
+  const split = <T,>(past: T, open: T): T[] => Array.from({ length: 12 }, (_, index) => (index < 5 ? past : open));
+
+  beforeEach(() => {
+    vi.setSystemTime(MID_YEAR);
+  });
+
+  it("freezes the months before the current one on first read and keeps the others live", async () => {
+    await monthlyPlan(foodId, 25000);
+    expect(await load()).toEqual({ [foodId]: split(25000, 25000) });
+    expect(await snapshotMonths()).toEqual([1, 2, 3, 4, 5]);
+
+    await setPlan(foodId, 40000);
+    expect(await load()).toEqual({ [foodId]: split(25000, 40000) });
+    expect(await snapshotMonths()).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("keeps the YEARLY shares of the months that are over when a standing order is added later", async () => {
+    await prisma.categoryBudgetPlan.create({ data: { householdId, categoryId: hobbyId, period: "YEARLY", amountCents: 1200000 } });
+    const before = (await load())[hobbyId]!;
+    expect(sum(before)).toBe(1200000);
+
+    const added = await prisma.recurringTransaction.create({
+      data: {
+        accountId: ACCOUNT_ID,
+        amountCents: -150000,
+        description: "CBY Kredit",
+        frequency: "MONTHLY",
+        intervalMonths: 6,
+        dayOfMonth: 1,
+        nextOccurrence: new Date(Date.UTC(YEAR, 2, 1, 12))
+      }
+    });
+    try {
+      const live = planMonthlyCents(
+        { period: "YEARLY", amountCents: 1200000 },
+        smoothedAvailablePerMonth(await loadRecurringYearMatrix(householdId, YEAR))
+      );
+      // The new standing order moves the distribution …
+      expect(live).not.toEqual(before);
+      const after = (await load())[hobbyId]!;
+      // … but only for June to December.
+      expect(after.slice(0, 5)).toEqual(before.slice(0, 5));
+      expect(after.slice(5)).toEqual(live.slice(5));
+    } finally {
+      await prisma.recurringTransaction.delete({ where: { id: added.id } });
+    }
+  });
+
+  it("shows no budget in the months that were over before the plan existed", async () => {
+    expect(await load()).toEqual({});
+    await monthlyPlan(foodId, 25000);
+    expect(await load()).toEqual({ [foodId]: split(null, 25000) });
+  });
+
+  it("keeps a budget in the months that are over after its plan was removed", async () => {
+    await monthlyPlan(foodId, 25000);
+    await load();
+    await prisma.categoryBudgetPlan.update({ where: { categoryId: foodId }, data: { deletedAt: new Date() } });
+    expect(await load()).toEqual({ [foodId]: split(25000, null) });
+  });
+
+  it("keeps a per-month Budget row of a month that is over and follows one of a month to come", async () => {
+    const march = await prisma.budget.create({
+      data: { accountId: ACCOUNT_ID, categoryId: travelId, month: 3, year: YEAR, amountCents: 7000 }
+    });
+    const september = await prisma.budget.create({
+      data: { accountId: ACCOUNT_ID, categoryId: travelId, month: 9, year: YEAR, amountCents: 8000 }
+    });
+    const expected: (number | null)[] = Array.from({ length: 12 }, () => null);
+    expected[2] = 7000;
+    expected[8] = 8000;
+    expect(await load()).toEqual({ [travelId]: expected });
+
+    await prisma.budget.update({ where: { id: march.id }, data: { amountCents: 1 } });
+    await prisma.budget.update({ where: { id: september.id }, data: { amountCents: 9000 } });
+    expected[8] = 9000;
+    expect(await load()).toEqual({ [travelId]: expected });
+  });
+
+  it("shares its snapshots with the loader of a single month", async () => {
+    await monthlyPlan(foodId, 25000);
+    // March is frozen by the month loader …
+    expect(await loadEffectiveCategoryBudgets({ householdId, year: YEAR, month: 3 })).toEqual({ [foodId]: 25000 });
+    await setPlan(foodId, 40000);
+    // … the year loader keeps it and freezes the other four months as they are now.
+    const expected = split(40000, 40000);
+    expected[2] = 25000;
+    expect(await load()).toEqual({ [foodId]: expected });
+
+    await setPlan(foodId, 50000);
+    expect(await loadEffectiveCategoryBudgets({ householdId, year: YEAR, month: 2 })).toEqual({ [foodId]: 40000 });
+    expect(await loadEffectiveCategoryBudgets({ householdId, year: YEAR, month: 3 })).toEqual({ [foodId]: 25000 });
+    expect(await loadEffectiveCategoryBudgets({ householdId, year: YEAR, month: 6 })).toEqual({ [foodId]: 50000 });
+  });
+
+  it("reads a year that is over entirely from its snapshots", async () => {
+    vi.setSystemTime(new Date("2037-02-10T10:00:00.000Z"));
+    await monthlyPlan(foodId, 25000);
+    await prisma.categoryBudgetPlan.create({ data: { householdId, categoryId: hobbyId, period: "YEARLY", amountCents: 1200000 } });
+    const first = await load();
+    expect(first[foodId]).toEqual(Array.from({ length: 12 }, () => 25000));
+    expect(sum(first[hobbyId]!)).toBe(1200000);
+    expect(await snapshotMonths()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+
+    await setPlan(foodId, 40000);
+    await prisma.categoryBudgetPlan.update({ where: { categoryId: hobbyId }, data: { deletedAt: new Date() } });
+    await monthlyPlan(travelId, 7000);
+    expect(await load()).toEqual(first);
+  });
+
+  it("gives every reader the same result when several read the year for the first time at once", async () => {
+    await monthlyPlan(foodId, 25000);
+    const results = await Promise.all(Array.from({ length: 6 }, () => load()));
+    for (const result of results) expect(result).toEqual({ [foodId]: split(25000, 25000) });
+    expect(await snapshotMonths()).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("leaves out a category that was deleted since", async () => {
+    await monthlyPlan(foodId, 25000);
+    await monthlyPlan(travelId, 7000);
+    await load();
+    await prisma.category.update({ where: { id: foodId }, data: { deletedAt: new Date() } });
+    expect(await load()).toEqual({ [travelId]: split(7000, 7000) });
   });
 });
