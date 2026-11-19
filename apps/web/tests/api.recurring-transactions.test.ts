@@ -123,8 +123,8 @@ describe("/api/recurring-transactions", () => {
       expect(await anchorFor(25, "2026-11-19T10:00:00.000Z")).toBe("2026-11-25T11:00:00.000Z");
     }, 20000);
 
-    it("is this month when the day is today", async () => {
-      expect(await anchorFor(19, "2026-11-19T10:00:00.000Z")).toBe("2026-11-19T11:00:00.000Z");
+    it("is next month when the day is today, so a payment entered by hand today is not booked again", async () => {
+      expect(await anchorFor(19, "2026-11-19T10:00:00.000Z")).toBe("2026-12-19T11:00:00.000Z");
     }, 20000);
 
     it("is next month when the day has passed", async () => {
@@ -132,9 +132,11 @@ describe("/api/recurring-transactions", () => {
       expect(await anchorFor(18, "2026-11-19T10:00:00.000Z")).toBe("2026-12-18T11:00:00.000Z");
     }, 20000);
 
-    it("treats day 30 and day 31 the same on 30 November: both are due today", async () => {
-      expect(await anchorFor(30, "2026-11-30T10:00:00.000Z")).toBe("2026-11-30T11:00:00.000Z");
-      expect(await anchorFor(31, "2026-11-30T10:00:00.000Z")).toBe("2026-11-30T11:00:00.000Z");
+    it("treats day 30 and day 31 the same on 30 November: both start in December", async () => {
+      expect(await anchorFor(30, "2026-11-30T10:00:00.000Z")).toBe("2026-12-30T11:00:00.000Z");
+      expect(await anchorFor(31, "2026-11-30T10:00:00.000Z")).toBe("2026-12-31T11:00:00.000Z");
+      // One day earlier the clamped day 30 is still ahead.
+      expect(await anchorFor(31, "2026-11-29T10:00:00.000Z")).toBe("2026-11-30T11:00:00.000Z");
     }, 20000);
 
     it("clamps to the last day of the following month and rolls over the year", async () => {
@@ -144,11 +146,11 @@ describe("/api/recurring-transactions", () => {
     }, 20000);
 
     it("takes today from the Berlin calendar, not from UTC", async () => {
-      // 1 Dec 00:30 in Berlin — still 30 Nov in UTC. Day 1 is today, day 30 is ahead in December.
-      expect(await anchorFor(1, "2026-11-30T23:30:00.000Z")).toBe("2026-12-01T11:00:00.000Z");
-      expect(await anchorFor(30, "2026-11-30T23:30:00.000Z")).toBe("2026-12-30T11:00:00.000Z");
-      // 30 Nov 23:30 in Berlin: day 30 is still today.
-      expect(await anchorFor(30, "2026-11-30T22:30:00.000Z")).toBe("2026-11-30T11:00:00.000Z");
+      // 1 Dec 00:30 in Berlin — still 30 Nov in UTC. Day 1 is today (-> January), day 2 is ahead.
+      expect(await anchorFor(1, "2026-11-30T23:30:00.000Z")).toBe("2027-01-01T11:00:00.000Z");
+      expect(await anchorFor(2, "2026-11-30T23:30:00.000Z")).toBe("2026-12-02T11:00:00.000Z");
+      // 30 Nov 23:30 in Berlin: day 1 is ahead, in December.
+      expect(await anchorFor(1, "2026-11-30T22:30:00.000Z")).toBe("2026-12-01T11:00:00.000Z");
     }, 20000);
 
     it("defaults dayOfMonth to 1", async () => {
@@ -185,15 +187,41 @@ describe("/api/recurring-transactions", () => {
     expect(updated.dayOfMonth).toBe(5);
   }, 20000);
 
-  it("re-anchors from today in Berlin when only dayOfMonth is changed via PATCH", async () => {
+  it("keeps the anchor month and changes only the day when only dayOfMonth is sent via PATCH", async () => {
     const created = (await (await create({ startDate: "2027-09-10" })).json()) as Created;
 
-    const ahead = (await (await patch(created.id, { dayOfMonth: 25 })).json()) as Created;
-    expect(ahead.dayOfMonth).toBe(25);
-    expect(ahead.nextOccurrence).toBe("2026-11-25T11:00:00.000Z");
+    const later = (await (await patch(created.id, { dayOfMonth: 25 })).json()) as Created;
+    expect(later.dayOfMonth).toBe(25);
+    expect(later.nextOccurrence).toBe("2027-09-25T10:00:00.000Z");
 
-    const passed = (await (await patch(created.id, { dayOfMonth: 5 })).json()) as Created;
-    expect(passed.nextOccurrence).toBe("2026-12-05T11:00:00.000Z");
+    // Day 31 is clamped to the length of the anchor month; dayOfMonth itself stays 31.
+    const clamped = (await (await patch(created.id, { dayOfMonth: 31 })).json()) as Created;
+    expect(clamped.dayOfMonth).toBe(31);
+    expect(clamped.nextOccurrence).toBe("2027-09-30T10:00:00.000Z");
+  }, 20000);
+
+  it("does not re-anchor a quarterly series when only dayOfMonth is changed via PATCH", async () => {
+    // Quarterly since January 2026: due in Jan, Apr, Jul and Oct. "Today" is 19 Nov 2026.
+    const created = (await (
+      await create({ amountCents: -30000, description: "Versicherung", intervalMonths: 3, startDate: "2026-01-15" })
+    ).json()) as Created;
+
+    const dueMonths = async (year: number) => {
+      const { GET } = await import("../app/api/recurring-transactions/yearly/route");
+      const res = await GET(new Request(`http://localhost/api/recurring-transactions/yearly?year=${year}`));
+      const matrix = (await res.json()) as { expenses: { rows: Array<{ id: string; monthlyCents: number[] }> } };
+      const row = matrix.expenses.rows.find((r) => r.id === created.id);
+      return row?.monthlyCents.flatMap((cents, index) => (cents === 0 ? [] : [index + 1]));
+    };
+    expect(await dueMonths(2026)).toEqual([1, 4, 7, 10]);
+
+    const updated = (await (await patch(created.id, { dayOfMonth: 28 })).json()) as Created;
+    expect(updated.dayOfMonth).toBe(28);
+    // Still anchored in January 2026 — not moved to the next 28th after today.
+    expect(updated.nextOccurrence).toBe("2026-01-28T11:00:00.000Z");
+    // Same phase, and the months before today stay in the yearly view.
+    expect(await dueMonths(2026)).toEqual([1, 4, 7, 10]);
+    expect(await dueMonths(2027)).toEqual([1, 4, 7, 10]);
   }, 20000);
 
   it("leaves nextOccurrence alone when neither startDate nor dayOfMonth is sent", async () => {

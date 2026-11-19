@@ -4,15 +4,19 @@
  *
  * Haushaltsbezogen (401 ohne Session, 404 außerhalb des eigenen Haushalts).
  *
- * Der Anker `nextOccurrence` wird nur neu gesetzt, wenn `startDate` (yyyy-mm-dd, hat
- * Vorrang) oder `dayOfMonth` im Body steht — wie beim Anlegen als 12:00 Uhr Berliner Zeit
- * des gemeinten Kalendertags; aus `dayOfMonth` allein: laufender Monat, falls der (auf die
- * Monatslänge begrenzte) Tag heute ist oder noch bevorsteht, sonst nächster Monat ("heute"
- * in Europe/Berlin). Bereits gebuchte Vorkommen bleiben unberührt.
+ * Der Anker `nextOccurrence` wird nur angefasst, wenn `startDate` oder `dayOfMonth` im Body
+ * steht, und immer als 12:00 Uhr Berliner Zeit des gemeinten Kalendertags gespeichert:
+ * - `startDate` (yyyy-mm-dd, hat Vorrang) setzt die Serie neu auf: dieses Datum ist die
+ *   erste Buchung.
+ * - `dayOfMonth` allein ändert nur den Tag: der Anker-Monat bleibt, der Tag wird auf die
+ *   Länge dieses Monats begrenzt. Die Serie wird dadurch NICHT neu aufgesetzt — bei einem
+ *   Intervall über 1 bleiben die fälligen Monate dieselben, und kein früherer Monat fällt
+ *   aus der Jahresübersicht.
+ * Bereits gebuchte Vorkommen bleiben in beiden Fällen unberührt.
  *
  * PATCH Body: { accountId?, categoryId? (null erlaubt), amountCents?, description?, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd) }
  */
-import { firstOccurrenceFrom, parseDayKey, zonedDate, zonedTimeToUtc, type CalendarDate } from "@doewe/shared";
+import { occurrenceDate, parseDayKey, zonedMonth, zonedTimeToUtc, type CalendarDate } from "@doewe/shared";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -66,15 +70,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
   }
 
-  // nextOccurrence neu bestimmen: ein explizites startDate hat Vorrang; sonst wird
-  // (wie bisher) aus einem geänderten dayOfMonth neu berechnet.
+  // nextOccurrence neu bestimmen: ein explizites startDate setzt die Serie neu auf. Ein
+  // geändertes dayOfMonth allein verschiebt nur den Tag im bestehenden Anker-Monat — die
+  // Fälligkeit rechnet ohnehin nur mit dem Anker-MONAT, so bleibt die Phase der Serie.
   const startDay = data.startDate ? parseDayKey(data.startDate) : null;
   const resolvedDayOfMonth = data.dayOfMonth ?? startDay?.day;
   let firstDay: CalendarDate | undefined;
   if (startDay) {
     firstDay = startDay;
   } else if (data.dayOfMonth !== undefined) {
-    firstDay = firstOccurrenceFrom(zonedDate(new Date()), data.dayOfMonth);
+    firstDay = occurrenceDate(zonedMonth(existing.nextOccurrence), data.dayOfMonth);
   }
   // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
   const nextOccurrence = firstDay ? zonedTimeToUtc({ ...firstDay, hour: 12 }) : undefined;
