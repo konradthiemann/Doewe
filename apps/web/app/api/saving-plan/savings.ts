@@ -60,7 +60,7 @@ async function sumSavingsCents(
   db: Db = prisma,
   depositsOnly = false
 ): Promise<number> {
-  savingsIds ??= await loadSavingsCategoryIds(householdId);
+  savingsIds ??= await loadSavingsCategoryIds(householdId, db);
   if (savingsIds.size === 0) {
     return 0;
   }

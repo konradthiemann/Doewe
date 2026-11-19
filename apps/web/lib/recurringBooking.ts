@@ -72,7 +72,7 @@ import {
 } from "@doewe/shared";
 
 import { DEMO_ACCOUNT_ID } from "./demoConstants";
-import { prisma } from "./prisma";
+import { LOCKED_TRANSACTION_OPTIONS, prisma } from "./prisma";
 import { loadBookedOccurrenceKeys, occurrenceKey } from "./recurringPeriods";
 
 export type BookedOccurrence = {
@@ -286,7 +286,7 @@ async function bookOccurrenceOnce(rec: DueRecurring, dueDay: CalendarDate): Prom
       },
       select: { id: true }
     });
-  });
+  }, LOCKED_TRANSACTION_OPTIONS);
 }
 
 /**
@@ -480,5 +480,5 @@ export async function linkBookingToOccurrence(params: {
       select: { id: true }
     });
     return { status: "linked", id: linked.id, recurringTransactionId: recurringId, recurringPeriod: period };
-  });
+  }, LOCKED_TRANSACTION_OPTIONS);
 }

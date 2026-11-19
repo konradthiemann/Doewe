@@ -27,7 +27,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
-import { prisma } from "../../../../lib/prisma";
+import { LOCKED_TRANSACTION_OPTIONS, prisma } from "../../../../lib/prisma";
 import { findSavingsBookingCategoryId, getAvailableSavingsCents, lockSavingsPool } from "../savings";
 
 const WithdrawInput = z.object({
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
       }
     });
     return { availableCents, created };
-  });
+  }, LOCKED_TRANSACTION_OPTIONS);
 
   const { availableCents, created } = result;
   if (!created) {

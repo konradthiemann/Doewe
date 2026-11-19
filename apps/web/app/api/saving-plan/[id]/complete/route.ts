@@ -48,7 +48,7 @@ import { z } from "zod";
 
 import { getSessionUser } from "../../../../../lib/auth";
 import { checkBudgetAlerts } from "../../../../../lib/budgetAlerts";
-import { prisma } from "../../../../../lib/prisma";
+import { LOCKED_TRANSACTION_OPTIONS, prisma } from "../../../../../lib/prisma";
 import { INT4_MAX } from "../../../transactions/schema";
 import { findSavingsBookingCategoryId, getAvailableSavingsCents, lockSavingsPool } from "../../savings";
 
@@ -195,7 +195,7 @@ export async function POST(
 
     const updated = await tx.budget.update({ where: { id }, data: { withdrawalTransactionId } });
     return { updated, withdrawnCents, expenseTransactionId };
-  });
+  }, LOCKED_TRANSACTION_OPTIONS);
 
   if (!outcome) {
     return NextResponse.json({ error: "Goal already completed" }, { status: 409 });
@@ -255,7 +255,7 @@ export async function DELETE(
       where: { id },
       data: { completedAt: null, spentCents: null, withdrawalTransactionId: null, reservedCents: null }
     });
-  });
+  }, LOCKED_TRANSACTION_OPTIONS);
 
   return NextResponse.json(updated);
 }
