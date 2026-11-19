@@ -1,11 +1,20 @@
 "use client";
 
+import { parseDayKey } from "@doewe/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { ATTACHMENT_MAX_SIZE_BYTES, isAllowedAttachmentMimeType } from "../lib/attachments";
 import { useI18n } from "../lib/i18n";
 import { compressImage, UnsupportedAttachmentError } from "../lib/imageCompression";
+import {
+  bookedTotalCents,
+  buildBatchRequest,
+  groupBookableLines,
+  inheritedTaxRelevance,
+  lineTotalCents,
+  receiptDayOrToday
+} from "../lib/receiptLines";
 
 import { uploadAttachment } from "./AttachmentManager";
 import { Button } from "./ui/Button";
@@ -38,6 +47,7 @@ interface Category {
   id: string;
   name: string;
   isIncome?: boolean;
+  isTaxRelevant?: boolean;
 }
 
 interface Account {
@@ -103,9 +113,13 @@ export default function ReceiptReview({
   const defaultCategoryId = expenseCategories[0]?.id ?? "";
 
   const [merchant, setMerchant] = useState(scanResult.merchant ?? "");
-  const [receiptDate, setReceiptDate] = useState(scanResult.date);
+  // The scanned date is free text from the model: anything that is not a real
+  // calendar day becomes today (Europe/Berlin) instead of a 400 on booking.
+  const [receiptDate, setReceiptDate] = useState(() => receiptDayOrToday(scanResult.date));
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [taxRelevant, setTaxRelevant] = useState(false);
+  // null = switch untouched: the request carries no `taxRelevant` and every
+  // booking inherits the flag of its category, like a manual booking.
+  const [taxOverride, setTaxOverride] = useState<boolean | null>(null);
 
   const [items, setItems] = useState<LineItem[]>(() =>
     scanResult.items.length > 0
@@ -135,7 +149,8 @@ export default function ReceiptReview({
         if (i !== index) return item;
         const updated = { ...item, ...updates };
         if ("quantity" in updates || "unitPriceCents" in updates) {
-          updated.totalCents = updated.quantity * updated.unitPriceCents;
+          // Whole cents: 0.345 × 1299 would otherwise be a fraction the API rejects.
+          updated.totalCents = lineTotalCents(updated.quantity, updated.unitPriceCents);
         }
         return updated;
       })
@@ -164,55 +179,27 @@ export default function ReceiptReview({
     ]);
   };
 
-  const grouped = useMemo(() => {
-    const map = new Map<
-      string,
-      { category: Category; items: LineItem[]; totalCents: number }
-    >();
-    for (const item of items) {
-      if (!item.name.trim()) continue;
-      const cat = categories.find((c) => c.id === item.categoryId);
-      if (!cat) continue;
-      const existing = map.get(item.categoryId);
-      if (existing) {
-        existing.items.push(item);
-        existing.totalCents += item.totalCents;
-      } else {
-        map.set(item.categoryId, {
-          category: cat,
-          items: [item],
-          totalCents: item.totalCents
-        });
-      }
-    }
-    return Array.from(map.values());
-  }, [items, categories]);
+  // Only named lines in a known category are booked — the preview and its
+  // total show exactly those.
+  const grouped = useMemo(() => groupBookableLines(items, categories), [items, categories]);
 
-  const totalCents = items.reduce((sum, i) => sum + i.totalCents, 0);
+  const totalCents = bookedTotalCents(grouped);
+
+  // While untouched, the switch shows what the bookings will inherit from the
+  // categories chosen below: on if all are tax-relevant, off if none is,
+  // "mixed" otherwise. Touching it sets one explicit value for all bookings.
+  const inheritedTax = inheritedTaxRelevance(grouped);
+  const taxChecked = taxOverride ?? inheritedTax === "all";
+  const taxMixed = taxOverride === null && inheritedTax === "mixed";
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const groups = grouped.map((g) => ({
-        categoryId: g.category.id,
-        items: g.items.map((item) => ({
-          name: item.name,
-          quantity: item.quantity,
-          unitPriceCents: item.unitPriceCents,
-          totalCents: item.totalCents,
-          position: item.position
-        }))
-      }));
-
       const res = await fetch("/api/transactions/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          receiptDate,
-          receiptMerchant: merchant || undefined,
-          accountId,
-          taxRelevant,
-          groups
-        })
+        body: JSON.stringify(
+          buildBatchRequest({ receiptDate, merchant, accountId, taxOverride, groups: grouped })
+        )
       });
 
       if (!res.ok) {
@@ -247,8 +234,9 @@ export default function ReceiptReview({
     }
   });
 
+  // The date field can be emptied by hand; the endpoint needs a real calendar day.
   const canSubmit =
-    items.some((i) => i.name.trim() && i.totalCents !== 0) && accountId;
+    items.some((i) => i.name.trim() && i.totalCents !== 0) && accountId && parseDayKey(receiptDate) !== null;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-6">
@@ -305,8 +293,12 @@ export default function ReceiptReview({
           <label className="flex items-center gap-2 text-sm text-ink-muted">
             <input
               type="checkbox"
-              checked={taxRelevant}
-              onChange={(e) => setTaxRelevant(e.target.checked)}
+              checked={taxChecked}
+              ref={(el) => {
+                if (el) el.indeterminate = taxMixed;
+              }}
+              aria-checked={taxMixed ? "mixed" : taxChecked}
+              onChange={(e) => setTaxOverride(e.target.checked)}
               className="rounded border-line text-brand focus:ring-brand"
             />
             {t("receiptScanner.taxRelevant")}
