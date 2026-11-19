@@ -1,7 +1,11 @@
 # Sparpläne und Sparziele
 
-**Quelle:** `apps/web/app/api/saving-plan/route.ts`, `apps/web/app/api/saving-plan/[id]/route.ts`, `apps/web/app/api/saving-plan/[id]/complete/route.ts`, `apps/web/app/api/saving-plan/compute.ts`
-**Endpoints:** `GET/POST /api/saving-plan`, `GET/PATCH/DELETE /api/saving-plan/[id]`, `POST/DELETE /api/saving-plan/[id]/complete`
+**Quelle:** `apps/web/app/api/saving-plan/route.ts`, `apps/web/app/api/saving-plan/[id]/route.ts`, `apps/web/app/api/saving-plan/[id]/complete/route.ts`, `apps/web/app/api/saving-plan/withdraw/route.ts`, `apps/web/app/api/saving-plan/compute.ts` (Berechnung), `apps/web/app/api/saving-plan/savings.ts` (Spartopf)
+**Endpoints:** `GET/POST /api/saving-plan`, `GET/PATCH/DELETE /api/saving-plan/[id]`, `POST/DELETE /api/saving-plan/[id]/complete`, `POST /api/saving-plan/withdraw`
+
+Was eine Spar-Kategorie ist und dass der Haushalt der Mandant ist, steht in
+[00-grundregeln.md](./00-grundregeln.md) §2 und §3. „Laufender Monat" ist der Berliner Kalendermonat
+(§1).
 
 ## Datenmodell
 
@@ -11,45 +15,50 @@ Sparziele verwenden das **Budget-Modell** mit `categoryId = null`:
 Budget (als Sparziel)
 ├── categoryId  = null       — unterscheidet Sparziel von Kategorie-Budget
 ├── title                    — Pflichtfeld (z.B. "Urlaub 2027")
-├── month       = Zielmonat  — wann das Ziel erreicht sein soll (1-12)
-├── year        = Zielyahr
-├── amountCents              — Ziel-Betrag in Cents (mind. 1)
+├── month       = Zielmonat  — wann das Ziel erreicht sein soll (1-12); null = ohne Termin
+├── year        = Zieljahr   — null = ohne Termin (Monat und Jahr nur gemeinsam)
+├── amountCents              — Ziel-Betrag in Cents (mind. 1); null = noch kein Betrag
 ├── completedAt = null       — null = aktives Ziel, gesetzt = abgeschlossen
 └── spentCents  = null       — beim Abschluss tatsächlich aus dem Spar-Topf
                                 entnommener Betrag (Snapshot); null solange aktiv
 ```
 
-Ein Ziel ist **aktiv**, solange `completedAt == null`. Sobald es abgeschlossen wird,
-hält `spentCents` den Betrag fest, der dafür aus dem gemeinsamen Spar-Topf entnommen
-wurde. Aktive und abgeschlossene Ziele werden in der GET-Response getrennt geliefert
-(`goals` vs. `completedGoals`).
+Drei Zustände, in der GET-Response getrennt geliefert:
+
+| Liste | Bedingung | Rolle |
+|---|---|---|
+| `goals` | `completedAt == null`, Monat und Jahr gesetzt | aktive Ziele mit Termin — nur sie treiben Zielsumme und Monatsrate |
+| `undatedGoals` | `completedAt == null`, ohne Termin | Ideen-Liste; nimmt an keiner Berechnung teil |
+| `completedGoals` | `completedAt` gesetzt | abgeschlossen; `spentCents` reserviert einen Teil des Topfs |
+
+Die Sparplan-Routen arbeiten nur mit `Budget`-Zeilen **ohne** Kategorie, gelesen über alle Konten des
+Haushalts. Ein Kategorie-Budget ist hier kein Ziel: `GET` listet es nicht, die Routen unter `[id]`
+und `[id]/complete` antworten dafür mit `404`.
 
 ## Verfügbares Spar-Guthaben (rawAvailableCents → availableCents)
 
 ### Schritt 1: Roher Spar-Saldo (rawAvailableCents)
 
-`resolveSavingsBalanceCents` in `route.ts` ermittelt den rohen Spar-Saldo aus den
-Transaktionen der Spar-Kategorie:
+`resolveSavingsBalanceCents(householdId)` in `savings.ts` ermittelt den Spartopf des Haushalts: die
+negierte Summe aller Buchungen in **allen Spar-Kategorien** über **alle Konten**.
 
 ```typescript
-async function resolveSavingsBalanceCents(accountId, userId) {
-  const savingsCatId = await findSavingsCategoryId(userId);
-  if (!savingsCatId) return 0;
-
-  const savingsTransactions = await prisma.transaction.findMany({
-    where: { accountId, categoryId: savingsCatId },
-    select: { amountCents: true }
-  });
-
-  // Sparbuchungen sind negativ → negieren für positiven Saldo
-  return savingsTransactions.reduce((total, tx) => total - tx.amountCents, 0);
-}
+const aggregate = await prisma.transaction.aggregate({
+  where: {
+    account: { householdId },
+    categoryId: { in: [...savingsIds] },
+    ...(range ? { occurredAt: { gte: range.start, lt: range.end } } : {})
+  },
+  _sum: { amountCents: true }
+});
+return 0 - (aggregate._sum.amountCents ?? 0);
 ```
 
 **Wichtig:**
-- Es werden **alle Sparbuchungen aller Zeiten** summiert, nicht nur diesen Monat
-- Die Berechnung negiert die negativen `amountCents` → Ergebnis ist immer positiv (sofern nur Sparbuchungen)
-- Eventuell gibt es auch positive Transaktionen in der Spar-Kategorie (z.B. Rückbuchungen) — diese würden den Saldo verringern
+- Es werden **alle Sparbuchungen aller Zeiten** summiert, nicht nur diesen Monat (kein `range`)
+- Einzahlungen sind negativ gespeichert, Entnahmen positiv — die negierte Summe ist der Saldo des Topfs
+- Gelöschte Buchungen zählen nicht
+- Ein Haushalt mit "Savings" und "Sparen" hat **einen** Topf aus beiden; jede Route sieht dieselbe Zahl
 - Wenn keine Spar-Kategorie existiert: `rawAvailableCents = 0`
 
 Dieser Wert wird in den Totals als `rawAvailableCents` ausgewiesen.
@@ -75,56 +84,66 @@ const availableCents = Math.max(rawSavingsBalance - withdrawnForCompletedCents, 
 - Der Abschluss eines Ziels reduziert nur diesen rechnerischen Topf — siehe Abschnitt
   "Completion-Lebenszyklus" zur Buchungs-Konvention
 
+`getAvailableSavingsCents(householdId)` in `savings.ts` berechnet denselben Wert für die Entnahme
+(Obergrenze von `POST /api/saving-plan/withdraw`).
+
 ## Transaktionen verknüpft mit Sparzielen
 
 ```typescript
-transactionSpentCents: goal.transactions.reduce(
-  (sum, tx) => sum + Math.abs(tx.amountCents), 0
-)
+transactionSpentCents: goal.transactions.reduce((sum, tx) => sum + Math.abs(tx.amountCents), 0)
 ```
 
-- `goal.transactions` = alle Transaktionen mit `savingGoalId = goal.id`
+- `goal.transactions` = alle **nicht gelöschten** Transaktionen mit `savingGoalId = goal.id`
 - Summiert den **absoluten Betrag** aller verknüpften Transaktionen
-- Zeigt, wie viel bereits auf dieses Ziel eingezahlt wurde
+- Die Oberfläche zeigt den Wert als für das Ziel **ausgegeben** an. In die Berechnung des Topfs und
+  der Monatsrate geht er nicht ein.
 
 ## Zielsumme (totalTargetCents)
 
 ```typescript
-const totalTargetCents = activeGoals.reduce((sum, goal) => sum + goal.amountCents, 0);
+const totalTargetCents = activeGoals.reduce((sum, goal) => sum + (goal.amountCents ?? 0), 0);
 ```
 
-`totalTargetCents` summiert nur die `amountCents` der **aktiven** Ziele
-(`completedAt == null`). Abgeschlossene Ziele zählen nicht mehr zur offenen Zielsumme.
+`activeGoals` sind die aktiven Ziele **mit Termin**. Abgeschlossene Ziele und Ziele ohne Termin
+zählen nicht zur offenen Zielsumme; ein Ziel ohne Betrag zählt mit 0.
 
 ## Empfohlene monatliche Sparrate (suggestedMonthlyCents)
 
 Der Algorithmus berechnet den **kleinsten konstanten Monatsbetrag** X, mit dem alle
-**aktiven** Sparziele pünktlich erreicht werden können. Die Schleife läuft ausschließlich
-über die aktiven Ziele und nutzt den um die abgeschlossenen Ziele bereinigten
-`availableCents` als Puffer.
+aktiven Sparziele mit Termin pünktlich erreicht werden können. X ist der Betrag, der in **jedem
+verbleibenden Monat einschließlich des laufenden** zurückzulegen ist.
+
+Deshalb wird gegen den Topf gerechnet, **wie er zu Beginn des laufenden Monats stand**: Was in diesem
+Monat schon eingezahlt wurde, ist der Nutzer, der der Rate folgt — kein Grund, sie zu senken. (Würde
+man die Einzahlungen dieses Monats als gedeckt zählen und den laufenden Monat trotzdem als offen,
+zählte der Monat doppelt, und die Rate fiele, sobald man spart.)
 
 ### Algorithmus
 
 ```
-Für jedes Ziel i (sortiert nach Deadline):
+savedThisMonth = Netto-Einzahlungen in die Spar-Kategorien im laufenden Monat
+                 (resolveSavedThisMonthCents; Entnahmen abgezogen, kann negativ sein)
+coveredAtMonthStart = max(availableCents - max(savedThisMonth, 0), 0)
+
+Für jedes aktive Ziel i mit Termin (sortiert nach Jahr, Monat):
   cumulativeAmount[i] = Summe der Zielbeträge von Ziel 1 bis i
-  cumulativeRemaining[i] = max(cumulativeAmount[i] - availableCents, 0)
+  cumulativeRemaining[i] = max(cumulativeAmount[i] - coveredAtMonthStart, 0)
   monthsUntil[i] = max((year - currentYear)*12 + (month - currentMonth), 1)
   requiredMonthly[i] = ceil(cumulativeRemaining[i] / monthsUntil[i])
 
-suggestedMonthlyCents = max(requiredMonthly[1..n])
+suggestedMonthlyCents = max(requiredMonthly[1..n])     (ohne Ziele: 0)
 ```
+
+Eine Netto-Entnahme im laufenden Monat (`savedThisMonth < 0`) wird nicht zurückaddiert — dieses Geld
+ist aus dem Topf.
 
 ```mermaid
 flowchart TD
-    A["Aktive Sparziele sortiert nach Deadline\n(completedAt == null)"] --> B
+    A["Aktive Sparziele mit Termin, sortiert nach Termin"] --> B
     B["availableCents = max(rawSaldo - withdrawnForCompleted, 0)"] --> C
-    C["totalTargetCents = SUM Zielbeträge aktiver Ziele"] --> D
-    D{totalTargetCents > availableCents?}
-    D -->|nein| ZERO["suggestedMonthlyCents = 0\n(bereits genug gespart)"]
-    D -->|ja| LOOP["Für jedes Ziel i in Reihenfolge:"]
-    LOOP --> CUM["cumulativeAmount += goal.amountCents"]
-    CUM --> REM["cumulativeRemaining = max(cumulativeAmount - availableCents, 0)"]
+    C["coveredAtMonthStart = max(availableCents - max(savedThisMonth, 0), 0)"] --> LOOP
+    LOOP["Für jedes Ziel i in Reihenfolge:"] --> CUM["cumulativeAmount += goal.amountCents"]
+    CUM --> REM["cumulativeRemaining = max(cumulativeAmount - coveredAtMonthStart, 0)"]
     REM --> MONTHS["monthsUntil = max((zielJahr-jetzt)*12 + (zielMonat-jetzt), 1)"]
     MONTHS --> REQ["requiredMonthly = ceil(cumulativeRemaining / monthsUntil)"]
     REQ --> MAX["suggestedMonthlyCents = max(suggestedMonthlyCents, requiredMonthly)"]
@@ -137,12 +156,13 @@ flowchart TD
 **Annahmen:**
 - Aktuell: Juni 2026
 - Keine abgeschlossenen Ziele → `availableCents == rawAvailableCents`
-- Verfügbares Guthaben (`availableCents`): 1.000 € (100.000 Cents)
+- Topf zu Monatsbeginn: 1.000 € (100.000 Cents), im Juni noch nichts eingezahlt
 - Ziel 1: "Laptop" — 800 € bis September 2026 (3 Monate), aktiv
 - Ziel 2: "Urlaub" — 1.500 € bis Dezember 2026 (6 Monate), aktiv
 
 | Schritt | Wert |
 |---|---|
+| coveredAtMonthStart | max(100.000 - 0, 0) = 100.000 Cents |
 | cumulativeAmount nach Ziel 1 | 80.000 Cents |
 | cumulativeRemaining Ziel 1 | max(80.000 - 100.000, 0) = 0 (schon gedeckt) |
 | requiredMonthly Ziel 1 | ceil(0 / 3) = 0 |
@@ -151,42 +171,43 @@ flowchart TD
 | requiredMonthly Ziel 2 | ceil(130.000 / 6) = 21.667 Cents = 216,67 € |
 | **suggestedMonthlyCents** | **21.667 Cents ≈ 216,67 €** |
 
+Zahlt der Nutzer im Juni 216,67 € ein, steigt `availableCents` auf 121.667 Cents;
+`coveredAtMonthStart` bleibt `121.667 − 21.667 = 100.000`, und die Rate bleibt bei 21.667 Cents.
+
 ### Wichtige Details
 
-- `monthsUntil` wird auf **mindestens 1** geclampt — Division durch 0 ausgeschlossen
+- `monthsUntil` wird auf **mindestens 1** geclampt — Division durch 0 ausgeschlossen; ein Ziel, dessen Termin der laufende Monat ist oder schon vorbei ist, wird mit einem Monat gerechnet
 - `Math.ceil()` — immer aufgerundet, kein Untersparen möglich
-- `usedAvailable = availableCents` wird konstant gehalten — nicht für jedes Ziel erneut subtrahiert. Das bedeutet: Das Guthaben wird nur einmalig als "Puffer" betrachtet, nicht pro Ziel einzeln zugewiesen.
+- Der gedeckte Betrag wird nicht pro Ziel erneut abgezogen: Er steht den Zielen in Terminreihenfolge einmalig als Puffer zur Verfügung.
+- Alle anderen Werte der `totals` (`rawAvailableCents`, `availableCents`, `totalTargetCents`) rechnen gegen den echten, aktuellen Topf — nur die Rate gegen den Stand zu Monatsbeginn.
 
 ## API-Besonderheit: flexible Feldnamen
 
 Die POST- und PATCH-Endpunkte akzeptieren mehrere Feldnamen für Monat/Jahr:
 
 ```typescript
-// POST: targetMonth, month, dueMonth werden alle akzeptiert
+// POST: targetMonth, month, dueMonth (und targetYear, year, dueYear)
 targetMonth: json?.targetMonth ?? json?.month ?? json?.dueMonth
 
-// PATCH: targetMonth, month
-targetMonth: json?.targetMonth ?? json?.month
+// PATCH: targetMonth, month — ein ausdrückliches null bleibt erhalten (entfernt den Termin)
+targetMonth: json?.targetMonth !== undefined ? json.targetMonth : json?.month
 ```
 
-## Titel-Normalisierung
+Monat und Jahr müssen immer gemeinsam gesetzt oder gemeinsam weggelassen bzw. auf `null` gesetzt
+werden, sonst `400`. Ein Titel nur aus Leerraum und ein Betrag über dem int4-Bereich sind ebenfalls
+`400`.
 
-```typescript
-function normalizeTitle({ title, categoryName, month, year }) {
-  const trimmed = title?.trim();
-  if (trimmed) return trimmed;          // 1. Expliziter Titel
-  if (categoryName) return categoryName; // 2. Kategoriename als Fallback
-  return `${year}-${String(month).padStart(2, "0")}`;  // 3. Datum als letzter Ausweg
-}
-```
+## Titel
 
-Da Sparziele immer `categoryId = null` haben, ist `categoryName` immer `null` — der Fallback ist also immer das Datum-Format.
+Der Titel ist beim Anlegen Pflicht und wird ohne Leerraum am Rand gespeichert. `normalizeTitle` in
+`route.ts` ist nur noch ein Fallback für alte Zeilen mit leerem Titel: Sie zeigt dann `JJJJ-MM` des
+Termins, bei Zielen ohne Termin einen leeren Text.
 
 ## GET /api/saving-plan — Response
 
 ```typescript
 {
-  goals: [                          // NUR aktive Ziele (completedAt == null)
+  goals: [                          // aktive Ziele MIT Termin, sortiert nach Termin
     {
       id: string,
       accountId: string,
@@ -195,38 +216,47 @@ Da Sparziele immer `categoryId = null` haben, ist `categoryName` immer `null` �
       title: string,
       month: number,
       year: number,
-      amountCents: number,
-      transactionSpentCents: number,  // Abs-Summe verknüpfter Transaktionen
+      amountCents: number | null,
+      transactionSpentCents: number,  // Abs-Summe verknüpfter, nicht gelöschter Transaktionen
       completedAt: null,              // bei aktiven Zielen immer null
       spentCents: null,               // bei aktiven Zielen immer null
       createdAt: DateTime
     }
   ],
+  undatedGoals: [ /* aktive Ziele OHNE Termin, gleiche Felder, month und year null */ ],
   completedGoals: [                 // abgeschlossene Ziele (completedAt != null), gleiche Felder
     {
-      id: string,
-      accountId: string,
-      categoryId: null,
-      categoryName: null,
-      title: string,
-      month: number,
-      year: number,
-      amountCents: number,
-      transactionSpentCents: number,
+      // …
       completedAt: DateTime,          // Abschluss-Zeitpunkt
-      spentCents: number,             // bei Abschluss entnommener Betrag (Snapshot)
-      createdAt: DateTime
+      spentCents: number              // bei Abschluss entnommener Betrag (Snapshot)
     }
   ],
   totals: {
     rawAvailableCents: number,          // roher Spar-Saldo (vor Reservierung)
     withdrawnForCompletedCents: number, // SUM spentCents aller abgeschlossenen Ziele
     availableCents: number,             // max(rawAvailableCents - withdrawnForCompleted, 0)
-    totalTargetCents: number,           // Summe der Zielbeträge NUR aktiver Ziele
-    suggestedMonthlyCents: number       // Empfohlene Monatsrate (nur aktive Ziele)
+    totalTargetCents: number,           // Summe der Zielbeträge aktiver Ziele mit Termin
+    suggestedMonthlyCents: number       // Empfohlene Monatsrate (siehe oben)
   }
 }
 ```
+
+`404`, wenn der Haushalt kein Konto hat.
+
+## Entnahme — `POST /api/saving-plan/withdraw`
+
+Bucht Geld aus dem Spartopf zurück ins Alltagsbudget: eine **positive** Buchung in einer
+Spar-Kategorie des Haushalts. Die Auswertungen ordnen sie als Sparen ein (Grundregeln §2) — sie
+verringert „Gespart" des Monats und ist keine Einnahme.
+
+- **Body:** `{ amountCents, accountId?, description? }` — `amountCents` ganze Zahl > 0; `accountId`
+  Standard: das älteste Konto des Haushalts; `description` Standard `"Savings withdrawal"`
+- **Obergrenze:** `getAvailableSavingsCents` — der Topf des Haushalts abzüglich der Reservierungen
+  abgeschlossener Ziele. Mehr geht nicht: `409` mit `availableCents`
+- **Kategorie:** Bei mehreren Spar-Kategorien geht die Buchung in die älteste
+  (`findSavingsBookingCategoryId`). Gibt es keine: `409`
+- **Datum:** `occurredAt` ist der Zeitpunkt der Anfrage
+- **Response `201`:** `{ id, amountCents, availableCents }` (`availableCents` = Rest nach der Entnahme)
 
 ## Completion-Lebenszyklus
 
@@ -236,17 +266,17 @@ Route `POST/DELETE /api/saving-plan/[id]/complete`.
 
 ### Abschließen — `POST /api/saving-plan/[id]/complete`
 
-- **Body (Zod):** `{ spentCents: number }` — Integer `>= 0`, der tatsächlich aus dem
+- **Body (Zod):** `{ spentCents: number }` — Integer `>= 0` (höchstens int4), der tatsächlich aus dem
   Spar-Topf entnommene Betrag
 - **Wirkung:** `completedAt = now`, `spentCents = <Body>`
-- **Guards:** Auth (`401` ohne Session), Existenz (`404` Goal not found),
-  Ownership (`403` Forbidden), Validierung (`400` bei ungültigem Body)
+- **Guards:** Auth (`401` ohne Session), Existenz (`404` Goal not found — auch für ein
+  Kategorie-Budget), Haushalt (`403` Forbidden), Validierung (`400` bei ungültigem Body)
 - **Response:** `{ id, completedAt, spentCents }`
 
 ### Wiedereröffnen — `DELETE /api/saving-plan/[id]/complete`
 
 - **Wirkung:** `completedAt = null`, `spentCents = null` — das Ziel ist wieder aktiv
-- **Guards:** identisch (Auth, Existenz, Ownership)
+- **Guards:** identisch (Auth, Existenz, Haushalt)
 - **Response:** `{ id, completedAt, spentCents }`
 
 ### Buchungs-Konvention (wichtig)
@@ -255,19 +285,39 @@ Der Abschluss erzeugt **keine echte Transaktion**. Der `spentCents`-Abzug ist ei
 reine Berechnung in der Sparplan-API:
 
 - Der **rohe Spar-Saldo** (`rawAvailableCents`, abgeleitet aus den Transaktionen der
-  Spar-Kategorie) bleibt durch den Abschluss **unverändert**.
+  Spar-Kategorien) bleibt durch den Abschluss **unverändert**.
 - Lediglich `availableCents` (der Topf für die aktiven Ziele) sinkt rechnerisch um den
   reservierten `spentCents`-Betrag.
 - Der **echte Kontostand** sinkt nur, wenn die Ausgabe **separat als Transaktion**
   gebucht wird — der Abschluss allein bewegt kein Geld.
 
+### Bekannte Grenzen
+
+Diese Punkte sind bewusst unverändert und offen:
+
+- **Kein Abgleich mit den Buchungen:** Weil der Abschluss keine Buchung erzeugt, ist „Verfügbar"
+  (`availableCents`) = roher Topf − Σ `spentCents`. Sobald ein Ziel abgeschlossen wurde, lässt sich
+  diese Zahl nicht mehr aus den Sparbuchungen allein herleiten und stimmt mit ihrer Summe nicht
+  überein.
+- **Entnahme und Abschluss zählen doppelt:** Wer das Geld für ein Ziel erst über `withdraw` entnimmt
+  (der rohe Topf sinkt) und das Ziel danach mit demselben Betrag als `spentCents` abschließt (die
+  Reservierung steigt), zieht den Betrag zweimal vom verfügbaren Topf ab. Die Oberfläche schlägt
+  beim Abschluss den dem Ziel zugeordneten Anteil des Topfs als Betrag vor.
+- **`spentCents` ist nicht durch den Topf begrenzt:** Jeder Wert von 0 bis zum int4-Maximum wird
+  angenommen. `availableCents` wird bei 0 abgeschnitten, eine Überziehung ist danach nicht mehr
+  sichtbar.
+- **Wiedereröffnen gibt die Reservierung frei:** `spentCents` wird gelöscht, `availableCents` steigt
+  wieder um diesen Betrag — auch wenn das Geld tatsächlich ausgegeben wurde.
+
 ### Auswirkungen auf andere Endpunkte
 
-- `GET /api/analytics/summary`: `plannedSavings` zählt nur noch Ziele mit
+- `GET /api/analytics/summary`: `plannedSavings` zählt nur Ziele mit
   `completedAt == null` — abgeschlossene Ziele sind keine geplante Ersparnis mehr.
-  Zusätzlich liefert die Route `completedGoals` (im **aktuellen** Monat abgeschlossene
+  Zusätzlich liefert die Route `completedGoals` (im **laufenden** Monat abgeschlossene
   Ziele, je `{ title, target, spent, completedAt }`, Euro) und `completedGoalsSpent`
   für die Dashboard-Anzeige.
 - `GET /api/analytics/monthly-review`: liefert `completedGoals[]` (im abgefragten Monat
   abgeschlossene Ziele, je `{ title, amountCents, spentCents }`) und die Summe
   `completedGoalsSpentCents`.
+
+In beiden Fällen entscheidet der Berliner Monat von `completedAt` (Grundregeln §1).
