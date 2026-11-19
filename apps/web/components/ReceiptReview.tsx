@@ -18,15 +18,32 @@ import {
 
 import { uploadAttachment } from "./AttachmentManager";
 import { Button } from "./ui/Button";
+import { InfoTip } from "./ui/InfoTip";
 import { useToast } from "./ui/Toast";
 
 interface LineItem {
   name: string;
+  /** Last valid quantity; what is booked. */
   quantity: number;
+  /** What the quantity field shows — may be empty or incomplete while typing. */
+  quantityText: string;
+  /** The field was left once: from then on an invalid quantity is pointed out. */
+  quantityTouched: boolean;
   unitPriceCents: number;
   totalCents: number;
   categoryId: string;
   position: number;
+}
+
+/**
+ * Quantity typed into the field (comma or dot as decimal separator), to three
+ * decimals; null while it is empty, incomplete or not above 0.
+ */
+export function parseQuantity(text: string): number | null {
+  const normalized = text.trim().replace(",", ".");
+  if (!/^\d*\.?\d*$/.test(normalized) || !/\d/.test(normalized)) return null;
+  const quantity = Math.round(Number(normalized) * 1000) / 1000;
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : null;
 }
 
 interface ScanResult {
@@ -105,9 +122,11 @@ export default function ReceiptReview({
   onBack,
   onComplete
 }: Props) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
+
+  const quantityToText = (quantity: number) => String(quantity).replace(".", locale === "de" ? "," : ".");
 
   const expenseCategories = categories.filter((c) => !c.isIncome);
   const defaultCategoryId = expenseCategories[0]?.id ?? "";
@@ -125,6 +144,8 @@ export default function ReceiptReview({
     scanResult.items.length > 0
       ? scanResult.items.map((item, i) => ({
           ...item,
+          quantityText: quantityToText(item.quantity),
+          quantityTouched: false,
           position: i,
           categoryId:
             expenseCategories.find(
@@ -135,6 +156,8 @@ export default function ReceiptReview({
           {
             name: "",
             quantity: 1,
+            quantityText: "1",
+            quantityTouched: false,
             unitPriceCents: 0,
             totalCents: 0,
             categoryId: defaultCategoryId,
@@ -142,6 +165,13 @@ export default function ReceiptReview({
           }
         ]
   );
+
+  // The field keeps exactly what was typed (also nothing at all); the quantity
+  // that is booked only follows once the text is a usable number.
+  const updateQuantityText = (index: number, text: string) => {
+    const quantity = parseQuantity(text);
+    updateItem(index, quantity === null ? { quantityText: text } : { quantityText: text, quantity });
+  };
 
   const updateItem = (index: number, updates: Partial<LineItem>) => {
     setItems((prev) =>
@@ -171,6 +201,8 @@ export default function ReceiptReview({
       {
         name: "",
         quantity: 1,
+        quantityText: "1",
+        quantityTouched: false,
         unitPriceCents: 0,
         totalCents: 0,
         categoryId: defaultCategoryId,
@@ -234,9 +266,15 @@ export default function ReceiptReview({
     }
   });
 
+  // A line that will be booked needs a usable quantity (the field may be empty while typing).
+  const quantitiesValid = items.every((i) => !i.name.trim() || parseQuantity(i.quantityText) !== null);
+
   // The date field can be emptied by hand; the endpoint needs a real calendar day.
   const canSubmit =
-    items.some((i) => i.name.trim() && i.totalCents !== 0) && accountId && parseDayKey(receiptDate) !== null;
+    items.some((i) => i.name.trim() && i.totalCents !== 0) &&
+    accountId &&
+    parseDayKey(receiptDate) !== null &&
+    quantitiesValid;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-6">
@@ -309,9 +347,12 @@ export default function ReceiptReview({
       {/* Line Items */}
       <div className="mb-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink">
-            {t("receiptScanner.positions")}
-          </h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="min-w-0 text-sm font-semibold text-ink">
+              {t("receiptScanner.positions")}
+            </h2>
+            <InfoTip topic="receipt.grouping" />
+          </div>
           <button
             type="button"
             onClick={addItem}
@@ -321,7 +362,10 @@ export default function ReceiptReview({
           </button>
         </div>
 
-        {items.map((item, index) => (
+        {items.map((item, index) => {
+          const quantityInvalid = parseQuantity(item.quantityText) === null;
+          const showQuantityError = quantityInvalid && item.quantityTouched;
+          return (
           <div
             key={index}
             className="rounded-card border border-line bg-surface p-3 shadow-card"
@@ -363,16 +407,18 @@ export default function ReceiptReview({
                   {t("receiptScanner.qty")}
                 </label>
                 <input
-                  type="number"
-                  min="0.001"
-                  step="0.001"
-                  value={item.quantity}
-                  onChange={(e) =>
-                    updateItem(index, {
-                      quantity: Math.max(0.001, parseFloat(e.target.value) || 1)
-                    })
-                  }
-                  className="w-full rounded-field border border-line bg-bg px-2 py-1 text-sm tabular-nums text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={t("receiptScanner.qty")}
+                  aria-invalid={showQuantityError}
+                  value={item.quantityText}
+                  onChange={(e) => updateQuantityText(index, e.target.value)}
+                  onBlur={() => updateItem(index, { quantityTouched: true })}
+                  className={`w-full rounded-field border bg-bg px-2 py-1 text-base tabular-nums text-ink focus:outline-none focus:ring-1 md:text-sm ${
+                    showQuantityError
+                      ? "border-danger focus:border-danger focus:ring-danger"
+                      : "border-line focus:border-brand focus:ring-brand"
+                  }`}
                 />
               </div>
               <div>
@@ -398,10 +444,15 @@ export default function ReceiptReview({
                   {t("receiptScanner.total")}
                 </label>
                 <div className="rounded-field border border-line bg-surface-2 px-2 py-1 text-sm tabular-nums text-ink">
-                  {formatCents(item.totalCents)}{"\u00A0\u20AC"}
+                  {quantityInvalid ? "–" : <>{formatCents(item.totalCents)}{"\u00A0\u20AC"}</>}
                 </div>
               </div>
             </div>
+            {showQuantityError && (
+              <p role="alert" className="mt-1 text-xs text-danger">
+                {t("receiptScanner.qtyInvalid")}
+              </p>
+            )}
 
             <div className="mt-2">
               <label className="mb-0.5 block text-[10px] text-ink-faint">
@@ -422,7 +473,8 @@ export default function ReceiptReview({
               </select>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Grouping Preview */}

@@ -2,7 +2,6 @@
 
 import {
   filterTransactions,
-  fromCents,
   listTotals,
   monthDayRange,
   monthKey,
@@ -10,7 +9,6 @@ import {
   monthsWithTransactions,
   savingsCategoryIds,
   shiftMonth,
-  toDecimalString,
   zonedDate,
   zonedDayKey,
   zonedMonth,
@@ -29,6 +27,7 @@ import PageContainer from "../../components/PageContainer";
 import RecurringTransactionForm from "../../components/RecurringTransactionForm";
 import TransactionForm from "../../components/TransactionForm";
 import { Dialog } from "../../components/ui/Dialog";
+import { InfoTip } from "../../components/ui/InfoTip";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { formatBookingDateTime, formatCalendarDate, formatMonth } from "../../lib/bookingDate";
@@ -153,6 +152,13 @@ function TransactionsPage() {
   const [dateTo, setDateTo] = useQueryState("to", parseAsString.withDefault(""));
   const [creating, setCreating] = useQueryState("new", parseAsBoolean.withDefault(false));
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
+
+  // Same localized amount format as every other screen ("1.234,56 €" in de).
+  const formatCurrency = useCallback(
+    (cents: number) =>
+      `${(cents / 100).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`,
+    [dateLocale]
+  );
 
   const tabs: Array<{ id: ActiveTab; label: string }> = useMemo(() => (
     [
@@ -833,14 +839,17 @@ function TransactionsPage() {
           {currentRecurring.length > 0 && (
             <details className="group rounded-card border border-line bg-brand-soft p-2.5 text-sm shadow-card">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-brand">{t("transactions.recurringSummaryTitle")}</p>
-                <span className="flex items-center gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 text-sm font-semibold text-brand">{t("transactions.recurringSummaryTitle")}</span>
+                  <InfoTip topic="transactions.recurringThisMonth" />
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
                   <span
-                    className={`text-sm font-semibold ${
+                    className={`whitespace-nowrap text-sm font-semibold tabular-nums ${
                       currentRecurringTotalCents < 0 ? "text-expense" : "text-income"
                     }`}
                   >
-                    {toDecimalString(fromCents(currentRecurringTotalCents))} €
+                    {formatCurrency(currentRecurringTotalCents)}
                   </span>
                   <svg
                     aria-hidden="true"
@@ -856,14 +865,14 @@ function TransactionsPage() {
               <ul className="mt-3 space-y-2">
                 {currentRecurring.map((rec) => (
                   <li key={rec.id} className="flex flex-col gap-1 rounded-field border border-line bg-surface/70 p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-ink">{rec.description}</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="min-w-0 text-sm font-medium text-ink">{rec.description}</p>
                       <span
-                        className={`text-sm font-semibold ${
+                        className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${
                           rec.amountCents < 0 ? "text-expense" : "text-income"
                         }`}
                       >
-                        {toDecimalString(fromCents(rec.amountCents))} €
+                        {formatCurrency(rec.amountCents)}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
@@ -911,8 +920,8 @@ function TransactionsPage() {
                         />
                         <span>{rec.description}</span>
                       </label>
-                      <span className={`text-sm font-semibold ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
-                        {toDecimalString(fromCents(rec.amountCents))} €
+                      <span className={`shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
+                        {formatCurrency(rec.amountCents)}
                       </span>
                     </li>
                   );
@@ -927,27 +936,30 @@ function TransactionsPage() {
               className="mb-2 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-field border border-line bg-surface-2 px-3 py-1.5 text-sm"
               aria-live="polite"
             >
-              <span className="text-ink-muted">
-                {hasFilters
-                  ? t("transactions.filteredTotalLabel", { count: filteredTotals.count })
-                  : t("transactions.allTotalLabel", { count: filteredTotals.count })}
+              <span className="flex items-center gap-2 text-ink-muted">
+                <span>
+                  {hasFilters
+                    ? t("transactions.filteredTotalLabel", { count: filteredTotals.count })
+                    : t("transactions.allTotalLabel", { count: filteredTotals.count })}
+                </span>
+                <InfoTip topic="transactions.totals" />
               </span>
               <span className="flex flex-wrap items-center gap-2 font-semibold tabular-nums">
                 {totalsParts.income && (
                   <span className="inline-flex items-center rounded-full bg-income-soft px-2.5 py-0.5 text-income">
                     <span className="sr-only">{t("transactions.filterTypeIncome")}: </span>
-                    +{toDecimalString(fromCents(filteredTotals.incomeCents))} €
+                    +{formatCurrency(filteredTotals.incomeCents)}
                   </span>
                 )}
                 {totalsParts.outcome && (
                   <span className="inline-flex items-center rounded-full bg-expense-soft px-2.5 py-0.5 text-expense">
                     <span className="sr-only">{t("transactions.filterTypeOutcome")}: </span>
-                    -{toDecimalString(fromCents(filteredTotals.outcomeCents))} €
+                    -{formatCurrency(filteredTotals.outcomeCents)}
                   </span>
                 )}
                 {totalsParts.savings && (
                   <span className="inline-flex items-center rounded-full bg-savings-soft px-2.5 py-0.5 text-savings">
-                    {t("transactions.savingsLabel")}: {toDecimalString(fromCents(filteredTotals.savingsCents))} €
+                    {t("transactions.savingsLabel")}: {formatCurrency(filteredTotals.savingsCents)}
                   </span>
                 )}
                 {totalsParts.net && (
@@ -959,7 +971,7 @@ function TransactionsPage() {
                     }`}
                   >
                     {t("transactions.netLabel")}: {filteredTotals.netCents >= 0 ? "+" : "-"}
-                    {toDecimalString(fromCents(Math.abs(filteredTotals.netCents)))} €
+                    {formatCurrency(Math.abs(filteredTotals.netCents))}
                   </span>
                 )}
               </span>
@@ -999,6 +1011,30 @@ function TransactionsPage() {
                             {t("transactions.pendingSync")}
                           </span>
                         )}
+                        {tx.recurringTransactionId && (
+                          <span
+                            className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-ink-muted"
+                            title={t("transactions.recurringMarkerTitle")}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="h-3.5 w-3.5 shrink-0"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M17 2l4 4-4 4" />
+                              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                              <path d="M7 22l-4-4 4-4" />
+                              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                            </svg>
+                            <span className="sr-only">{t("transactions.recurringMarkerTitle")}</span>
+                            <span aria-hidden="true">{t("transactions.recurringMarker")}</span>
+                          </span>
+                        )}
                       </span>
                       {tx.categoryId && (
                         <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted lg:col-start-3 lg:row-start-1 lg:min-w-0 lg:justify-self-start lg:truncate">
@@ -1010,11 +1046,11 @@ function TransactionsPage() {
                   </div>
                   <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:contents">
                     <span
-                      className={`text-sm font-semibold text-right lg:col-start-4 lg:row-start-1 lg:whitespace-nowrap lg:tabular-nums ${
+                      className={`whitespace-nowrap text-sm font-semibold text-right tabular-nums lg:col-start-4 lg:row-start-1 ${
                         tx.amountCents < 0 ? "text-expense" : "text-income"
                       }`}
                     >
-                      {toDecimalString(fromCents(tx.amountCents))} €
+                      {formatCurrency(tx.amountCents)}
                     </span>
                     <button
                       type="button"
@@ -1063,7 +1099,7 @@ function TransactionsPage() {
               {recurringError}
             </p>
           )}
-          <div className="flex items-center justify-end gap-2 text-sm text-ink">
+          <div className="flex flex-wrap items-center justify-end gap-2 text-sm text-ink">
             <button
               type="button"
               onClick={() => void handleRecurringCsvExport()}
@@ -1072,13 +1108,14 @@ function TransactionsPage() {
             >
               {t("transactions.recurringExportCsv")}
             </button>
+            <InfoTip topic="recurring.basics" />
             <span>{t("transactions.recurringTotalLabel")}</span>
             <span
-              className={`inline-flex items-center rounded-full px-3 py-1 font-semibold ${
+              className={`inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 font-semibold tabular-nums ${
                 recurringTotalCents < 0 ? "bg-expense-soft text-expense" : "bg-income-soft text-income"
               }`}
             >
-              {toDecimalString(fromCents(recurringTotalCents))} €
+              {formatCurrency(recurringTotalCents)}
             </span>
           </div>
           <div
@@ -1114,8 +1151,8 @@ function TransactionsPage() {
                     </div>
                   </div>
                   <div className="flex w-1/3 flex-col items-end justify-between self-stretch lg:contents">
-                    <span className={`text-sm font-semibold text-right lg:col-start-5 lg:row-start-1 lg:whitespace-nowrap lg:tabular-nums ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
-                      {toDecimalString(fromCents(rec.amountCents))} €
+                    <span className={`whitespace-nowrap text-sm font-semibold text-right tabular-nums lg:col-start-5 lg:row-start-1 ${rec.amountCents < 0 ? "text-expense" : "text-income"}`}>
+                      {formatCurrency(rec.amountCents)}
                     </span>
                     <button
                       type="button"

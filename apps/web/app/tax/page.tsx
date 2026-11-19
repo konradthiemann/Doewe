@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
 import { Button } from "../../components/ui/Button";
+import { InfoTip } from "../../components/ui/InfoTip";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { type AttachmentMeta, TAX_EXPORT_MAX_RECEIPT_BYTES, formatAttachmentBytes } from "../../lib/attachments";
@@ -138,8 +139,11 @@ export default function TaxPage() {
       <PageContainer className="max-w-4xl space-y-6">
         <div className={cardClass}>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-lg font-medium">{t("tax.title")}</h1>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="min-w-0 text-lg font-medium">{t("tax.title")}</h1>
+                <InfoTip topic="tax.overview" />
+              </div>
               <p className="mt-1 text-sm text-ink-muted">{t("tax.description")}</p>
             </div>
             <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
+import { fromCents, parseCents, toDecimalString, zonedDate } from "@doewe/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -10,10 +10,17 @@ import { useApiQuery } from "../lib/api/useApiQuery";
 import { cn } from "../lib/cn";
 import { appConfig } from "../lib/config";
 import { useI18n } from "../lib/i18n";
+import {
+  backfillMonthCount,
+  dayOfStartDate,
+  isStartDateInRange,
+  moveStartDateToDay
+} from "../lib/recurringStart";
 import { recurringTransactionFormSchema, type RecurringTransactionFormValues } from "../lib/schemas/forms";
 
 import { Button } from "./ui/Button";
 import { FormActions } from "./ui/FormActions";
+import { InfoTip } from "./ui/InfoTip";
 
 type RecurringDetails = {
   id: string;
@@ -60,12 +67,20 @@ export default function RecurringTransactionForm({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const descriptionRef = useRef<HTMLInputElement>(null);
+  // "Today" and the current month are the app's calendar (Europe/Berlin).
+  const today = useMemo(() => zonedDate(new Date()), []);
+  // Day and start date stay as stored until the user changes one. Only a start
+  // date the user picked is sent: it re-anchors the series, and with it comes
+  // the question whether past months are booked.
+  const [startDateTouched, setStartDateTouched] = useState(false);
+  const [backfill, setBackfill] = useState(false);
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<RecurringTransactionFormValues>({
     resolver: zodResolver(recurringTransactionFormSchema),
@@ -81,6 +96,14 @@ export default function RecurringTransactionForm({
   });
 
   const categoryId = watch("categoryId");
+  const startDateValue = watch("startDate") ?? "";
+  const intervalValue = watch("intervalMonths");
+  // The server rejects a start date more than 10 years from today — say so at
+  // the field instead of letting the request fail.
+  const startDateOutOfRange = startDateTouched && startDateValue !== "" && !isStartDateInRange(startDateValue, today);
+  const backfillCount =
+    startDateTouched && !startDateOutOfRange ? backfillMonthCount(startDateValue, intervalValue, today) : 0;
+  const showBackfill = backfillCount > 0;
 
   useEffect(() => {
     descriptionRef.current?.focus();
@@ -108,6 +131,8 @@ export default function RecurringTransactionForm({
 
   async function onSubmit(values: RecurringTransactionFormValues) {
     setSubmitError(null);
+    // The message is shown at the start-date field.
+    if (startDateOutOfRange) return;
 
     let rawCents: number;
     try {
@@ -118,14 +143,19 @@ export default function RecurringTransactionForm({
     }
 
     const signedCents = txType === "income" ? Math.abs(rawCents) : -Math.abs(rawCents);
+    const sendStartDate = startDateTouched && !!values.startDate;
+    const dayChanged = values.dayOfMonth !== (recurring.dayOfMonth ?? 1);
     const payload = {
       accountId: values.accountId,
       amountCents: signedCents,
       description: values.description,
       categoryId: values.categoryId || undefined,
       intervalMonths: values.intervalMonths,
-      dayOfMonth: values.dayOfMonth,
-      startDate: values.startDate || undefined,
+      // Untouched day and start date are not sent: the server leaves the
+      // series' anchor alone unless one of them is in the body.
+      ...(dayChanged || sendStartDate ? { dayOfMonth: values.dayOfMonth } : {}),
+      ...(sendStartDate ? { startDate: values.startDate } : {}),
+      ...(sendStartDate && showBackfill ? { backfill } : {}),
     };
 
     try {
@@ -188,10 +218,13 @@ export default function RecurringTransactionForm({
         className="relative flex max-h-[calc(100vh-4rem)] w-full flex-col space-y-4 overflow-y-auto rounded-card border border-line bg-surface p-4 text-left shadow-raised sm:p-6"
         aria-describedby={submitError ?? loadError ? "form-error" : undefined}
       >
-        <div className="flex items-center justify-between">
-          <h3 id={headingId} className="text-base font-semibold">
-            {t("recurringForm.title")}
-          </h3>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 id={headingId} className="min-w-0 text-base font-semibold">
+              {t("recurringForm.title")}
+            </h3>
+            <InfoTip topic="recurring.basics" />
+          </div>
           {onClose && (
             <button
               type="button"
@@ -359,7 +392,14 @@ export default function RecurringTransactionForm({
             {t("recurringForm.dayOfMonthLabel")} <span className="text-danger">*</span>
           </label>
           <input
-            {...register("dayOfMonth", { valueAsNumber: true })}
+            {...register("dayOfMonth", {
+              valueAsNumber: true,
+              onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+                // Keep the shown start date on the chosen day (within its month).
+                const current = getValues("startDate");
+                if (current) setValue("startDate", moveStartDateToDay(current, Number(event.target.value)));
+              },
+            })}
             id="recurring-dayofmonth"
             type="number"
             min={1}
@@ -374,19 +414,54 @@ export default function RecurringTransactionForm({
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="recurring-startdate">
-            {t("recurringForm.startDateLabel")}
-          </label>
+          <div className="mb-1 flex items-center gap-2">
+            <label className="block text-sm font-medium" htmlFor="recurring-startdate">
+              {t("recurringForm.startDateLabel")}
+            </label>
+            <InfoTip topic="recurring.startDate" />
+          </div>
           <input
-            {...register("startDate")}
+            {...register("startDate", {
+              onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+                setStartDateTouched(true);
+                setBackfill(false);
+                // The start date is the first booking: the day of month follows it.
+                const day = dayOfStartDate(event.target.value);
+                if (day !== null) setValue("dayOfMonth", day, { shouldValidate: true });
+              },
+            })}
             id="recurring-startdate"
             type="date"
-            aria-invalid={!!errors.startDate}
+            aria-invalid={!!errors.startDate || startDateOutOfRange}
+            aria-describedby={startDateOutOfRange ? "recurring-startdate-range" : undefined}
             className="w-full rounded-field border-line-strong bg-surface text-ink focus:border-brand focus:ring-brand"
           />
           <p className="text-xs text-ink-muted">{t("recurringForm.startDateHelper")}</p>
           {errors.startDate && (
             <p role="alert" className="mt-1 text-xs text-danger">{errors.startDate.message}</p>
+          )}
+          {startDateOutOfRange && (
+            <p id="recurring-startdate-range" role="alert" className="mt-1 text-xs text-danger">
+              {t("recurringForm.errorStartDateRange")}
+            </p>
+          )}
+          {showBackfill && (
+            <div className="mt-2 rounded-field border border-line bg-surface-2 p-3">
+              <label className="flex items-start gap-2 text-sm font-medium text-ink">
+                <input
+                  type="checkbox"
+                  checked={backfill}
+                  onChange={(event) => setBackfill(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-line-strong text-brand focus-visible:ring-brand"
+                />
+                <span className="min-w-0">{t("recurringForm.backfillLabel")}</span>
+              </label>
+              <p className="mt-1 text-xs text-ink-muted">
+                {backfillCount === 1
+                  ? t("recurringForm.backfillHintOne")
+                  : t("recurringForm.backfillHintMany", { count: backfillCount })}
+              </p>
+            </div>
           )}
         </div>
 

@@ -18,9 +18,25 @@ export interface DialogProps {
   title?: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * Called when focus is about to leave the closing dialog. The dialog has no
+   * Radix trigger, so nothing is focused by default: call
+   * `event.preventDefault()` and focus the element that opened it.
+   */
+  onCloseAutoFocus?: (event: Event) => void;
+  /** Close when the area around the dialog body is tapped (off by default: forms keep their input). */
+  dismissOnBackdrop?: boolean;
 }
 
-export function Dialog({ open, onOpenChange, title, children, className }: DialogProps) {
+export function Dialog({
+  open,
+  onOpenChange,
+  title,
+  children,
+  className,
+  onCloseAutoFocus,
+  dismissOnBackdrop = false
+}: DialogProps) {
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
@@ -45,6 +61,16 @@ export function Dialog({ open, onOpenChange, title, children, className }: Dialo
           //   the title's generated id would break Radix's own title-presence check.
           // - opt out of the description requirement — the title conveys the purpose.
           aria-describedby={undefined}
+          onCloseAutoFocus={onCloseAutoFocus}
+          // The content element spans the viewport; only a tap on itself (not on
+          // the dialog body inside) is a tap "outside".
+          onClick={
+            dismissOnBackdrop
+              ? (event) => {
+                  if (event.target === event.currentTarget) onOpenChange(false);
+                }
+              : undefined
+          }
         >
           <div className={cn("w-full max-w-lg sm:max-w-xl", className)}>
             {title && (
@@ -61,3 +87,5 @@ export function Dialog({ open, onOpenChange, title, children, className }: Dialo
 }
 
 export const DialogClose = RadixDialog.Close;
+/** Visible title for dialogs that render their own heading (instead of the sr-only `title` prop). */
+export const DialogTitle = RadixDialog.Title;

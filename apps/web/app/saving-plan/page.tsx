@@ -1,18 +1,20 @@
 "use client";
 
-import { fromCents, parseCents, percentOf, toDecimalString } from "@doewe/shared";
+import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CompleteGoalDialog, type CompleteGoalResult } from "../../components/CompleteGoalDialog";
 import PageContainer from "../../components/PageContainer";
 import PlannedSavingForm from "../../components/PlannedSavingForm";
+import { InfoTip } from "../../components/ui/InfoTip";
 import { Spinner } from "../../components/ui/Spinner";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { formatBookingDayMonth, formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
-import { cascadeGoalProgress, type GoalProgress } from "../../lib/savingGoalProgress";
+import { cascadeGoalProgress, goalPercent, type GoalProgress } from "../../lib/savingGoalProgress";
 
 type SavingGoal = {
   id: string;
@@ -56,9 +58,8 @@ function SavingPlanPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<SavingGoal | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [completeTarget, setCompleteTarget] = useState<GoalWithProgress | null>(null);
-  const [completeSpent, setCompleteSpent] = useState("");
-  const [completeError, setCompleteError] = useState<string | null>(null);
-  const [completing, setCompleting] = useState(false);
+  // The button that opened the complete dialog: gets the focus back on cancel.
+  const completeTriggerRef = useRef<HTMLElement | null>(null);
   const [reopeningId, setReopeningId] = useState<string | null>(null);
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -67,7 +68,6 @@ function SavingPlanPage() {
   const [withdrawing, setWithdrawing] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const deleteDialogRef = useRef<HTMLDivElement | null>(null);
-  const completeDialogRef = useRef<HTMLDivElement | null>(null);
   const withdrawDialogRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -133,14 +133,14 @@ function SavingPlanPage() {
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
-    if (dialogOpen || deleteConfirm || completeTarget || withdrawOpen) {
+    if (dialogOpen || deleteConfirm || withdrawOpen) {
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = previousOverflow;
       };
     }
     document.body.style.overflow = previousOverflow;
-  }, [dialogOpen, deleteConfirm, completeTarget, withdrawOpen]);
+  }, [dialogOpen, deleteConfirm, withdrawOpen]);
 
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
@@ -174,50 +174,27 @@ function SavingPlanPage() {
     }
   }, [deleteConfirm, invalidatePlan, t, toast]);
 
-  const openCompleteDialog = useCallback((goal: GoalWithProgress) => {
+  const openCompleteDialog = useCallback((goal: GoalWithProgress, trigger: HTMLElement) => {
+    completeTriggerRef.current = trigger;
     setCompleteTarget(goal);
-    setCompleteSpent(toDecimalString(fromCents(goal.achievedCents)));
-    setCompleteError(null);
   }, []);
 
   const closeCompleteDialog = useCallback(() => {
     setCompleteTarget(null);
-    setCompleteSpent("");
-    setCompleteError(null);
   }, []);
 
-  const handleComplete = useCallback(async () => {
-    if (!completeTarget) return;
-    let spentCents: number;
-    try {
-      spentCents = parseCents(completeSpent);
-    } catch {
-      setCompleteError(t("savingPlan.completeSpentInvalid"));
-      return;
-    }
-    if (spentCents < 0) {
-      setCompleteError(t("savingPlan.completeSpentInvalid"));
-      return;
-    }
-    setCompleting(true);
-    try {
-      const res = await fetch(`/api/saving-plan/${completeTarget.id}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ spentCents })
-      });
-      if (!res.ok) {
-        throw new Error(t("savingPlan.errorComplete"));
-      }
+  const handleCompleted = useCallback(
+    (result: CompleteGoalResult) => {
       invalidatePlan();
-      toast.success(t("savingPlan.feedbackCompleted"));
-      closeCompleteDialog();
-    } catch (completeErr) {
-      setCompleteError(completeErr instanceof Error ? completeErr.message : t("savingPlan.errorComplete"));
-    } finally {
-      setCompleting(false);
-    }
-  }, [closeCompleteDialog, completeSpent, completeTarget, invalidatePlan, t, toast]);
+      toast.success(
+        result.withdrawnCents > 0
+          ? t("savingPlan.complete.doneWithdrawn", { amount: formatCurrency(result.withdrawnCents) })
+          : t("savingPlan.complete.done")
+      );
+      setCompleteTarget(null);
+    },
+    [formatCurrency, invalidatePlan, t, toast]
+  );
 
   const handleReopen = useCallback(
     async (goal: SavingGoal) => {
@@ -305,20 +282,6 @@ function SavingPlanPage() {
   }, [closeDialog, dialogOpen]);
 
   useEffect(() => {
-    if (!completeTarget) return;
-    const node = completeDialogRef.current;
-    node?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeCompleteDialog();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [closeCompleteDialog, completeTarget]);
-
-  useEffect(() => {
     if (!withdrawOpen) return;
     const node = withdrawDialogRef.current;
     node?.focus({ preventScroll: true });
@@ -360,6 +323,7 @@ function SavingPlanPage() {
           <h2 id="saving-plan-summary" className="text-lg font-medium">
             {t("savingPlan.summaryTitle")}
           </h2>
+          <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={openWithdrawDialog}
@@ -372,26 +336,34 @@ function SavingPlanPage() {
             </svg>
             {t("savingPlan.withdraw.action")}
           </button>
+          <InfoTip topic="savingPlan.withdraw" />
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-4">
-          <div className="rounded-field border border-line bg-surface-2 p-4 text-ink">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryAvailable")}</p>
-            <p className="text-xl font-semibold">{formatCurrency(availableCents)}</p>
+          <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryAvailable")}</p>
+              <InfoTip topic="savingPlan.pool" />
+            </div>
+            <p className="text-xl font-semibold tabular-nums">{formatCurrency(availableCents)}</p>
             <p className="text-xs text-ink-muted">{t("savingPlan.summaryAvailableHelp")}</p>
           </div>
-          <div className="rounded-field border border-line bg-surface-2 p-4 text-ink">
+          <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryPlannedTotal")}</p>
-            <p className="text-xl font-semibold">{formatCurrency(plan?.totals.totalTargetCents ?? 0)}</p>
+            <p className="text-xl font-semibold tabular-nums">{formatCurrency(plan?.totals.totalTargetCents ?? 0)}</p>
             <p className="text-xs text-ink-muted">{t("savingPlan.summaryPlannedHelp")}</p>
           </div>
-          <div className="rounded-field border border-line bg-savings-soft p-4 text-ink">
-            <p className="text-xs font-semibold uppercase tracking-wide text-savings">{t("savingPlan.summarySuggestedMonthly")}</p>
-            <p className="text-xl font-semibold">{formatCurrency(plan?.totals.suggestedMonthlyCents ?? 0)}</p>
+          <div className="min-w-0 rounded-field border border-line bg-savings-soft p-4 text-ink">
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 text-xs font-semibold uppercase tracking-wide text-savings">{t("savingPlan.summaryMonthlyRate")}</p>
+              <InfoTip topic="savingPlan.rate" />
+            </div>
+            <p className="text-xl font-semibold tabular-nums">{formatCurrency(plan?.totals.suggestedMonthlyCents ?? 0)}</p>
             <p className="text-xs text-ink-muted">{t("savingPlan.summarySuggestedMonthlyHelp")}</p>
           </div>
-          <div className="rounded-field border border-line bg-surface-2 p-4 text-ink">
+          <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryRemainingAfter")}</p>
-            <p className="text-xl font-semibold">{formatCurrency(remainingAfterGoals)}</p>
+            <p className="text-xl font-semibold tabular-nums">{formatCurrency(remainingAfterGoals)}</p>
             <p className="text-xs text-ink-muted">
               {remainingAfterGoals > 0
                 ? t("savingPlan.summaryRemainingHelpPositive")
@@ -406,17 +378,20 @@ function SavingPlanPage() {
         )}
         {withdrawnForCompletedCents > 0 && (
           <p className="text-xs text-ink-muted">
-            {t("savingPlan.summaryWithdrawnForCompleted", { amount: formatCurrency(withdrawnForCompletedCents) })}
+            {t("savingPlan.summaryReservedForCompleted", { amount: formatCurrency(withdrawnForCompletedCents) })}
           </p>
         )}
       </section>
 
       <section aria-labelledby="saving-plan-timeline" className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 id="saving-plan-timeline" className="text-lg font-medium">
-            {t("savingPlan.timelineTitle")}
-          </h2>
-          <span className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineHint")}</span>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 id="saving-plan-timeline" className="min-w-0 text-lg font-medium">
+              {t("savingPlan.timelineTitle")}
+            </h2>
+            <InfoTip topic="savingPlan.progress" />
+          </div>
+          <span className="text-right text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineHint")}</span>
         </div>
         {loading ? (
           <p className="text-sm text-ink-muted">{t("savingPlan.timelineLoading")}</p>
@@ -490,7 +465,8 @@ function SavingPlanPage() {
                       </div>
                       {goal.transactionSpentCents > 0 && (() => {
                         const amount = goal.amountCents ?? 0;
-                        const spentPercent = amount > 0 ? Math.min(percentOf(goal.transactionSpentCents, amount), 100) : 0;
+                        // Same rule as the progress above: 995 of 1,000 is 99 %, not 100 %.
+                        const spentPercent = amount > 0 ? goalPercent(goal.transactionSpentCents, amount) : 0;
                         return (
                           <div className="mt-2">
                             <div className="flex justify-between text-xs text-warning">
@@ -519,7 +495,7 @@ function SavingPlanPage() {
                       <div className="mt-3 flex flex-wrap gap-2 justify-end">
                         <button
                           type="button"
-                          onClick={() => openCompleteDialog(goal)}
+                          onClick={(event) => openCompleteDialog(goal, event.currentTarget)}
                           className="inline-flex items-center rounded-field border border-success/40 bg-surface px-3 py-1.5 text-xs font-medium text-success shadow-card hover:bg-success-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2"
                         >
                           {t("savingPlan.markComplete")}
@@ -558,7 +534,7 @@ function SavingPlanPage() {
               {t("savingPlan.undatedHint")}
             </span>
           </div>
-          <p className="text-sm text-ink-muted">{t("savingPlan.undatedSubtitle")}</p>
+          <p className="text-sm text-ink-muted">{t("savingPlan.undatedSubtitleRate")}</p>
           <ul className="grid gap-3 sm:grid-cols-2">
             {undatedGoals.map((goal) => (
               <li
@@ -662,7 +638,7 @@ function SavingPlanPage() {
                         <p className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineGoal")}</p>
                         <p className="text-lg font-semibold text-ink">{formatCurrency(goal.amountCents ?? 0)}</p>
                         <p className="text-xs text-ink-muted">
-                          {t("savingPlan.completedWithdrawn", { amount: formatCurrency(spent) })}
+                          {t("savingPlan.completedSpent", { amount: formatCurrency(spent) })}
                         </p>
                       </div>
                     </div>
@@ -763,63 +739,14 @@ function SavingPlanPage() {
         </div>
       )}
 
-      {completeTarget && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={closeCompleteDialog} />
-          <div
-            ref={completeDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="complete-confirm-heading"
-            aria-describedby="complete-confirm-message"
-            className="relative z-10 mx-4 w-full max-w-md rounded-card bg-surface p-6 shadow-raised focus:outline-none"
-            tabIndex={-1}
-          >
-            <h2 id="complete-confirm-heading" className="text-lg font-semibold text-ink">
-              {t("savingPlan.completeDialogTitle")}
-            </h2>
-            <p id="complete-confirm-message" className="mt-2 text-sm text-ink-muted">
-              {t("savingPlan.completeDialogMessage", { title: completeTarget.title })}
-            </p>
-            <div className="mt-4">
-              <label htmlFor="complete-spent" className="block text-sm font-medium text-ink">
-                {t("savingPlan.completeSpentLabel")}
-              </label>
-              <input
-                id="complete-spent"
-                type="text"
-                inputMode="decimal"
-                value={completeSpent}
-                onChange={(event) => setCompleteSpent(event.target.value)}
-                className="mt-1 block w-full rounded-field border-line-strong bg-surface shadow-card focus:border-brand focus:ring-brand"
-              />
-              <p className="mt-1 text-xs text-ink-muted">{t("savingPlan.completeSpentHint")}</p>
-              {completeError && (
-                <p className="mt-1 text-xs text-danger">{completeError}</p>
-              )}
-            </div>
-            <div className="mt-4 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeCompleteDialog}
-                disabled={completing}
-                className="inline-flex items-center rounded-field border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-50"
-              >
-                {t("savingPlan.confirmDeleteCancel")}
-              </button>
-              <button
-                type="button"
-                onClick={handleComplete}
-                disabled={completing}
-                className="inline-flex items-center rounded-field border border-transparent bg-success px-4 py-2 text-sm font-medium text-brand-on shadow-card hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2 disabled:opacity-50"
-              >
-                {completing && <Spinner size="sm" className="mr-2" />}
-                {completing ? t("savingPlan.completing") : t("savingPlan.completeConfirm")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CompleteGoalDialog
+        goal={completeTarget}
+        poolCents={availableCents}
+        formatCurrency={formatCurrency}
+        onClose={closeCompleteDialog}
+        onCompleted={handleCompleted}
+        returnFocusTo={completeTriggerRef.current}
+      />
 
       {withdrawOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center">
