@@ -3,16 +3,21 @@
  * POST /api/recurring-transactions  — Neuen Dauerauftrag anlegen
  *
  * Daueraufträge sind Vorlagen für regelmäßige Transaktionen (z.B. Miete jeden 1. des Monats).
- * Sie werden NICHT automatisch als echte Transaktionen angelegt — stattdessen werden sie
- * im Analytics-Dashboard als "geplante" Beträge eingerechnet.
+ * Fällige Vorkommen werden automatisch als echte Transaktionen gebucht: täglich vom Cron
+ * (POST /api/cron/materialize-recurring) und für abgeschlossene Monate beim Lesen von
+ * Dashboard und Rückblick (siehe lib/recurringBooking.ts). Nur ein im laufenden Monat
+ * fälliges, noch nicht gebuchtes Vorkommen rechnet das Dashboard als "geplant" ein.
  *
- * `nextOccurrence` wird automatisch aus `dayOfMonth` berechnet (aktueller Monat, falls
- * der Tag noch nicht vergangen ist, sonst nächster Monat). Alternativ kann ein `startDate`
- * (yyyy-mm-dd) übergeben werden — dann ist dieses Datum die erste Buchung (nextOccurrence),
- * z.B. für ein Abo, dessen erste Zahlung erst in einigen Monaten fällig wird.
+ * `nextOccurrence` ist der Anker der Serie (erste Buchung) und wird als 12:00 Uhr Berliner
+ * Zeit des gemeinten Kalendertags gespeichert. Ohne `startDate` wird er aus `dayOfMonth`
+ * berechnet: laufender Monat, falls der (auf die Monatslänge begrenzte) Tag heute ist oder
+ * noch bevorsteht, sonst nächster Monat — "heute" ist der Kalendertag in Europe/Berlin.
+ * Alternativ kann ein `startDate` (yyyy-mm-dd) übergeben werden — dann ist dieses Datum die
+ * erste Buchung, z.B. für ein Abo, dessen erste Zahlung erst in einigen Monaten fällig wird.
  *
  * POST Body: { accountId, categoryId?, amountCents, description, intervalMonths? (1-24), dayOfMonth? (1-31), startDate? (yyyy-mm-dd) }
  */
+import { firstOccurrenceFrom, parseDayKey, zonedDate, zonedTimeToUtc } from "@doewe/shared";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -30,57 +35,9 @@ const RecurringInput = z.object({
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .refine(isRealCalendarDate, "Ungültiges Datum")
+    .refine((value) => parseDayKey(value) !== null, "Ungültiges Datum")
     .optional()
 });
-
-/**
- * Berechnet das nächste Fälligkeitsdatum für einen Dauerauftrag.
- *
- * Logik: Ist `dayOfMonth` noch nicht vergangen → aktueller Monat.
- * Sonst → nächster Monat. Datum wird auf den letzten Tag des Monats geclampt
- * (z.B. dayOfMonth=31 im Februar → 28/29).
- */
-function nextOccurrenceDate(dayOfMonth: number, now = new Date()) {
-  const today = now.getDate();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  
-  // If dayOfMonth hasn't passed this month, use current month, otherwise next month
-  if (dayOfMonth > today) {
-    // Clamp to last day of current month if dayOfMonth exceeds days in month
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const clampedDay = Math.min(dayOfMonth, daysInMonth);
-    return new Date(currentYear, currentMonth, clampedDay, 0, 0, 0, 0);
-  }
-  
-  // Use next month
-  const nextMonth = currentMonth + 1;
-  const nextYear = nextMonth > 11 ? currentYear + 1 : currentYear;
-  const normalizedMonth = nextMonth % 12;
-  const daysInNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
-  const clampedDay = Math.min(dayOfMonth, daysInNextMonth);
-  return new Date(nextYear, normalizedMonth, clampedDay, 0, 0, 0, 0);
-}
-
-/** Prüft, ob ein `yyyy-mm-dd`-String ein gültiges Kalenderdatum ist. */
-function isRealCalendarDate(startDate: string): boolean {
-  const [year, month, day] = startDate.split("-").map(Number);
-  if (month < 1 || month > 12) return false;
-  const daysInMonth = new Date(year, month, 0).getDate();
-  return day >= 1 && day <= daysInMonth;
-}
-
-/**
- * Wandelt einen `yyyy-mm-dd`-String in ein lokales Date (Mitternacht) um.
- * Der Tag wird defensiv auf den letzten Tag des Monats geclampt.
- */
-function startDateToDate(startDate: string): Date {
-  const [year, month, day] = startDate.split("-").map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const clampedDay = Math.min(day, daysInMonth);
-  return new Date(year, month - 1, clampedDay, 0, 0, 0, 0);
-}
 
 export async function GET() {
   const user = await getSessionUser();
@@ -116,10 +73,13 @@ export async function POST(req: Request) {
     }
   }
   // Startdatum (falls angegeben) legt die erste Buchung direkt fest; ansonsten wird
-  // nextOccurrence wie bisher aus dayOfMonth berechnet.
-  const day = data.dayOfMonth ?? (data.startDate ? Number(data.startDate.slice(8, 10)) : 1);
-  const nextDate = data.startDate ? startDateToDate(data.startDate) : nextOccurrenceDate(day);
-  
+  // sie aus dayOfMonth und dem heutigen Berliner Kalendertag berechnet.
+  const startDay = data.startDate ? parseDayKey(data.startDate) : null;
+  const day = data.dayOfMonth ?? startDay?.day ?? 1;
+  const firstDay = startDay ?? firstOccurrenceFrom(zonedDate(new Date()), day);
+  // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
+  const nextDate = zonedTimeToUtc({ ...firstDay, hour: 12 });
+
   const createData = {
     accountId: data.accountId,
     categoryId: data.categoryId,

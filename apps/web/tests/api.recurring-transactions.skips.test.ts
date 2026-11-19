@@ -49,7 +49,8 @@ beforeAll(async () => {
         frequency: "MONTHLY",
         intervalMonths: 1,
         dayOfMonth: 23,
-        nextOccurrence: new Date(2026, 9, 23)
+        // Far in the future, so the global cron run of a parallel test file never books it.
+        nextOccurrence: new Date("2037-10-23T10:00:00.000Z") // 23 Oct 2037, noon in Berlin
       }
     })
   ).id;

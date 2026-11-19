@@ -4,7 +4,9 @@
  * Legt eine RecurringTransaction (MONTHLY) mit Konto, Kategorie, Betrag (Vorzeichen wie gespeichert)
  * und Beschreibung der Buchung an und verknüpft die Buchung damit (recurringTransactionId). Der
  * Anker `nextOccurrence` ist der Buchungstag (Europe/Berlin) + intervalMonths, optional mit
- * abweichendem dayOfMonth — so wird der Ursprungsmonat nicht erneut automatisch gebucht.
+ * abweichendem dayOfMonth, gespeichert als 12:00 Uhr Berliner Zeit dieses Tages — so wird der
+ * Ursprungsmonat nicht erneut automatisch gebucht. Die Buchung selbst gilt als das Vorkommen
+ * ihres Berliner Monats (`recurringPeriod`), auch wenn sie später verschoben oder gelöscht wird.
  *
  * Haushaltsbezogen (kein Demo-Account-Sonderweg nötig): die Buchung wird über ihr Konto im Haushalt
  * des Nutzers gesucht. Soft-gelöschte Buchungen filtert die Extension in lib/prisma.ts heraus.
@@ -12,7 +14,7 @@
  * POST Body: { intervalMonths (1-24), dayOfMonth? (1-31) }
  * Antworten: 201 RecurringTransaction | 400 | 401 | 404 | 409 (bereits verknüpft)
  */
-import { addMonthsClamped } from "@doewe/shared";
+import { addMonthsClamped, monthKey, zonedDate, zonedTimeToUtc } from "@doewe/shared";
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "../../../../../lib/auth";
@@ -20,22 +22,9 @@ import { prisma } from "../../../../../lib/prisma";
 
 import { MakeRecurringInput } from "./schema";
 
-const BOOKING_TIME_ZONE = "Europe/Berlin";
 const ALREADY_LINKED_ERROR = "Transaction is already linked to a recurring transaction";
 
 class AlreadyLinkedError extends Error {}
-
-/** Calendar day of `instant` in Europe/Berlin (not the process time zone). */
-function berlinCalendarDate(instant: Date): { year: number; month: number; day: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: BOOKING_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(instant);
-  const value = (type: string) => Number(parts.find((p) => p.type === type)?.value);
-  return { year: value("year"), month: value("month"), day: value("day") };
-}
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
@@ -61,9 +50,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: ALREADY_LINKED_ERROR }, { status: 409 });
   }
 
-  const booking = berlinCalendarDate(source.occurredAt);
+  const booking = zonedDate(source.occurredAt);
   const next = addMonthsClamped(booking, intervalMonths, dayOfMonth);
-  const nextOccurrence = new Date(next.year, next.month - 1, next.day, 0, 0, 0, 0);
+  // 12:00 Uhr Berliner Zeit: in Berlin und in UTC derselbe Kalendertag.
+  const nextOccurrence = zonedTimeToUtc({ ...next, hour: 12 });
 
   try {
     const recurring = await prisma.$transaction(async (tx) => {
@@ -80,9 +70,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         }
       });
       // Guard against a concurrent request linking the booking first: roll back if we lost the race.
+      // The booking is the occurrence of its own month; recording that period keeps the
+      // occurrence where it is when the user later moves the booking into another month.
       const linked = await tx.transaction.updateMany({
         where: { id: source.id, recurringTransactionId: null },
-        data: { recurringTransactionId: created.id }
+        data: { recurringTransactionId: created.id, recurringPeriod: monthKey(booking) }
       });
       if (linked.count === 0) throw new AlreadyLinkedError();
       return created;
