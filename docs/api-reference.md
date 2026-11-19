@@ -437,7 +437,7 @@ Create a new transaction.
 | `savingGoalId` | string | Optional; ID of a `Budget` row of the household. Omit rather than sending `null` |
 | `amountCents` | integer | Required; within the Postgres `int4` range (−2,147,483,648 … 2,147,483,647). Negative = money leaves the account, positive = money comes in; `0` is accepted |
 | `description` | string | Required; trimmed, non-empty after trimming; no NUL characters or unpaired surrogates |
-| `occurredAt` | string | Required. Either an ISO instant (stored as given) or a bare calendar day `yyyy-mm-dd`, which is stored as **12:00 Europe/Berlin** of that day. Must be a real date within the years 0000–9999 |
+| `occurredAt` | string | Required. Either an ISO instant with a time zone (`…Z` or `…+01:00`, stored as given), an ISO date-time without a zone (read as Europe/Berlin wall-clock time), or a bare calendar day `yyyy-mm-dd`, which is stored as **12:00 Europe/Berlin** of that day. Anything else, a date that does not exist, or a year before 1900 or after 9999 is a `400` |
 | `taxRelevant` | boolean | Optional. Earmarks the transaction for the tax return (see [Attachments](#attachments-receipts)). When omitted, defaults to the category's `isTaxRelevant` (else `false`); an explicit value always wins |
 
 **Success response — `201 Created`:** Full transaction object (same shape as GET list item).

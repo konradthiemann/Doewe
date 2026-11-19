@@ -18,6 +18,8 @@
  * -5.7e-14 where the true result is exactly 0 (shown as "-0,00 €" with an
  * overspend line).
  */
+import { percentOf } from "./money";
+
 
 export type DashboardBudgetInput = {
   carryoverFromLastMonth: number;
@@ -98,16 +100,16 @@ export function computeAvailableBudget(input: DashboardBudgetInput): DashboardBu
   const projectedLeft = availableBudget - projectedSpent;
 
   const spentPercent =
-    availableBudget > 0 ? Math.min(100, Math.round((projectedSpent / availableBudget) * 100)) : 0;
+    availableBudget > 0 ? Math.min(100, percentOf(projectedSpent, availableBudget)) : 0;
   const expensesPercent =
-    availableBudget > 0 ? Math.min(100, Math.round((projectedExpenses / availableBudget) * 100)) : 0;
+    availableBudget > 0 ? Math.min(100, percentOf(projectedExpenses, availableBudget)) : 0;
   const savedPercent =
     availableBudget > 0
-      ? Math.min(100 - expensesPercent, Math.round((totalSavingsTransfer / availableBudget) * 100))
+      ? Math.min(100 - expensesPercent, percentOf(totalSavingsTransfer, availableBudget))
       : 0;
   const overspent = Math.max(0, projectedSpent - availableBudget);
   const overspentPercent =
-    availableBudget > 0 ? Math.max(0, Math.round((overspent / availableBudget) * 100)) : 0;
+    availableBudget > 0 ? Math.max(0, percentOf(overspent, availableBudget)) : 0;
   const hasIncomeData = projectedIncome > 0 || carryover !== 0;
   const budgetUnderwater = availableBudget <= 0;
 

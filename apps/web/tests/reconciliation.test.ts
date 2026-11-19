@@ -35,6 +35,7 @@ const cat: Record<"food" | "rent" | "salary" | "savings" | "sparen", string> = {
 };
 
 type Review = {
+  prevMonth: { month: number; year: number; incomeCents: number; outcomeCents: number; savingsCents: number } | null;
   month: number;
   year: number;
   incomeCents: number;
@@ -96,7 +97,11 @@ async function categoryYear(year: number): Promise<YearMatrix> {
   return (await res.json()) as YearMatrix;
 }
 
-/** What the transaction list shows for a month: the page calls exactly these shared functions. */
+/**
+ * What the transaction list shows for a month: apps/web/app/transactions/page.tsx
+ * filters with filterTransactions and totals with listTotals (its component
+ * test, app/transactions/transactions.test.tsx, covers the wiring).
+ */
 async function listFor(month: number, year: number) {
   const { GET } = await import("../app/api/transactions/route");
   const res = await GET();
@@ -350,6 +355,26 @@ describe("the month changes at midnight in Berlin", () => {
     expect([r.month, r.year]).toEqual([11, 2026]);
     expect(r.outcomeCents).toBe(1_200);
     expect(r.balanceAtEndCents).toBe(623_601);
+  });
+
+  it("at that moment the quarterly overview ends with December", async () => {
+    vi.setSystemTime(new Date("2026-11-30T23:30:00.000Z"));
+    const q = await quarterly();
+    expect(q.quarters.map((x) => `${x.year}-${x.month}`)).toEqual(["2026-10", "2026-11", "2026-12"]);
+    expect(q.quarters[2].outcomeCents).toBe(90_800);
+  });
+
+  it("the review's comparison with the previous month uses that month's Berlin boundaries", async () => {
+    vi.setSystemTime(new Date("2026-11-30T23:30:00.000Z"));
+    const [nov, oct] = await Promise.all([review(11, 2026), review(10, 2026)]);
+    // includes the row at 00:00:30 on 1 October, which is still September in UTC
+    expect(nov.prevMonth).toMatchObject({
+      month: 10,
+      year: 2026,
+      incomeCents: oct.incomeCents,
+      outcomeCents: 104_199,
+      savingsCents: oct.savingsCents
+    });
   });
 
   it("one hour earlier (23:30 in Berlin on 30 November) it is still November", async () => {

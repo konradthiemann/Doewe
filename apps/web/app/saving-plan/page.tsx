@@ -1,6 +1,6 @@
 "use client";
 
-import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
+import { fromCents, parseCents, percentOf, toDecimalString } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -490,7 +490,7 @@ function SavingPlanPage() {
                       </div>
                       {goal.transactionSpentCents > 0 && (() => {
                         const amount = goal.amountCents ?? 0;
-                        const spentPercent = amount > 0 ? Math.min(Math.round((goal.transactionSpentCents / amount) * 100), 100) : 0;
+                        const spentPercent = amount > 0 ? Math.min(percentOf(goal.transactionSpentCents, amount), 100) : 0;
                         return (
                           <div className="mt-2">
                             <div className="flex justify-between text-xs text-warning">

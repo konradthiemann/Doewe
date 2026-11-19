@@ -7,7 +7,8 @@ export {
   sub as subCents,
   multiply as multiplyCents,
   toDecimalString,
-  formatEuro
+  formatEuro,
+  percentOf
 } from "./money";
 
 export type { Transaction, TransactionId, AccountId, CategoryId, CreateTransactionInput } from "./domain";

@@ -1,5 +1,6 @@
 "use client";
 
+import { percentOf } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo, useRef, useState } from "react";
@@ -222,7 +223,7 @@ function ReviewPage() {
     const prev = data.prevMonth;
     const diff = (a: number, b: number) => ({
       absDiff: (a - b) / 100,
-      pct: b !== 0 ? Math.round(((a - b) / Math.abs(b)) * 100) : null
+      pct: b !== 0 ? percentOf(a - b, Math.abs(b)) : null
     });
     return {
       income: diff(cur.incomeCents, prev.incomeCents),
@@ -429,7 +430,7 @@ function ReviewPage() {
                 {data.incomeCategories.map((cat) => {
                   const sharePct =
                     data.incomeCents > 0
-                      ? Math.round((cat.amountCents / data.incomeCents) * 100)
+                      ? percentOf(cat.amountCents, data.incomeCents)
                       : 0;
                   return (
                     <li

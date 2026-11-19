@@ -10,10 +10,19 @@ import { z } from "zod";
 export const INT4_MIN = -2_147_483_648;
 export const INT4_MAX = 2_147_483_647;
 
-// Zeitpunkte außerhalb der Jahre 0000–9999 kann Prisma nicht übergeben
-// (z. B. ein Tippfehler wie Jahr 20261 im Datumsfeld).
-const MIN_INSTANT_MS = Date.parse("0000-01-01T00:00:00.000Z");
+// Zeitpunkte nach dem Jahr 9999 kann Prisma nicht übergeben (z. B. ein
+// Tippfehler wie Jahr 20261 im Datumsfeld). Vor 1900 ist immer ein Tippfehler
+// (0026 statt 2026) — und zweistellige Jahre deutet JavaScript als 19xx um.
+const MIN_YEAR = 1900;
+const MIN_INSTANT_MS = Date.UTC(MIN_YEAR, 0, 1);
 const MAX_INSTANT_MS = Date.parse("9999-12-31T23:59:59.999Z");
+
+// ISO-Zeitpunkt, mit oder ohne Zeitzone. Mit Zone (`Z`, `±hh:mm`) ist er
+// eindeutig. Ohne Zone läse `new Date()` ihn in der Zeitzone des Prozesses — in
+// Produktion (UTC) eine andere Stunde als auf einem Entwicklerrechner; er gilt
+// deshalb als Berliner Uhrzeit, wie ein reiner Kalendertag.
+const ISO_DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?$/;
 
 const UNPAIRED_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
@@ -25,17 +34,29 @@ export function isStorableText(value: string): boolean {
 /**
  * Zeitpunkt einer Buchung aus dem Request. Ein reiner Kalendertag
  * (`yyyy-mm-dd`) wird als 12:00 Uhr Berliner Zeit dieses Tages gelesen
- * (docs/calculations/00-grundregeln.md §1), alles andere als ISO-Zeitpunkt.
+ * (docs/calculations/00-grundregeln.md §1). Sonst muss es ein ISO-Zeitpunkt
+ * sein (`2026-11-19T10:00:00.000Z`); ohne Zeitzone gilt er als Berliner Uhrzeit.
  * `null`, wenn der Wert kein gültiges, speicherbares Datum ist.
  */
 export function parseOccurredAt(value: string | Date): Date | null {
   let date: Date;
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (typeof value !== "string") {
+    date = value;
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const day = parseDayKey(value);
-    if (!day) return null;
+    if (!day || day.year < MIN_YEAR) return null;
     date = zonedTimeToUtc({ ...day, hour: 12 });
   } else {
-    date = typeof value === "string" ? new Date(value) : value;
+    const match = ISO_DATE_TIME.exec(value);
+    if (!match) return null;
+    if (match[7]) {
+      date = new Date(value);
+    } else {
+      const day = parseDayKey(value.slice(0, 10));
+      const [hour, minute, second] = [Number(match[4]), Number(match[5]), Number(match[6] ?? 0)];
+      if (!day || day.year < MIN_YEAR || hour > 23 || minute > 59 || second > 59) return null;
+      date = zonedTimeToUtc({ ...day, hour, minute, second });
+    }
   }
   const ms = date.getTime();
   return Number.isNaN(ms) || ms < MIN_INSTANT_MS || ms > MAX_INSTANT_MS ? null : date;

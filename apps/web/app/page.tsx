@@ -1,5 +1,5 @@
 "use client";
-import { computeAvailableBudget, zonedMonth } from "@doewe/shared";
+import { computeAvailableBudget, percentOf, zonedMonth } from "@doewe/shared";
 import {
   Chart as ChartJS,
   ArcElement,
@@ -185,7 +185,7 @@ export default function HomePage() {
   // Core KPIs derived from the summary numbers above.
   // Savings rate: how much of projected income is transferred to savings this month.
   const savingsRate = projectedIncome > 0
-    ? Math.max(0, Math.round((totalSavingsTransfer / projectedIncome) * 100))
+    ? Math.max(0, percentOf(totalSavingsTransfer, projectedIncome))
     : 0;
   // Standing orders of this month, whether already booked or not. The
   // `recurring*Total` fields only cover what is not booked yet and shrink to 0
@@ -211,7 +211,7 @@ export default function HomePage() {
     const prev = arr[arr.length - 2];
     const diff = (a: number, b: number) => {
       const absDiff = (a - b) / 100;
-      const pct = b !== 0 ? Math.round(((a - b) / Math.abs(b)) * 100) : null;
+      const pct = b !== 0 ? percentOf(a - b, Math.abs(b)) : null;
       return { absDiff, pct };
     };
     return {
@@ -261,7 +261,7 @@ export default function HomePage() {
   const actualSavings = summary.monthlySavingsActual || 0;
   const plannedColor = "#4e6fa3"; // savings
   const actualColor = "#2e7d54"; // income
-  const savingsProgress = plannedSavings > 0 ? Math.max(0, Math.min(100, Math.round((actualSavings / plannedSavings) * 100))) : 0;
+  const savingsProgress = plannedSavings > 0 ? Math.max(0, Math.min(100, percentOf(actualSavings, plannedSavings))) : 0;
 
   // Saving goals completed this month (by completion/withdrawal date)
   const completedGoals = summary.completedGoals || [];

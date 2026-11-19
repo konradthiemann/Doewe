@@ -47,6 +47,7 @@ import {
   addFlow,
   classifyFlow,
   emptyFlowTotals,
+  percentOf,
   shiftMonth,
   zonedMonth,
   zonedMonthRange,
@@ -321,7 +322,7 @@ export async function GET(request: Request) {
   // Net savings can be negative (more withdrawn than deposited): the rate stays within 0–100.
   const savingsRatePct =
     incomeCents > 0
-      ? Math.max(0, Math.min(100, Math.round((savingsCents / incomeCents) * 100)))
+      ? Math.max(0, Math.min(100, percentOf(savingsCents, incomeCents)))
       : 0;
 
   const hasPrevData =

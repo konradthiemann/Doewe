@@ -7,6 +7,7 @@ import {
   zonedMonthRange
 } from "@doewe/shared";
 
+import { loadEffectiveCategoryBudgets } from "./categoryBudgets";
 import { prisma } from "./prisma";
 import { sendPushToUser } from "./push";
 import { loadBookedOccurrenceKeys, occurrenceKey } from "./recurringPeriods";
@@ -15,7 +16,7 @@ import { loadSavingsCategoryIds } from "./savingsCategory";
 /**
  * Budget-Warnungen (Teil C): Nach einer Transaktions-Mutation prüfen, ob eine
  * Kategorie-Budget-Schwelle (80 % / 100 %) erreicht wurde, und — falls neu —
- * einen Push an den Kontoinhaber senden. Dedupe über den BudgetAlertLog
+ * einen Push an den buchenden Nutzer senden. Dedupe über den BudgetAlertLog
  * (Unique auf [budgetId, year, month, threshold]), damit dieselbe Schwelle im
  * selben Monat nur einmal meldet.
  *
@@ -27,10 +28,15 @@ import { loadSavingsCategoryIds } from "./savingsCategory";
  * Kategorie: im Monat fällig, nicht übersprungen und für den Monat noch nicht
  * gebucht (siehe lib/recurringPeriods.ts).
  *
- * Bekannte Einschränkung: Als Budget wird nur ein Monats-Budget (`Budget`-Zeile
- * mit Kategorie, Monat und Jahr auf dem Konto der Buchung) gelesen. Budget-Pläne
- * (`CategoryBudgetPlan`), die die Oberfläche anlegt, lösen keine Warnung aus —
- * der BudgetAlertLog hängt an `budgetId`.
+ * Das Budget ist dieselbe Zahl wie auf dem Dashboard (lib/categoryBudgets.ts):
+ * der Budget-Plan der Kategorie, sonst die Monats-Budgets des Haushalts
+ * zusammen.
+ *
+ * Bekannte Einschränkung: Der BudgetAlertLog hängt an `budgetId`. Eine Warnung
+ * gibt es deshalb nur, wenn für Kategorie und Monat mindestens ein
+ * Monats-Budget (`Budget`-Zeile) im Haushalt existiert. Eine Kategorie, die nur
+ * einen Budget-Plan (`CategoryBudgetPlan`) hat — das ist alles, was die
+ * Oberfläche anlegt —, löst keine Warnung aus.
  */
 
 /** Geplante Daueraufträge einer Kategorie im Monat (siehe oben), Ausgaben in Cents. */
@@ -100,18 +106,26 @@ export async function checkBudgetAlerts(params: {
     const { month, year } = zonedMonth(params.occurredAt);
     const { start, end } = zonedMonthRange(year, month);
 
-    const budget = await prisma.budget.findFirst({
-      where: { accountId, categoryId, month, year },
-      select: {
-        id: true,
-        amountCents: true,
-        category: { select: { name: true } },
-        account: { select: { householdId: true } }
-      }
-    });
-    if (!budget?.amountCents || budget.amountCents <= 0) return;
+    const account = await prisma.account.findFirst({ where: { id: accountId }, select: { householdId: true } });
+    if (!account) return;
+    const householdId = account.householdId;
 
-    const householdId = budget.account.householdId;
+    // The alert log is keyed by a Budget row, so an alert needs one per-month
+    // row of the household for this category as its anchor (the oldest, so
+    // every account's bookings dedupe on the same row).
+    const budget = await prisma.budget.findFirst({
+      where: { account: { householdId }, categoryId, month, year },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, category: { select: { name: true } } }
+    });
+    if (!budget) return;
+
+    // The amount is the budget the dashboard shows for this month: the plan if
+    // the category has one, otherwise the household's per-month rows added up.
+    const effectiveBudgets = await loadEffectiveCategoryBudgets({ householdId, year, month });
+    const budgetCents = (effectiveBudgets[categoryId] as number | undefined) ?? 0;
+    if (budgetCents <= 0) return;
+
     const savingsIds = await loadSavingsCategoryIds(householdId);
 
     const bookedRows = await prisma.transaction.findMany({
@@ -122,7 +136,7 @@ export async function checkBudgetAlerts(params: {
     const recurringCents = await plannedRecurringExpenseCents(householdId, categoryId, month, year, savingsIds);
     const spentCents = bookedExpenseCents + recurringCents;
 
-    const reached = reachedBudgetThresholds(spentCents, budget.amountCents);
+    const reached = reachedBudgetThresholds(spentCents, budgetCents);
     if (reached.length === 0) return;
 
     // Nur die HÖCHSTE erreichte Schwelle ist relevant (100 % schließt 80 % ein).

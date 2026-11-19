@@ -12,8 +12,10 @@
 - **Beleg-Scan:** Ein Gutschein oder Rabatt, der allein in einer Kategorie steht, wird nicht mehr als Ausgabe gebucht; die Buchungen eines Belegs ergeben zusammen die Belegsumme. Das Belegdatum wird als 12:00 Uhr Berliner Zeit des Belegtags gespeichert statt als Mitternacht UTC.
 - **Jahresübersicht und CSV-Export der Daueraufträge** ordnen gleich ein (Spar-Kategorie, dann Vorzeichen) — eine Einnahme ohne Kategorie steht im CSV nicht mehr als „Ausgabe". Die Jahresübersicht nach Kategorien ordnet jede Buchung einzeln ein; ihre Monatssummen entsprechen dem Rückblick.
 - **Rückblick:** Die Sparquote bleibt zwischen 0 und 100 %; ungültige Monats-/Jahresangaben fallen auf den letzten abgeschlossenen Monat zurück.
-- **Budget-Warnung (Push)** rechnet „Ausgegeben" wie das Dashboard.
-- **Eingaben, die sich nicht speichern lassen, sind `400` statt `500`** (Beschreibung oder Titel nur aus Leerraum, Betrag außerhalb int4, unlesbares Datum, kein JSON). Die Offline-Outbox hält bei jedem 5xx an — ein solcher Eintrag blockierte bisher alle späteren Offline-Buchungen.
+- **Budget-Warnung (Push)** rechnet „Ausgegeben" und das Budget wie das Dashboard (Budget-Plan vor Monats-Budget, Monats-Budgets mehrerer Konten zusammen) und meldet eine exakt erreichte Schwelle zuverlässig.
+- **Prozentwerte** werden einheitlich kaufmännisch gerundet (`percentOf`): 435 € von 3.000 € sind 15 %, nicht 14 %.
+- **Kategorien:** Die Nutzungs-Reihenfolge zählt gelöschte Buchungen nicht mehr mit. Bei einem Dauerauftrag lässt sich die Kategorie wieder entfernen.
+- **Eingaben, die sich nicht speichern lassen, sind `400` statt `500`** (Beschreibung oder Titel nur aus Leerraum, Betrag außerhalb int4, unlesbares Datum oder Jahr vor 1900, kein JSON). Die Offline-Outbox hält bei jedem 5xx an — ein solcher Eintrag blockierte bisher alle späteren Offline-Buchungen.
 ### Added
 - `docs/calculations/00-grundregeln.md` — die verbindlichen Regeln für Kalender, Einordnung, Umfang, gebucht/geplant und den Abgleich der Bildschirme; die übrige Berechnungs-Doku und `docs/api-reference.md` sind darauf abgestimmt.
 - `@doewe/shared`: `calendar.ts` (`APP_TIME_ZONE`, `zonedMonth`, `zonedDate`, `zonedMonthRange`, `zonedDayRange`, `zonedYearRange`, `zonedTimeToUtc`, `zonedDayKey`, …), `cashflow.ts` (`classifyFlow`, `sumFlows`, `isSavingsCategoryName`, `savingsCategoryIds`) und `transactionFilter.ts` (`filterTransactions`, `listTotals` — Filter und Summen der Buchungsliste); in `recurringSchedule.ts` neu `occurrenceDate`, `isOnOrBeforeDate`, `firstOccurrenceFrom`.

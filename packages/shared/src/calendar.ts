@@ -80,8 +80,12 @@ function offsetMs(utcMs: number, timeZone: string): number {
 /**
  * The instant at which the wall clock in `timeZone` shows the given date and
  * time. Month and day may overflow (month 13 is January of the next year, day
- * 0 the last day of the previous month), like `Date.UTC`. A wall-clock time
- * skipped by a daylight-saving jump resolves to the instant after the jump.
+ * 0 the last day of the previous month), like `Date.UTC`; years below 100 are
+ * not supported (`Date.UTC` reads them as 19xx). A wall-clock time skipped by a
+ * daylight-saving jump resolves to an instant next to the jump — in
+ * Europe/Berlin the jump is at 02:00/03:00, never at midnight or noon, so day
+ * and month ranges are exact; in a zone that jumps at midnight they still
+ * tile the timeline without gap or overlap.
  */
 export function zonedTimeToUtc(
   local: CalendarDate & { hour?: number; minute?: number; second?: number },

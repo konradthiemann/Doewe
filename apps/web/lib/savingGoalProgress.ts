@@ -4,6 +4,8 @@
  * The available savings fill the goals in order (a cascade): the first goal is
  * served first, what is left goes to the next one.
  */
+import { percentOf } from "@doewe/shared";
+
 
 export type GoalStatus = "complete" | "current" | "upcoming";
 
@@ -25,7 +27,7 @@ export type GoalProgress = {
  */
 export function goalPercent(achievedCents: number, targetCents: number): number {
   if (targetCents <= 0 || achievedCents >= targetCents) return 100;
-  return Math.min(99, Math.max(0, Math.round((achievedCents / targetCents) * 100)));
+  return Math.min(99, Math.max(0, percentOf(achievedCents, targetCents)));
 }
 
 /** Distributes `availableCents` over the goals in order and derives each goal's progress. */

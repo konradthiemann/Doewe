@@ -174,3 +174,13 @@ export function formatEuro(c: Cents, locale: "de" | "en"): string {
   });
   return formatter.format(c / 100);
 }
+
+/**
+ * `part` as a percentage of `whole`, rounded half up to a whole percent; 0 when
+ * `whole` is 0. Multiplies before dividing: `(part / whole) * 100` turns an
+ * exact x.5 % into x.4999… and rounds it down (435 of 3,000 is 14.5 %, not 14).
+ */
+export function percentOf(part: number, whole: number): number {
+  if (whole === 0) return 0;
+  return Math.round((part * 100) / whole);
+}

@@ -31,8 +31,10 @@ export function reachedBudgetThresholds(
   budgetCents: number,
   thresholds: readonly number[] = BUDGET_ALERT_THRESHOLDS
 ): number[] {
-  const percent = budgetPercent(spentCents, budgetCents);
-  return [...thresholds].sort((a, b) => a - b).filter((threshold) => percent >= threshold);
+  if (budgetCents <= 0) return [];
+  // Integer comparison: (spent / budget) * 100 can land a hair below a
+  // threshold that was reached exactly.
+  return [...thresholds].sort((a, b) => a - b).filter((threshold) => spentCents * 100 >= threshold * budgetCents);
 }
 
 /** True, wenn im 7-Bit-Bitmask (Bit 0 = Sonntag … Bit 6 = Samstag) gesetzt. */

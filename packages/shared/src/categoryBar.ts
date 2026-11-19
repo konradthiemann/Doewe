@@ -1,3 +1,5 @@
+import { percentOf } from "./money";
+
 export interface CategoryBarInput {
   spentCents: number;
   /** null = no budget set for this category (share mode). */
@@ -27,7 +29,7 @@ export function computeCategoryBar({ spentCents, budgetCents, totalOutcomeCents 
     return {
       mode: "share",
       fillRatio: clamp01(ratio),
-      percent: Math.round(ratio * 100),
+      percent: percentOf(spentCents, totalOutcomeCents),
       over: false,
       overByCents: 0,
       remainingCents: 0
@@ -48,7 +50,7 @@ export function computeCategoryBar({ spentCents, budgetCents, totalOutcomeCents 
   return {
     mode: "budget",
     fillRatio: clamp01(ratio),
-    percent: Math.round(ratio * 100),
+    percent: percentOf(spentCents, budgetCents),
     over: spentCents > budgetCents,
     overByCents: Math.max(0, spentCents - budgetCents),
     remainingCents: Math.max(0, budgetCents - spentCents)

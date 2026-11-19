@@ -125,7 +125,7 @@ zusammen mit der Buchung im `MutationLog` gespeichert; eine Wiederholung mit dem
 bekommt die gespeicherte Antwort zurück und bucht nicht doppelt.
 
 **Fehler sind `400`, nicht `500`:** Kein gültiges JSON, eine Beschreibung nur aus Leerraum, ein
-Betrag außerhalb von int4, ein unlesbares Datum oder eines außerhalb der Jahre 0000–9999 werden von
+Betrag außerhalb von int4, ein unlesbares Datum oder eines außerhalb der Jahre 1900–9999 werden von
 der Validierung abgewiesen. Hintergrund: Die Offline-Outbox hält bei jedem 5xx an, um ihre
 Reihenfolge zu wahren — eine einzige solche Eingabe hätte alle späteren Offline-Buchungen blockiert.
 
@@ -170,8 +170,10 @@ gehört, bestimmt ihr Kalendertag **in Europe/Berlin** — auf dem Server wie im
 
 - Ein reiner Kalendertag (`yyyy-mm-dd`) wird als **12:00 Uhr Berliner Zeit** dieses Tages
   gespeichert. Ein Tag, den es nicht gibt (z.B. `2026-02-30`), ist ungültig.
-- Alles andere wird als ISO-Zeitpunkt gelesen und unverändert gespeichert.
-- Ungültig oder außerhalb der Jahre 0000–9999 → `400`.
+- Ein ISO-Zeitpunkt mit Zeitzone (`2026-11-19T10:00:00.000Z`, `…+01:00`) wird unverändert
+  gespeichert. Fehlt die Zeitzone (`2026-11-19T11:00:00`), gilt er als Berliner Uhrzeit.
+- Alles andere — kein ISO-Format, ein Datum, das es nicht gibt, ein Jahr vor 1900 (Tippfehler wie
+  `0026`) oder nach 9999 — → `400`.
 
 ## Buchungsliste: Filter und Summen
 

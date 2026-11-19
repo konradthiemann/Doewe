@@ -131,7 +131,8 @@ const plannedSavings = (plannedBudgetAgg._sum.amountCents ?? 0) / 100;
 `checkBudgetAlerts` (`lib/budgetAlerts.ts`) wird nach `POST /api/transactions` aufgerufen und sendet einen Push, wenn die Kategorie der Buchung 80 % oder 100 % ihres Budgets erreicht hat. Gemeldet wird nur die höchste erreichte Schwelle, jede Schwelle je Budget und Monat höchstens einmal (`BudgetAlertLog`). Nutzer mit abgeschaltetem `notifyBudgetAlerts` bekommen nichts.
 
 - **Ausgegeben** ist dieselbe Zahl wie `spent` im Dashboard: gebuchte Ausgaben der Kategorie im Berliner Monat der Buchung, alle Konten des Haushalts, plus geplante Daueraufträge der Kategorie.
-- **Bekannte Grenze — nur Monats-Budgets:** Als Budget liest die Warnung ausschließlich eine Monats-`Budget`-Zeile (Kategorie, Monat, Jahr) auf dem Konto der Buchung. **Budget-Pläne lösen nie eine Warnung aus**, obwohl die Oberfläche unter `/budgets` nur Pläne anlegt — der `BudgetAlertLog` hängt an `budgetId`.
+- **Budget** ist dieselbe Zahl wie `budget` im Dashboard (`loadEffectiveCategoryBudgets`): der Budget-Plan der Kategorie, sonst die Monats-Budgets des Haushalts zusammen. Verglichen wird ganzzahlig (`spent × 100 >= Schwelle × budget`).
+- **Bekannte Grenze — eine Monats-`Budget`-Zeile ist nötig:** Der `BudgetAlertLog` hängt an `budgetId`. Eine Warnung gibt es nur, wenn für Kategorie und Monat mindestens eine Monats-`Budget`-Zeile im Haushalt existiert (die älteste dient als Anker). **Eine Kategorie, die nur einen Budget-Plan hat, löst nie eine Warnung aus** — und die Oberfläche unter `/budgets` legt nur Pläne an.
 - Andere Wege, auf denen Buchungen entstehen (Beleg-Scan, Bearbeiten, Sync, automatisch gebuchte Daueraufträge), rufen die Prüfung nicht auf.
 
 ## API

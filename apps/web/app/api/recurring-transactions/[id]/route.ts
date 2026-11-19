@@ -86,7 +86,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const updateData = {
     accountId: data.accountId,
-    categoryId: data.categoryId ?? undefined,
+    // undefined = unchanged, null = remove the category
+    categoryId: data.categoryId,
     amountCents: data.amountCents,
     description: data.description,
     intervalMonths: data.intervalMonths,
