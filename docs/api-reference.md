@@ -864,7 +864,7 @@ Update a recurring transaction template. Partial update — send only changed fi
 - `startDate` (`yyyy-mm-dd`, takes precedence) re-anchors the series to that date.
 - `dayOfMonth` alone only moves the day: the anchor **month is kept** and the day is clamped to the length of that month. The series is not re-anchored — with an interval above 1 the due months stay the same, and no earlier month drops out of the yearly view or the CSV.
 
-Occurrences that are already booked are left untouched in both cases. `categoryId: null` passes validation but does not clear the category (the field is then left unchanged).
+Occurrences that are already booked are left untouched in both cases. `categoryId: null` removes the category; omitting the field leaves it unchanged.
 
 **Auth required:** Yes
 
