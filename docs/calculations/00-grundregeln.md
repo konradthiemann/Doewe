@@ -67,6 +67,13 @@ Folgerungen:
   `Transaction.recurringPeriod` (`JJJJ-MM`, der Monat, für den gebucht wurde) erkannt — nicht über den
   Monat von `occurredAt`. Verschieben oder Löschen der Buchung ändert deshalb nichts daran, dass der
   Monat als gebucht gilt.
+- Eine von Hand erfasste Zahlung gilt als das Vorkommen, wenn sie auf demselben Konto liegt, denselben
+  Betrag und dieselbe Kategorie hat (ohne Kategorie: dieselbe Beschreibung) und höchstens 7 Tage vor
+  oder nach dem Fälligkeitstag datiert ist. Sie wird dann mit dem Dauerauftrag verknüpft, statt dass
+  ein zweites Mal gebucht wird.
+- Monate vor `RecurringTransaction.bookFromPeriod` werden nie automatisch gebucht. Ein Dauerauftrag
+  mit Startdatum in der Vergangenheit bucht deshalb erst ab dem laufenden Monat, außer das Nachbuchen
+  wurde ausdrücklich verlangt.
 - **Kontostand** = Summe aller Buchungen bis zum Ende des laufenden Monats.
   **Übertrag** = Summe aller Buchungen vor Beginn des Monats.
 
@@ -91,3 +98,18 @@ jeden Monat `M`:
 | Jahresübersicht nach Kategorien, Monat `M`: Gruppen-Summen | Rückblick `M`: Einnahmen, Ausgaben, Gespart |
 | Dashboard nach Monatsende (alles gebucht) | Rückblick desselben Monats |
 | „Ausgegeben" je Kategorie, gebucht | dieselbe Zahl im Rückblick und in der Jahresübersicht; Dashboard und Budget-Warnung rechnen im laufenden Monat zusätzlich das Geplante ein |
+
+## 7. Spartopf, Sparziele und Budgets
+
+- **Spartopf** = Einzahlungen in die Spar-Kategorien minus Entnahmen, über alle Konten des Haushalts.
+  Davon abgezogen wird nur der Betrag, der für Ziele zurückgehalten wird, die abgeschlossen wurden,
+  bevor Entnahmen gebucht wurden (`Budget.reservedCents`).
+- Ein Sparziel abzuschließen bucht eine Entnahme aus dem Spartopf (höchstens so viel, wie im Topf ist)
+  und auf Wunsch den Kauf als Ausgabe. Wieder öffnen nimmt die Entnahme zurück. Der Spartopf lässt
+  sich deshalb immer aus den Buchungen nachrechnen.
+- Das Budget einer Kategorie ist der Budget-Plan, sonst die Monats-Budgets des Haushalts zusammen.
+  Für einen abgeschlossenen Monat gilt der Stand, der beim ersten Lesen nach Monatsende festgehalten
+  wurde (`BudgetMonthSnapshot`); spätere Änderungen an Plänen oder Daueraufträgen wirken nur auf den
+  laufenden und künftige Monate.
+- Budget-Warnungen vergleichen „Ausgegeben" (gebucht und geplant) mit diesem Budget und gehen an alle
+  Mitglieder des Haushalts, die sie eingeschaltet haben.
