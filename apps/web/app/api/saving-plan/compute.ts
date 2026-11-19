@@ -2,12 +2,16 @@
  * Pure saving-plan computation — no Prisma, no I/O — so it can be unit-tested directly.
  *
  * Goals are stored as `Budget` rows with `categoryId = null`. A goal is considered
- * "completed" once `completedAt` is set; `spentCents` then holds the amount that was
- * actually withdrawn from the shared savings pool on completion.
+ * "completed" once `completedAt` is set.
+ *
+ * Completing a goal takes its money out of the savings pool with a real
+ * withdrawal booking (see ./[id]/complete/route.ts), so the pool is simply the
+ * sum of the savings bookings. The one exception are goals completed before
+ * withdrawals were booked: they hold their amount back from the pool through
+ * `reservedCents` (set once by the migration, never for a new completion).
  *
  * Completed goals leave the forward-looking plan: they no longer count toward the
- * planned total nor the suggested monthly rate, and the amount withdrawn for them is
- * subtracted from the savings pool that funds the remaining active goals.
+ * planned total nor the suggested monthly rate.
  *
  * "Undated" goals (month/year null) are an idea backlog with no deadline. They do
  * NOT participate in the forward-looking plan at all: they are excluded from the
@@ -21,15 +25,18 @@
  * rate would drop as soon as the user saves.) "Current month" is the Europe/Berlin
  * calendar month of `now`.
  */
-import { zonedMonth } from "@doewe/shared";
+import { sumFlows, zonedMonth, type FlowRow } from "@doewe/shared";
 
 export type SavingPlanGoal = {
   /** goal amount; null = no amount set yet (undated ideas may omit it) */
   amountCents: number | null;
   /** null = active, set = completed */
   completedAt: Date | string | null;
-  /** amount withdrawn from savings on completion (set only when completed) */
-  spentCents: number | null;
+  /**
+   * amount a goal completed before withdrawals were booked still holds back
+   * from the pool; null for every goal completed since (and for active goals)
+   */
+  reservedCents: number | null;
   /** target month 1-12, null = undated */
   month: number | null;
   /** target year, null = undated */
@@ -37,17 +44,31 @@ export type SavingPlanGoal = {
 };
 
 export type SavingPlanTotals = {
-  /** raw savings balance before reserving anything for completed goals */
+  /** raw savings balance: the negated sum of all savings bookings */
   rawAvailableCents: number;
-  /** sum of spentCents across all completed goals */
+  /**
+   * legacy reservation: sum of reservedCents across completed goals. 0 unless
+   * the household completed goals before withdrawals were booked.
+   */
   withdrawnForCompletedCents: number;
-  /** savings pool available to the remaining active goals (floored at 0) */
+  /** raw balance minus the legacy reservation (floored at 0) */
   availableCents: number;
   /** sum of amountCents across active goals only */
   totalTargetCents: number;
   /** minimum constant monthly amount to reach all active goals on time */
   suggestedMonthlyCents: number;
 };
+
+/**
+ * What was spent on a goal ("X ausgegeben"), from the bookings linked to it:
+ * their outcome minus their refunds, never below 0. Classified like every
+ * other figure (classifyFlow): a linked booking in a savings category is a
+ * transfer to or from the pool, not spending, and does not count.
+ */
+export function linkedSpentCents(rows: Iterable<FlowRow>, savingsIds: ReadonlySet<string>): number {
+  const { outcomeCents, incomeCents } = sumFlows(rows, savingsIds);
+  return Math.max(outcomeCents - incomeCents, 0);
+}
 
 function isCompleted(goal: SavingPlanGoal): boolean {
   return goal.completedAt != null;
@@ -81,9 +102,11 @@ export function computeSavingPlanTotals(
       !isCompleted(goal) && isScheduled(goal)
   );
 
+  // Only goals completed before withdrawals were booked carry a reservation;
+  // every later completion already left the raw balance as a booking.
   const withdrawnForCompletedCents = goals
     .filter(isCompleted)
-    .reduce((sum, goal) => sum + (goal.spentCents ?? 0), 0);
+    .reduce((sum, goal) => sum + (goal.reservedCents ?? 0), 0);
 
   const availableCents = Math.max(rawSavingsBalance - withdrawnForCompletedCents, 0);
 

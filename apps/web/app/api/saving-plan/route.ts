@@ -12,10 +12,18 @@
  *   goals          — aktive Ziele mit Termin (Monat/Jahr), sortiert nach Termin
  *   undatedGoals   — aktive Ziele ohne Termin (Ideen-Liste)
  *   completedGoals — abgeschlossene Ziele
- *   totals         — siehe computeSavingPlanTotals (./compute.ts). Die Sparrate
- *                    (`suggestedMonthlyCents`) rechnet gegen den Topf zu Beginn des
- *                    laufenden Berliner Monats; alles andere gegen den echten Topf.
- *   `transactionSpentCents` je Ziel zählt nur nicht gelöschte Buchungen.
+ *   totals         — siehe computeSavingPlanTotals (./compute.ts). Der Topf
+ *                    (`rawAvailableCents`) ist die Summe der Sparbuchungen; ein
+ *                    abgeschlossenes Ziel hat sein Geld als Buchung entnommen.
+ *                    `withdrawnForCompletedCents` ist nur noch der Altbestand:
+ *                    was Ziele zurückhalten, die vor den Entnahme-Buchungen
+ *                    abgeschlossen wurden (`reservedCents`), sonst 0.
+ *                    `availableCents` = Topf minus Altbestand, mindestens 0.
+ *                    Die Sparrate (`suggestedMonthlyCents`) rechnet gegen den
+ *                    Topf zu Beginn des laufenden Berliner Monats.
+ *   `transactionSpentCents` je Ziel: Ausgaben der verknüpften, nicht gelöschten
+ *                    Buchungen minus verknüpfte Erstattungen, mindestens 0
+ *                    (classifyFlow; Buchungen einer Spar-Kategorie zählen nicht).
  *
  * POST Body: { accountId, title, targetMonth?, targetYear?, amountCents? }
  *   (Monat und Jahr nur gemeinsam; Alias `month`/`year`, `dueMonth`/`dueYear`)
@@ -29,7 +37,7 @@ import { prisma } from "../../../lib/prisma";
 import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
 import { INT4_MAX } from "../transactions/schema";
 
-import { computeSavingPlanTotals } from "./compute";
+import { computeSavingPlanTotals, linkedSpentCents } from "./compute";
 import { resolveSavedThisMonthCents, resolveSavingsBalanceCents } from "./savings";
 
 const SavingPlanInput = z
@@ -96,7 +104,7 @@ export async function GET() {
         category: { select: { name: true } },
         // Der Soft-Delete-Filter aus lib/prisma.ts greift nur im obersten
         // `where` — gelöschte Buchungen hier selbst ausschließen.
-        transactions: { where: { deletedAt: null }, select: { amountCents: true } }
+        transactions: { where: { deletedAt: null }, select: { amountCents: true, categoryId: true } }
       }
     }),
     resolveSavingsBalanceCents(user.householdId, savingsIds),
@@ -117,7 +125,7 @@ export async function GET() {
     month: goal.month,
     year: goal.year,
     amountCents: goal.amountCents,
-    transactionSpentCents: goal.transactions.reduce((sum, tx) => sum + Math.abs(tx.amountCents), 0),
+    transactionSpentCents: linkedSpentCents(goal.transactions, savingsIds),
     completedAt: goal.completedAt,
     spentCents: goal.spentCents,
     createdAt: goal.createdAt
@@ -131,14 +139,14 @@ export async function GET() {
   const undatedGoals = activeRaw.filter((goal) => goal.month == null || goal.year == null).map(mapGoal);
   const completedGoals = goalsRaw.filter((goal) => goal.completedAt != null).map(mapGoal);
 
-  // computeSavingPlanTotals reserves the amount withdrawn for completed goals out
-  // of the raw balance, and measures the suggested monthly rate against the pool
-  // at the start of the current month (hence this month's net deposits).
+  // computeSavingPlanTotals holds back what goals completed before withdrawals
+  // were booked still reserve, and measures the suggested monthly rate against
+  // the pool at the start of the current month (hence this month's net deposits).
   const totals = computeSavingPlanTotals(
     goalsRaw.map((goal) => ({
       amountCents: goal.amountCents,
       completedAt: goal.completedAt,
-      spentCents: goal.spentCents,
+      reservedCents: goal.reservedCents,
       month: goal.month,
       year: goal.year
     })),
