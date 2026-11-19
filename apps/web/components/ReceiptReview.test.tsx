@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "../lib/i18n";
 
-import ReceiptReview from "./ReceiptReview";
+import ReceiptReview, { parseUnitPrice } from "./ReceiptReview";
 import { ToastProvider } from "./ui/Toast";
 
 const fetchMock = vi.fn();
@@ -246,5 +246,120 @@ describe("ReceiptReview: quantity field", () => {
     await user.tab();
     expect(screen.getByText(QTY_ERROR)).toBeInTheDocument();
     expect(bookButton()).toBeDisabled();
+  });
+});
+
+describe("parseUnitPrice", () => {
+  it("reads comma or dot, two decimals at most, and a leading minus", () => {
+    expect(parseUnitPrice("1,29")).toBe(129);
+    expect(parseUnitPrice("1.29")).toBe(129);
+    expect(parseUnitPrice("1,5")).toBe(150);
+    expect(parseUnitPrice("12")).toBe(1200);
+    expect(parseUnitPrice(" 0,99 ")).toBe(99);
+    expect(parseUnitPrice("-0,50")).toBe(-50);
+    expect(parseUnitPrice("−0,50")).toBe(-50);
+    expect(parseUnitPrice("0")).toBe(0);
+    expect(parseUnitPrice("-0")).toBe(0);
+  });
+
+  it("is null while empty, incomplete or not a price", () => {
+    expect(parseUnitPrice("")).toBeNull();
+    expect(parseUnitPrice("-")).toBeNull();
+    expect(parseUnitPrice(",")).toBeNull();
+    expect(parseUnitPrice("1,299")).toBeNull();
+    expect(parseUnitPrice("abc")).toBeNull();
+    expect(parseUnitPrice("1,2,3")).toBeNull();
+  });
+});
+
+describe("ReceiptReview: unit-price field", () => {
+  const CHEESE: ScanItem = { name: "Käse", quantity: 2, unitPriceCents: 1299, totalCents: 2598, suggestedCategory: "Lebensmittel" };
+  const priceFields = () => screen.getAllByRole("textbox", { name: "Stückpreis" }) as HTMLInputElement[];
+  const priceField = () => priceFields()[0]!;
+  const bookButton = () => screen.getByRole("button", { name: "Buchen" });
+  const PRICE_ERROR = "Bitte einen Preis eingeben, zum Beispiel 1,29 oder -0,50 für einen Rabatt.";
+
+  it("shows the scanned price with a comma and keeps exactly what is typed", async () => {
+    const user = userEvent.setup();
+    setup([CHEESE]);
+    expect(priceField()).toHaveValue("12,99");
+
+    await user.clear(priceField());
+    // No snapping back to 0.00 while the field is empty.
+    expect(priceField()).toHaveValue("");
+    expect(screen.queryByText(PRICE_ERROR)).not.toBeInTheDocument();
+
+    await user.type(priceField(), "1,5");
+    // Not reformatted to "1.50" on the way.
+    expect(priceField()).toHaveValue("1,5");
+    // 2 × 1,50 = 3,00
+    await waitFor(() => expect(screen.getByText(/Gesamt.*3,00/)).toBeInTheDocument());
+  });
+
+  it("accepts a dot as decimal separator too and books whole cents", async () => {
+    const user = userEvent.setup();
+    const { onComplete } = setup([CHEESE]);
+
+    await user.clear(priceField());
+    await user.type(priceField(), "2.49");
+    expect(priceField()).toHaveValue("2.49");
+
+    await book(user, onComplete);
+    const groups = bookedBody().groups as Array<{ items: Array<{ unitPriceCents: number; totalCents: number }> }>;
+    expect(groups[0]!.items[0]).toMatchObject({ unitPriceCents: 249, totalCents: 498 });
+  });
+
+  it("points out an empty price once the field is left and blocks booking until it is fixed", async () => {
+    const user = userEvent.setup();
+    const { onComplete } = setup([CHEESE]);
+
+    await user.clear(priceField());
+    await user.tab();
+
+    expect(screen.getByText(PRICE_ERROR)).toBeInTheDocument();
+    expect(priceField()).toHaveAttribute("aria-invalid", "true");
+    expect(bookButton()).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.type(priceField(), "3,10");
+    expect(screen.queryByText(PRICE_ERROR)).not.toBeInTheDocument();
+    expect(bookButton()).toBeEnabled();
+
+    await book(user, onComplete);
+    const groups = bookedBody().groups as Array<{ items: Array<{ unitPriceCents: number; totalCents: number }> }>;
+    expect(groups[0]!.items[0]).toMatchObject({ unitPriceCents: 310, totalCents: 620 });
+  });
+
+  it("treats text and three decimals as invalid", async () => {
+    const user = userEvent.setup();
+    setup([CHEESE]);
+
+    await user.clear(priceField());
+    await user.type(priceField(), "zwölf");
+    await user.tab();
+    expect(screen.getByText(PRICE_ERROR)).toBeInTheDocument();
+    expect(bookButton()).toBeDisabled();
+
+    await user.clear(priceField());
+    await user.type(priceField(), "1,299");
+    await user.tab();
+    expect(screen.getByText(PRICE_ERROR)).toBeInTheDocument();
+    expect(bookButton()).toBeDisabled();
+  });
+
+  it("keeps a discount negative", async () => {
+    const user = userEvent.setup();
+    const { onComplete } = setup([
+      CHEESE,
+      { name: "Rabatt", quantity: 1, unitPriceCents: -100, totalCents: -100, suggestedCategory: "Lebensmittel" }
+    ]);
+    expect(priceFields()[1]).toHaveValue("-1,00");
+
+    await user.clear(priceFields()[1]!);
+    await user.type(priceFields()[1]!, "-0,50");
+
+    await book(user, onComplete);
+    const groups = bookedBody().groups as Array<{ items: Array<{ name: string; unitPriceCents: number; totalCents: number }> }>;
+    expect(groups[0]!.items[1]).toMatchObject({ name: "Rabatt", unitPriceCents: -50, totalCents: -50 });
   });
 });

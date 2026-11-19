@@ -17,6 +17,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Doughnut, Bar } from "react-chartjs-2";
 
 import { SavingsOverviewCard } from "../components/dashboard/SavingsOverviewCard";
+import {
+  RecurringItem,
+  UpcomingRecurringList,
+  type RecurringSuggestion
+} from "../components/dashboard/UpcomingRecurring";
 import OnboardingWizard from "../components/OnboardingWizard";
 import PageContainer from "../components/PageContainer";
 import { CategoryBreakdown } from "../components/review/CategoryBreakdown";
@@ -70,6 +75,9 @@ type SummaryData = {
   projectedOutcomeTotal?: number;
   projectedSavingsTotal?: number;
   projectedRemaining?: number;
+  // Hand-entered bookings that may be a planned standing order's payment;
+  // the user confirms them. Optional: older payloads (offline cache) lack it.
+  recurringSuggestions?: RecurringSuggestion[];
 };
 
 type QuarterlyData = {
@@ -299,26 +307,6 @@ export default function HomePage() {
 
   // Leerer Account (Erstnutzung): Hero zeigt Willkommens-Einstieg statt 0-Werten
   const showWelcome = !loading && !hasIncomeData && projectedSpent === 0 && recurringTransactions.length === 0;
-
-  const renderRecurringItem = (rec: { id: string; description: string; amountCents: number; dayOfMonth: number | null }) => (
-    <li key={rec.id} className="flex items-center justify-between rounded-field border border-line bg-surface-2 p-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-ink truncate">
-          {rec.description}
-        </p>
-        {rec.dayOfMonth && (
-          <p className="text-xs text-ink-muted">
-            {t("dashboard.recurringDay", { day: rec.dayOfMonth })}
-          </p>
-        )}
-      </div>
-      <span className={`text-sm font-semibold tabular-nums ml-3 ${
-        rec.amountCents < 0 ? "text-expense" : "text-income"
-      }`}>
-        {formatCurrency(rec.amountCents / 100)}
-      </span>
-    </li>
-  );
 
   return (
     <main id="maincontent" className="py-6 md:py-8">
@@ -563,9 +551,11 @@ export default function HomePage() {
                 {t("dashboard.upcomingTitle")}
               </p>
               {upcomingRecurring.length > 0 ? (
-                <ul className="mt-2 space-y-2">
-                  {upcomingRecurring.map(renderRecurringItem)}
-                </ul>
+                <UpcomingRecurringList
+                  items={upcomingRecurring}
+                  suggestions={summary.recurringSuggestions}
+                  formatCurrency={formatCurrency}
+                />
               ) : (
                 <p className="mt-2 text-sm text-ink-muted">{t("dashboard.upcomingNone")}</p>
               )}
@@ -589,7 +579,9 @@ export default function HomePage() {
                     </div>
                   </div>
                   <ul className="space-y-2">
-                    {recurringTransactions.map(renderRecurringItem)}
+                    {recurringTransactions.map((rec) => (
+                      <RecurringItem key={rec.id} rec={rec} formatCurrency={formatCurrency} />
+                    ))}
                   </ul>
                 </div>
               </details>

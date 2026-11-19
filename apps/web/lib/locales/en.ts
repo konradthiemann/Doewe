@@ -829,7 +829,7 @@ export const en: Record<string, string> = {
   "info.transactions.recurringThisMonth.title": "Standing orders this month",
   "info.transactions.recurringThisMonth.body": "All standing orders due this month – whether already booked or not. Skipped ones are left out.\n\nThe number on the right adds everything up: income minus expenses and saving.",
   "info.recurring.basics.title": "How standing orders work",
-  "info.recurring.basics.body": "A standing order is booked automatically on its day – every month or every few months. If a month does not have that day (the 31st, for example), it is booked on the last day of the month.\n\nTo leave out next month, untick it under “Upcoming recurring” in the “Transactions” tab. If you delete the booking of a month, it stays deleted and is not booked again.\n\nIf you already entered the payment by hand (same amount, same category, at most 7 days before or after the standing order's day), it counts as that month's booking. Nothing is booked twice.",
+  "info.recurring.basics.body": "A standing order is booked automatically on its day – every month or every few months. If a month does not have that day (the 31st, for example), it is booked on the last day of the month.\n\nTo leave out next month, untick it under “Upcoming recurring” in the “Transactions” tab. If you delete the booking of a month, it stays deleted and is not booked again.\n\nIf you already entered the payment by hand, the overview asks under “Still due this month” whether that was the standing order. If you confirm, the standing order is not booked again this month. Otherwise it is booked on its day as usual, and you can delete one of the two bookings.",
   "info.recurring.startDate.title": "Start date",
   "info.recurring.startDate.body": "The start date is the day of the first booking. The “day of month” follows it.\n\nIf the start date lies in a past month, the past months are only booked if you tick “Book past months”. Otherwise booking starts with the current month.\n\nIf you leave the start date empty when creating, the standing order starts on the next day the “day of month” falls on.",
   "info.form.booking.title": "Income, expense or saving?",
@@ -914,5 +914,12 @@ export const en: Record<string, string> = {
   "recurringForm.errorStartDateRange": "The start date must be within 10 years before or after today.",
   "transactions.recurringMarker": "Standing order",
   "transactions.recurringMarkerTitle": "Booking of a standing order",
-  "receiptScanner.qtyInvalid": "Please enter a quantity above 0, for example 1 or 0.345."
+  "receiptScanner.qtyInvalid": "Please enter a quantity above 0, for example 1 or 0.345.",
+  "dashboard.recurringSuggestion": "Already paid? On {date} you booked {amount} “{description}”.",
+  "dashboard.recurringSuggestionNoDescription": "Already paid? On {date} you booked {amount}.",
+  "dashboard.recurringSuggestionConfirm": "That was this standing order",
+  "dashboard.recurringSuggestionLinked": "Done – the standing order won't be booked again this month.",
+  "dashboard.recurringSuggestionStale": "That booking no longer matches the standing order. The overview has been refreshed.",
+  "dashboard.recurringSuggestionError": "That didn't work. Please try again in a moment.",
+  "receiptScanner.unitPriceInvalid": "Please enter a price, for example 1.29, or -0.50 for a discount."
 };

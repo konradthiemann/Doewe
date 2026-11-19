@@ -829,7 +829,7 @@ export const de: Record<string, string> = {
   "info.transactions.recurringThisMonth.title": "Daueraufträge in diesem Monat",
   "info.transactions.recurringThisMonth.body": "Alle Daueraufträge, die diesen Monat fällig sind – egal ob schon gebucht oder noch nicht. Übersprungene sind nicht dabei.\n\nDie Zahl rechts fasst alles zusammen: Einnahmen minus Ausgaben und Sparen.",
   "info.recurring.basics.title": "So funktionieren Daueraufträge",
-  "info.recurring.basics.body": "Ein Dauerauftrag wird an seinem Tag automatisch gebucht – jeden Monat oder alle paar Monate. Gibt es den Tag in einem Monat nicht (zum Beispiel den 31.), wird am letzten Tag des Monats gebucht.\n\nUm den nächsten Monat auszulassen, nimm im Tab „Transaktionen“ unter „Bevorstehende Wiederkehrende“ den Haken heraus. Löschst du die Buchung eines Monats, bleibt sie gelöscht und wird nicht noch einmal gebucht.\n\nHast du die Zahlung schon von Hand eingetragen (gleicher Betrag, gleiche Kategorie, höchstens 7 Tage vor oder nach dem Tag des Dauerauftrags), gilt sie als Buchung dieses Monats. Es wird nicht doppelt gebucht.",
+  "info.recurring.basics.body": "Ein Dauerauftrag wird an seinem Tag automatisch gebucht – jeden Monat oder alle paar Monate. Gibt es den Tag in einem Monat nicht (zum Beispiel den 31.), wird am letzten Tag des Monats gebucht.\n\nUm den nächsten Monat auszulassen, nimm im Tab „Transaktionen“ unter „Bevorstehende Wiederkehrende“ den Haken heraus. Löschst du die Buchung eines Monats, bleibt sie gelöscht und wird nicht noch einmal gebucht.\n\nHast du die Zahlung schon von Hand eingetragen, fragt dich die Übersicht unter „Steht diesen Monat noch an“, ob das der Dauerauftrag war. Bestätigst du es, wird der Dauerauftrag diesen Monat nicht noch einmal gebucht. Sonst wird er an seinem Tag wie gewohnt gebucht, und du kannst eine der beiden Buchungen löschen.",
   "info.recurring.startDate.title": "Startdatum",
   "info.recurring.startDate.body": "Das Startdatum ist der Tag der ersten Buchung. Der „Tag des Monats“ richtet sich danach.\n\nLiegt das Startdatum in einem vergangenen Monat, werden die vergangenen Monate nur gebucht, wenn du „Vergangene Monate nachbuchen“ ankreuzt. Sonst wird erst ab dem laufenden Monat gebucht.\n\nLässt du das Startdatum beim Anlegen leer, beginnt der Dauerauftrag am nächsten Tag, auf den der „Tag des Monats“ fällt.",
   "info.form.booking.title": "Einnahme, Ausgabe oder Sparen?",
@@ -914,5 +914,12 @@ export const de: Record<string, string> = {
   "recurringForm.errorStartDateRange": "Das Startdatum darf höchstens 10 Jahre zurück oder voraus liegen.",
   "transactions.recurringMarker": "Dauerauftrag",
   "transactions.recurringMarkerTitle": "Buchung eines Dauerauftrags",
-  "receiptScanner.qtyInvalid": "Bitte eine Menge über 0 eingeben, zum Beispiel 1 oder 0,345."
+  "receiptScanner.qtyInvalid": "Bitte eine Menge über 0 eingeben, zum Beispiel 1 oder 0,345.",
+  "dashboard.recurringSuggestion": "Schon bezahlt? Am {date} hast du {amount} „{description}“ gebucht.",
+  "dashboard.recurringSuggestionNoDescription": "Schon bezahlt? Am {date} hast du {amount} gebucht.",
+  "dashboard.recurringSuggestionConfirm": "Das war dieser Dauerauftrag",
+  "dashboard.recurringSuggestionLinked": "Erledigt – der Dauerauftrag wird diesen Monat nicht noch einmal gebucht.",
+  "dashboard.recurringSuggestionStale": "Diese Buchung passt nicht mehr zum Dauerauftrag. Die Übersicht ist jetzt aktualisiert.",
+  "dashboard.recurringSuggestionError": "Das hat nicht geklappt. Bitte versuch es gleich noch einmal.",
+  "receiptScanner.unitPriceInvalid": "Bitte einen Preis eingeben, zum Beispiel 1,29 oder -0,50 für einen Rabatt."
 };

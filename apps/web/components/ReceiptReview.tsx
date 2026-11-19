@@ -1,6 +1,6 @@
 "use client";
 
-import { parseDayKey } from "@doewe/shared";
+import { parseDayKey, parseMoneyInput } from "@doewe/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
@@ -29,7 +29,12 @@ interface LineItem {
   quantityText: string;
   /** The field was left once: from then on an invalid quantity is pointed out. */
   quantityTouched: boolean;
+  /** Last valid unit price; what is booked. */
   unitPriceCents: number;
+  /** What the unit-price field shows — may be empty or incomplete while typing. */
+  unitPriceText: string;
+  /** The field was left once: from then on an invalid price is pointed out. */
+  unitPriceTouched: boolean;
   totalCents: number;
   categoryId: string;
   position: number;
@@ -44,6 +49,20 @@ export function parseQuantity(text: string): number | null {
   if (!/^\d*\.?\d*$/.test(normalized) || !/\d/.test(normalized)) return null;
   const quantity = Math.round(Number(normalized) * 1000) / 1000;
   return Number.isFinite(quantity) && quantity > 0 ? quantity : null;
+}
+
+/**
+ * Unit price typed into the field, in cents: comma or dot as decimal separator,
+ * at most two decimals, a leading minus for a discount or deposit return
+ * (same rules as every money field, `parseMoneyInput`). Null while it is
+ * empty, incomplete or not a price.
+ */
+export function parseUnitPrice(text: string): number | null {
+  const trimmed = text.trim();
+  const negative = trimmed.startsWith("-") || trimmed.startsWith("\u2212");
+  const cents = parseMoneyInput(negative ? trimmed.slice(1) : trimmed);
+  if (cents === null) return null;
+  return negative && cents !== 0 ? -cents : cents;
 }
 
 interface ScanResult {
@@ -127,6 +146,8 @@ export default function ReceiptReview({
   const queryClient = useQueryClient();
 
   const quantityToText = (quantity: number) => String(quantity).replace(".", locale === "de" ? "," : ".");
+  const unitPriceToText = (cents: number) =>
+    `${cents < 0 ? "-" : ""}${(Math.abs(cents) / 100).toFixed(2).replace(".", locale === "de" ? "," : ".")}`;
 
   const expenseCategories = categories.filter((c) => !c.isIncome);
   const defaultCategoryId = expenseCategories[0]?.id ?? "";
@@ -146,6 +167,8 @@ export default function ReceiptReview({
           ...item,
           quantityText: quantityToText(item.quantity),
           quantityTouched: false,
+          unitPriceText: unitPriceToText(item.unitPriceCents),
+          unitPriceTouched: false,
           position: i,
           categoryId:
             expenseCategories.find(
@@ -159,6 +182,8 @@ export default function ReceiptReview({
             quantityText: "1",
             quantityTouched: false,
             unitPriceCents: 0,
+            unitPriceText: "",
+            unitPriceTouched: false,
             totalCents: 0,
             categoryId: defaultCategoryId,
             position: 0
@@ -171,6 +196,12 @@ export default function ReceiptReview({
   const updateQuantityText = (index: number, text: string) => {
     const quantity = parseQuantity(text);
     updateItem(index, quantity === null ? { quantityText: text } : { quantityText: text, quantity });
+  };
+
+  // Same for the unit price: no reformatting while typing.
+  const updateUnitPriceText = (index: number, text: string) => {
+    const cents = parseUnitPrice(text);
+    updateItem(index, cents === null ? { unitPriceText: text } : { unitPriceText: text, unitPriceCents: cents });
   };
 
   const updateItem = (index: number, updates: Partial<LineItem>) => {
@@ -204,6 +235,8 @@ export default function ReceiptReview({
         quantityText: "1",
         quantityTouched: false,
         unitPriceCents: 0,
+        unitPriceText: "",
+        unitPriceTouched: false,
         totalCents: 0,
         categoryId: defaultCategoryId,
         position: prev.length
@@ -266,15 +299,18 @@ export default function ReceiptReview({
     }
   });
 
-  // A line that will be booked needs a usable quantity (the field may be empty while typing).
-  const quantitiesValid = items.every((i) => !i.name.trim() || parseQuantity(i.quantityText) !== null);
+  // A line that will be booked needs a usable quantity and unit price (the
+  // fields may be empty or incomplete while typing).
+  const linesValid = items.every(
+    (i) => !i.name.trim() || (parseQuantity(i.quantityText) !== null && parseUnitPrice(i.unitPriceText) !== null)
+  );
 
   // The date field can be emptied by hand; the endpoint needs a real calendar day.
   const canSubmit =
     items.some((i) => i.name.trim() && i.totalCents !== 0) &&
     accountId &&
     parseDayKey(receiptDate) !== null &&
-    quantitiesValid;
+    linesValid;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-6">
@@ -365,6 +401,8 @@ export default function ReceiptReview({
         {items.map((item, index) => {
           const quantityInvalid = parseQuantity(item.quantityText) === null;
           const showQuantityError = quantityInvalid && item.quantityTouched;
+          const unitPriceInvalid = parseUnitPrice(item.unitPriceText) === null;
+          const showUnitPriceError = unitPriceInvalid && item.unitPriceTouched;
           return (
           <div
             key={index}
@@ -426,17 +464,19 @@ export default function ReceiptReview({
                   {t("receiptScanner.unitPrice")}
                 </label>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={(item.unitPriceCents / 100).toFixed(2)}
-                  onChange={(e) => {
-                    const cents = Math.round(
-                      parseFloat(e.target.value || "0") * 100
-                    );
-                    updateItem(index, { unitPriceCents: cents });
-                  }}
-                  className="w-full rounded-field border border-line bg-bg px-2 py-1 text-sm tabular-nums text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                  type="text"
+                  inputMode="decimal"
+                  aria-label={t("receiptScanner.unitPrice")}
+                  aria-invalid={showUnitPriceError}
+                  value={item.unitPriceText}
+                  placeholder={locale === "de" ? "0,00" : "0.00"}
+                  onChange={(e) => updateUnitPriceText(index, e.target.value)}
+                  onBlur={() => updateItem(index, { unitPriceTouched: true })}
+                  className={`w-full rounded-field border bg-bg px-2 py-1 text-base tabular-nums text-ink focus:outline-none focus:ring-1 md:text-sm ${
+                    showUnitPriceError
+                      ? "border-danger focus:border-danger focus:ring-danger"
+                      : "border-line focus:border-brand focus:ring-brand"
+                  }`}
                 />
               </div>
               <div>
@@ -444,13 +484,18 @@ export default function ReceiptReview({
                   {t("receiptScanner.total")}
                 </label>
                 <div className="rounded-field border border-line bg-surface-2 px-2 py-1 text-sm tabular-nums text-ink">
-                  {quantityInvalid ? "–" : <>{formatCents(item.totalCents)}{"\u00A0\u20AC"}</>}
+                  {quantityInvalid || unitPriceInvalid ? "–" : <>{formatCents(item.totalCents)}{"\u00A0\u20AC"}</>}
                 </div>
               </div>
             </div>
             {showQuantityError && (
               <p role="alert" className="mt-1 text-xs text-danger">
                 {t("receiptScanner.qtyInvalid")}
+              </p>
+            )}
+            {showUnitPriceError && (
+              <p role="alert" className="mt-1 text-xs text-danger">
+                {t("receiptScanner.unitPriceInvalid")}
               </p>
             )}
 
