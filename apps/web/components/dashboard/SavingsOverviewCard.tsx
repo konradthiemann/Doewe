@@ -4,7 +4,7 @@ import { type MonthRef } from "@doewe/shared";
 
 import { formatBookingDayMonth, formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
-import { goalPercent } from "../../lib/savingGoalProgress";
+import { SavingRateProgress } from "../saving-plan/SavingRateProgress";
 import { InfoTip } from "../ui/InfoTip";
 
 export type CompletedGoalRow = { title: string; target: number; spent: number; completedAt: string };
@@ -48,9 +48,6 @@ export function SavingsOverviewCard({
   const savedCents = Math.round(savedThisMonth * 100);
   const rateCents = plan?.monthlyRateCents ?? 0;
   const hasRate = rateCents > 0;
-  // Same rule as a goal's progress: 100 % only once the rate is really reached.
-  const ratePercent = hasRate ? goalPercent(savedCents, rateCents) : 0;
-  const remainingCents = Math.max(0, rateCents - savedCents);
 
   return (
     <section aria-labelledby="savings-overview" className="min-w-0">
@@ -83,24 +80,11 @@ export function SavingsOverviewCard({
 
         {hasRate && (
           <div className="mt-4">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-              <div
-                className="h-2 rounded-full bg-savings transition-[width] duration-base ease-calm motion-reduce:transition-none"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={ratePercent}
-                aria-label={t("dashboard.rateProgressLabel")}
-                style={{ width: `${ratePercent}%` }}
-              />
-            </div>
-            <p className="mt-1.5 text-xs text-ink-muted">
-              {t("dashboard.rateProgress", { percent: ratePercent })}
-              {" · "}
-              {remainingCents > 0
-                ? t("dashboard.rateRemaining", { amount: formatCurrency(remainingCents / 100) })
-                : t("dashboard.rateReached")}
-            </p>
+            <SavingRateProgress
+              savedCents={savedCents}
+              rateCents={rateCents}
+              formatCents={(cents) => formatCurrency(cents / 100)}
+            />
             {nextDeadline && (
               <p className="mt-0.5 text-xs text-ink-muted">
                 {t("dashboard.nextGoalDeadline", { date: formatMonth(nextDeadline, dateLocale) })}

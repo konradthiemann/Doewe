@@ -812,7 +812,7 @@ export const de: Record<string, string> = {
   "info.review.budgets.title": "Budgets im Rückblick",
   "info.review.budgets.body": "Hier siehst du die Ausgaben je Kategorie und – wo eines festgelegt ist – das Budget dazu.\n\nDas Budget eines abgeschlossenen Monats bleibt so, wie es am Monatsende war. Änderst du später ein Budget oder einen Dauerauftrag, wirkt das nur auf den laufenden und auf künftige Monate.",
   "info.savingPlan.rate.title": "Geplante Summe und Monatsrate",
-  "info.savingPlan.rate.body": "Geplante Summe: die Beträge aller offenen Ziele mit Termin zusammen.\n\nMonatsrate: die Raten deiner Ziele zusammen. Die Rate eines Ziels legst du selbst fest. Doewe schlägt den Zielbetrag geteilt durch die Monate bis zum Termin vor, den laufenden Monat eingeschlossen. Liegt das Geld schon auf deinem Sparkonto, trag 0 ein.\n\nEin Ziel, dessen Termin vorbei ist, zählt nicht mehr zur Monatsrate.",
+  "info.savingPlan.rate.body": "Geplante Summe: die Beträge aller offenen Ziele mit Termin zusammen.\n\nMonatsrate: die Raten deiner Ziele zusammen. Die Rate eines Ziels legst du selbst fest. Doewe schlägt den Zielbetrag geteilt durch die Monate bis zum Termin vor, den laufenden Monat eingeschlossen. Liegt das Geld schon auf deinem Sparkonto, trag 0 ein.\n\nEin Ziel, dessen Termin vorbei ist, zählt nicht mehr zur Monatsrate.\n\nDoewe hält die Monatsrate jeden Monat fest. Der Rückblick vergleicht sie mit dem, was du in dem Monat zur Seite gelegt hast.",
   "info.savingPlan.rate.example": "Ziel: 1.200,00 € bis Januar. Heute ist November.\nVorschlag (November und Dezember) | 600,00 € pro Monat\nDas Geld liegt schon bereit | 0,00 € pro Monat",
   "info.savingPlan.complete.title": "Ziel abschließen",
   "info.savingPlan.complete.body": "Abschließen nimmt das Ziel aus deinem Plan. Gebucht wird nichts.\n\nAls Kosten werden festgehalten: die verknüpften Buchungen und alles, was du aus Erspartem eingetragen hast. Was du am Ende noch vom Sparkonto bezahlt hast, kannst du im selben Schritt nachtragen.\n\nMit „Wieder öffnen“ ist das Ziel wieder aktiv.",
@@ -912,5 +912,15 @@ export const de: Record<string, string> = {
   "savingPlan.form.rateInvalid": "Ungültige Monatsrate (z. B. 250 oder 249,90).",
   "info.savingPlan.spending.title": "Was für ein Ziel ausgegeben wurde",
   "info.savingPlan.spending.body": "Aus dem Monatsbudget: Buchungen, die du mit dem Ziel verknüpft hast, zum Beispiel das Essen im Urlaub.\n\nAus Erspartem: was du direkt vom Sparkonto bezahlt hast. Das ist keine Buchung – Kontostand, Monatszahlen und Budgets bleiben, wie sie sind. Du trägst es nur am Ziel ein, damit du siehst, was das Ziel insgesamt gekostet hat.",
-  "info.savingPlan.spending.example": "Urlaub, Ziel 2.000,00 €\nHotel und Flug, vom Sparkonto bezahlt | 1.500,00 € aus Erspartem\nEssen vor Ort, mit dem Ziel verknüpft | 300,00 € aus dem Monatsbudget\nNoch übrig | 200,00 €"
+  "info.savingPlan.spending.example": "Urlaub, Ziel 2.000,00 €\nHotel und Flug, vom Sparkonto bezahlt | 1.500,00 € aus Erspartem\nEssen vor Ort, mit dem Ziel verknüpft | 300,00 € aus dem Monatsbudget\nNoch übrig | 200,00 €",
+  "savingPlan.summarySavedThisMonth": "Diesen Monat zur Seite gelegt",
+  "savingPlan.summarySavedThisMonthHelp": "Gebucht und geplant. Leg Monatsraten fest, um es mit deinem Plan zu vergleichen.",
+  "review.savingPlanTitle": "Sparplan",
+  "review.savingPlanSaved": "{saved} von {rate} Monatsrate zur Seite gelegt.",
+  "review.savingPlanNoRate": "Für diesen Monat ist keine Monatsrate festgehalten. Zur Seite gelegt: {saved}.",
+  "review.savingPlanZeroRate": "In diesem Monat war keine Monatsrate geplant. Zur Seite gelegt: {saved}.",
+  "info.review.savingPlan.title": "Sparplan im Rückblick",
+  "info.review.savingPlan.body": "Zur Seite gelegt: was du in diesem Monat zum Sparen gebucht hast, minus was du aus dem Ersparten zurückgeholt hast – nie unter 0.\n\nMonatsrate: die Raten deiner Sparziele, so wie sie in diesem Monat galten. Doewe hält die Rate jeden Monat fest; spätere Änderungen an deinen Zielen ändern vergangene Monate nicht.\n\nWurde für einen Monat keine Rate festgehalten – etwa vor Einführung der Monatsraten –, steht hier nur, was du zur Seite gelegt hast.",
+  "review.savingPlanMissing": "{amount} unter der Monatsrate.",
+  "review.savingPlanReached": "Monatsrate erreicht."
 };

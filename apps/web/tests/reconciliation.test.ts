@@ -422,3 +422,32 @@ describe("a saving goal: what was spent = linked bookings + payments from saving
     }
   });
 });
+
+describe("saving plan: the review's rate = the rate recorded while the month ran", () => {
+  it("shows October's recorded rate and October's savings, whatever the plan says now", async () => {
+    const goal = await prisma.budget.create({
+      data: { accountId: ACCOUNT_ID, categoryId: null, title: "RC Rad", month: 3, year: 2027, amountCents: 90_000, monthlyRateCents: 15_000 }
+    });
+    try {
+      // While October runs, the plan is read: October's rate is recorded.
+      vi.setSystemTime(new Date("2026-10-20T10:00:00.000Z"));
+      const { GET } = await import("../app/api/saving-plan/route");
+      expect((await GET()).status).toBe(200);
+
+      // Back in November the rate changes; October keeps 150 €.
+      vi.setSystemTime(NOW);
+      await prisma.budget.update({ where: { id: goal.id }, data: { monthlyRateCents: 30_000 } });
+      expect((await GET()).status).toBe(200);
+
+      const oct = (await review(10, 2026)) as Review & { savingPlan: { rateCents: number | null; savedCents: number } };
+      expect(oct.savingPlan.rateCents).toBe(15_000);
+      expect(oct.savingPlan.savedCents).toBe(Math.max(oct.savingsCents, 0));
+      // September ran before any rate was recorded.
+      const sep = (await review(9, 2026)) as Review & { savingPlan: { rateCents: number | null } };
+      expect(sep.savingPlan.rateCents).toBeNull();
+    } finally {
+      await prisma.savingRateMonthSnapshot.deleteMany({ where: { householdId } });
+      await prisma.budget.delete({ where: { id: goal.id } });
+    }
+  });
+});

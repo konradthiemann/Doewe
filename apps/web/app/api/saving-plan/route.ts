@@ -27,7 +27,8 @@
  *   totals — siehe computeSavingPlanTotals (./compute.ts):
  *     totalTargetCents — Zielbeträge der aktiven Ziele mit Termin
  *     monthlyRateCents — Monatsraten der aktiven Ziele, deren Termin der laufende
- *                        Berliner Monat oder später ist
+ *                        Berliner Monat oder später ist; wird als Rate des
+ *                        laufenden Monats festgehalten (lib/savingRate.ts)
  *
  * POST Body: { accountId, title, targetMonth?, targetYear?, amountCents?, monthlyRateCents? }
  *   (Monat und Jahr nur gemeinsam; Alias `month`/`year`, `dueMonth`/`dueYear`.
@@ -40,6 +41,7 @@ import { z } from "zod";
 import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
 import { suggestMonthlyRateCents } from "../../../lib/savingGoalProgress";
+import { recordSavingRate, refreshSavingRate } from "../../../lib/savingRate";
 import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
 import { INT4_MAX } from "../transactions/schema";
 
@@ -154,6 +156,8 @@ export async function GET() {
   const completedGoals = goalsRaw.filter((goal) => goal.completedAt != null).map(mapGoal);
 
   const totals = computeSavingPlanTotals(goalsRaw, now);
+  // The review compares each month with the rate that applied then.
+  await recordSavingRate(user.householdId, totals.monthlyRateCents, now);
 
   return NextResponse.json({
     goals,
@@ -199,5 +203,6 @@ export async function POST(req: Request) {
     }
   });
 
+  await refreshSavingRate(user.householdId);
   return NextResponse.json(created, { status: 201 });
 }

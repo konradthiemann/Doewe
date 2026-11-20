@@ -99,6 +99,7 @@ jeden Monat `M`:
 | Rückblick `M` | Spalte `M` der Quartalsübersicht |
 | Jahresübersicht nach Kategorien, Monat `M`: Gruppen-Summen | Rückblick `M`: Einnahmen, Ausgaben, Gespart |
 | Dashboard nach Monatsende (alles gebucht) | Rückblick desselben Monats |
+| Rückblick `M`: Monatsrate des Sparplans | die Rate, die festgehalten wurde, während `M` lief |
 | „Ausgegeben" je Kategorie, gebucht | dieselbe Zahl im Rückblick und in der Jahresübersicht; Dashboard und Budget-Warnung rechnen im laufenden Monat zusätzlich das Geplante ein |
 
 ## 7. Sparen, Sparziele und Budgets
@@ -119,4 +120,6 @@ jeden Monat `M`:
   geplant) mit diesem Budget und gehen an alle Mitglieder des Haushalts, die sie eingeschaltet haben.
 - **Monatsrate:** Jedes Ziel mit Termin hat eine Rate, die der Haushalt festlegt. Vorgeschlagen wird
   `ceil(Zielbetrag / Monate bis zum Termin)`, der laufende Monat zählt mit, der Zielmonat nicht. Die
-  Monatsrate des Plans ist die Summe der Raten der offenen Ziele, deren Termin noch kommt.
+  Monatsrate des Plans ist die Summe der Raten der offenen Ziele, deren Termin noch kommt. Sie wird
+  für den laufenden Monat festgehalten (`SavingRateMonthSnapshot`); der Rückblick eines Monats
+  vergleicht die damals festgehaltene Rate mit dem, was in dem Monat gespart wurde (netto, nie unter 0).

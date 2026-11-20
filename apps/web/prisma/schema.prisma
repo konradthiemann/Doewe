@@ -305,6 +305,7 @@ model Household {
   categories Category[]
   categoryBudgetPlans CategoryBudgetPlan[]
   budgetSnapshots BudgetMonthSnapshot[]
+  savingRateSnapshots SavingRateMonthSnapshot[]
 }
 
 // v1: one household per user (`userId @unique`) → the session carries a single
@@ -440,6 +441,23 @@ model BudgetMonthSnapshot {
   month       Int
   budgets     Json
   createdAt   DateTime @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, year, month])
+}
+
+// The monthly rate of the saving plan as it stood in a month (Europe/Berlin).
+// Written for the running month only — whenever the plan is read or a goal
+// changes, and daily by the cron — so a month that is over keeps the rate of
+// its last day. The review compares it with what was saved that month.
+model SavingRateMonthSnapshot {
+  id          String   @id @default(cuid())
+  householdId String
+  year        Int
+  month       Int
+  rateCents   Int
+  updatedAt   DateTime @default(now()) @updatedAt
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 

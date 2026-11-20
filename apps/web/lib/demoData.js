@@ -224,6 +224,7 @@ async function clearAccountData(prisma, accountId) {
     await prisma.categoryBudgetPlan.deleteMany({ where: { householdId: account.householdId } });
     // Frozen budgets of past months belong to the data set that is being replaced.
     await prisma.budgetMonthSnapshot.deleteMany({ where: { householdId: account.householdId } });
+    await prisma.savingRateMonthSnapshot.deleteMany({ where: { householdId: account.householdId } });
     await prisma.budgetAlertLog.deleteMany({ where: { householdId: account.householdId } });
   }
   // Recurring-Skips hängen per onDelete: Cascade an RecurringTransaction.

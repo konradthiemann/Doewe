@@ -812,7 +812,7 @@ export const en: Record<string, string> = {
   "info.review.budgets.title": "Budgets in the review",
   "info.review.budgets.body": "Here you see the expenses per category and – where one is set – the budget for it.\n\nThe budget of a finished month stays as it was when the month ended. If you change a budget or a standing order later, that only affects the current and future months.",
   "info.savingPlan.rate.title": "Planned total and monthly rate",
-  "info.savingPlan.rate.body": "Planned total: the amounts of all open goals with a date together.\n\nMonthly rate: the rates of your goals together. You set each goal's rate yourself. Doewe suggests the target divided by the months until the date, the current month included. If the money is already on your savings account, enter 0.\n\nA goal whose date has passed no longer counts towards the monthly rate.",
+  "info.savingPlan.rate.body": "Planned total: the amounts of all open goals with a date together.\n\nMonthly rate: the rates of your goals together. You set each goal's rate yourself. Doewe suggests the target divided by the months until the date, the current month included. If the money is already on your savings account, enter 0.\n\nA goal whose date has passed no longer counts towards the monthly rate.\n\nDoewe records the monthly rate every month. The review compares it with what you set aside in that month.",
   "info.savingPlan.rate.example": "Goal: €1,200.00 by January. Today is November.\nSuggestion (November and December) | €600.00 per month\nThe money is already there | €0.00 per month",
   "info.savingPlan.complete.title": "Complete a goal",
   "info.savingPlan.complete.body": "Completing takes the goal out of your plan. Nothing is booked.\n\nThe cost recorded is the linked bookings plus everything you added as paid from savings. Anything you paid from your savings account at the end can be added in the same step.\n\n“Reopen” makes the goal active again.",
@@ -912,5 +912,15 @@ export const en: Record<string, string> = {
   "savingPlan.form.rateInvalid": "Invalid monthly rate (e.g. 250 or 249.90).",
   "info.savingPlan.spending.title": "What was spent on a goal",
   "info.savingPlan.spending.body": "From the monthly budget: bookings you linked to the goal, for example meals on holiday.\n\nFrom savings: what you paid straight from your savings account. This is not a booking – balance, monthly figures and budgets stay as they are. You only add it to the goal so you can see what the goal cost in total.",
-  "info.savingPlan.spending.example": "Holiday, target €2,000.00\nHotel and flight, paid from the savings account | €1,500.00 from savings\nMeals on site, linked to the goal | €300.00 from the monthly budget\nLeft | €200.00"
+  "info.savingPlan.spending.example": "Holiday, target €2,000.00\nHotel and flight, paid from the savings account | €1,500.00 from savings\nMeals on site, linked to the goal | €300.00 from the monthly budget\nLeft | €200.00",
+  "savingPlan.summarySavedThisMonth": "Set aside this month",
+  "savingPlan.summarySavedThisMonthHelp": "Booked and planned. Set monthly rates to compare it with your plan.",
+  "review.savingPlanTitle": "Saving plan",
+  "review.savingPlanSaved": "{saved} of the {rate} monthly rate set aside.",
+  "review.savingPlanNoRate": "No monthly rate was recorded for this month. Set aside: {saved}.",
+  "review.savingPlanZeroRate": "No monthly rate was planned for this month. Set aside: {saved}.",
+  "info.review.savingPlan.title": "Saving plan in the review",
+  "info.review.savingPlan.body": "Set aside: what you booked as savings this month, minus what you moved back from your savings – never below 0.\n\nMonthly rate: the rates of your saving goals as they applied in that month. Doewe records the rate every month; later changes to your goals do not change past months.\n\nIf no rate was recorded for a month – for example before monthly rates existed – only what you set aside is shown.",
+  "review.savingPlanMissing": "{amount} below the monthly rate.",
+  "review.savingPlanReached": "Monthly rate reached."
 };
