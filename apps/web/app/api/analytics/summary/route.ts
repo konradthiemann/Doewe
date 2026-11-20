@@ -13,7 +13,7 @@
  * - `monthlySavingsActual`  — Gebuchtes Sparen diesen Monat, netto (Einzahlungen − Entnahmen)
  * - `plannedSavings`        — Budget-Ziel ohne Kategorie (= Sparziel) für diesen Monat
  * - `completedGoals`        — In diesem Monat (per completedAt) als erledigt markierte Sparziele
- * - `completedGoalsSpent`   — Summe der dafür entnommenen Beträge (Euro)
+ * - `completedGoalsSpent`   — Summe ihrer Kosten (`spentCents`, Euro)
  * - `projectedIncomeTotal`  — Hochrechnung inkl. noch nicht gebuchter Daueraufträge
  * - `projectedOutcomeTotal` — Hochrechnung Ausgaben inkl. Daueraufträge
  * - `projectedRemaining`    — Voraussichtlich verbleibendes Geld

@@ -1,41 +1,24 @@
 /**
- * Shared savings-pool helpers used by the saving-plan routes.
+ * Helpers shared by the saving-plan routes.
  *
- * The pool is one figure per household (docs/calculations/00-grundregeln.md
- * §2 and §3): the negated sum of all bookings in ALL savings categories of
- * the household, across all of its accounts. Deposits are stored as NEGATIVE
- * transactions (money leaving the current account), withdrawals as POSITIVE
- * ones (money coming back), so negating the net sum yields a positive balance.
- *
- * Completing a goal books a real withdrawal, so "available" is that balance.
- * Only goals completed before withdrawals were booked still hold an amount
- * back (`Budget.reservedCents`, set once by the migration).
- *
- * The helpers that feed a write take the database client as an argument, so
- * the routes can read the pool inside the transaction that changes it.
+ * The app keeps no savings balance (docs/calculations/07-sparziele.md), so
+ * nothing here sums the savings bookings any more.
  */
-import { isSavingsCategoryName, zonedMonth, zonedMonthRange } from "@doewe/shared";
+import { isSavingsCategoryName, parseDayKey, zonedDate, zonedTimeToUtc } from "@doewe/shared";
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { prisma } from "../../../lib/prisma";
-import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
+import { INT4_MAX } from "../transactions/schema";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
 /**
- * Serialises the writes that take money out of a household's pool (withdraw,
- * complete a goal) for the rest of the transaction: two of them running at the
- * same moment would otherwise both read the same balance and together take out
- * more than there is.
- */
-export async function lockSavingsPool(tx: Prisma.TransactionClient, householdId: string): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`savings-pool:${householdId}`}))`;
-}
-
-/**
- * The savings category a new pool booking (a withdrawal) is written to: the
- * oldest one, so the choice is stable when a household has several.
+ * The savings category a new savings booking (taking money back from the
+ * savings) is written to: the oldest one, so the choice is stable when a
+ * household has several.
  */
 export async function findSavingsBookingCategoryId(householdId: string, db: Db = prisma): Promise<string | null> {
   const categories = await db.category.findMany({
@@ -48,73 +31,39 @@ export async function findSavingsBookingCategoryId(householdId: string, db: Db =
 }
 
 /**
- * Negated net sum of the household's savings bookings, optionally within
- * `[start, end)` and optionally only the deposits (negative amounts). A caller
- * that needs several sums passes the same `savingsIds` (from
- * `loadSavingsCategoryIds`) to each of them.
+ * Loads a saving goal of the household: 404 for an unknown id, a category
+ * budget (not a goal) or a deleted goal (`findUnique` sees tombstones, so
+ * `deletedAt` is checked explicitly), 403 for a goal of another household.
  */
-async function sumSavingsCents(
-  householdId: string,
-  savingsIds: ReadonlySet<string> | undefined,
-  range?: { start: Date; end: Date },
-  db: Db = prisma,
-  depositsOnly = false
-): Promise<number> {
-  savingsIds ??= await loadSavingsCategoryIds(householdId, db);
-  if (savingsIds.size === 0) {
-    return 0;
+export async function loadOwnedGoal(id: string, householdId: string) {
+  const goal = await prisma.budget.findUnique({
+    where: { id },
+    include: { account: { select: { householdId: true } } }
+  });
+
+  if (!goal || goal.categoryId !== null || goal.deletedAt !== null) {
+    return { error: NextResponse.json({ error: "Goal not found" }, { status: 404 }) } as const;
   }
-
-  const aggregate = await db.transaction.aggregate({
-    where: {
-      account: { householdId },
-      categoryId: { in: [...savingsIds] },
-      deletedAt: null,
-      ...(range ? { occurredAt: { gte: range.start, lt: range.end } } : {}),
-      ...(depositsOnly ? { amountCents: { lt: 0 } } : {})
-    },
-    _sum: { amountCents: true }
-  });
-
-  // Deposits are negative, withdrawals positive — negate the net to get a
-  // positive "set aside" balance. `0 -` avoids returning -0.
-  return 0 - (aggregate._sum.amountCents ?? 0);
+  if (goal.account.householdId !== householdId) {
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) } as const;
+  }
+  return { goal } as const;
 }
 
-/** Raw savings balance of the household: all savings categories, all accounts. */
-export async function resolveSavingsBalanceCents(
-  householdId: string,
-  savingsIds?: ReadonlySet<string>
-): Promise<number> {
-  return sumSavingsCents(householdId, savingsIds);
-}
+/** Body of a payment from savings (POST …/payments, and the optional last payment on completion). */
+export const SavingsPaymentInput = z.object({
+  amountCents: z.number().int().min(1).max(INT4_MAX),
+  /** Berlin calendar day `yyyy-mm-dd`; default today. */
+  day: z
+    .string()
+    .refine((value) => parseDayKey(value) !== null, { message: "day must be a calendar day yyyy-mm-dd" })
+    .optional(),
+  note: z.string().trim().max(200).optional()
+});
+export type SavingsPaymentInputValue = z.infer<typeof SavingsPaymentInput>;
 
-/**
- * Gross amount deposited into the pool (deposits only, withdrawals NOT
- * subtracted, never negative) within the Europe/Berlin calendar month of `now`.
- * The pool minus this is what was covered when the month began, with this
- * month's withdrawals already taken out (see computeSavingPlanTotals).
- */
-export async function resolveDepositedThisMonthCents(
-  householdId: string,
-  now: Date,
-  savingsIds?: ReadonlySet<string>
-): Promise<number> {
-  const { year, month } = zonedMonth(now);
-  return sumSavingsCents(householdId, savingsIds, zonedMonthRange(year, month), prisma, true);
-}
-
-/**
- * Savings pool currently available to spend or withdraw: the raw balance minus
- * what goals completed before withdrawals were booked still hold back
- * (`reservedCents`; nothing for everyone else). Floored at 0.
- */
-export async function getAvailableSavingsCents(householdId: string, db: Db = prisma): Promise<number> {
-  // One after the other: inside a transaction both run on the same connection.
-  const raw = await sumSavingsCents(householdId, undefined, undefined, db);
-  const reservedAgg = await db.budget.aggregate({
-    where: { account: { householdId }, categoryId: null, completedAt: { not: null }, deletedAt: null },
-    _sum: { reservedCents: true }
-  });
-  return Math.max(raw - (reservedAgg._sum.reservedCents ?? 0), 0);
+/** The instant stored for a payment: 12:00 Berlin of its day (calculation rules §1). */
+export function paymentOccurredAt(day: string | undefined, now: Date): Date {
+  const calendarDay = (day ? parseDayKey(day) : null) ?? zonedDate(now);
+  return zonedTimeToUtc({ ...calendarDay, hour: 12 });
 }

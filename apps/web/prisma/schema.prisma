@@ -206,12 +206,18 @@ model Budget {
   // have a concrete target amount yet).
   amountCents Int?      // goal amount; null = no amount set yet
   completedAt DateTime? // null = active goal, set = goal closed
-  spentCents  Int?      // what the goal cost in the end (shown as "Ausgegeben")
-  // Completing a goal takes the money out of the savings pool with a real
-  // withdrawal booking; its id is kept so that reopening the goal can undo it.
+  // What the goal cost, fixed when it is completed: linked bookings plus the
+  // payments from savings. Null while the goal is active.
+  spentCents  Int?
+  // Saving goal only: what the household plans to set aside for it each month.
+  // Null = no rate set. Only dated goals carry one.
+  monthlyRateCents Int?
+  // Legacy (goals completed while completion booked a withdrawal, from
+  // 19 November 2026): that booking. Reopening such a goal still deletes it.
+  // Never set now.
   withdrawalTransactionId String?
-  // Only for goals completed before withdrawals were booked: the amount that is
-  // still held back from the pool instead of a booking. Never set for new goals.
+  // Legacy (savings pool, no longer computed): what a goal completed before
+  // withdrawals were booked held back. Never set now.
   reservedCents Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
@@ -220,8 +226,27 @@ model Budget {
   account      Account       @relation(fields: [accountId], references: [id])
   category     Category?     @relation(fields: [categoryId], references: [id])
   transactions Transaction[]
+  savingsPayments SavingGoalPayment[]
 
   @@unique([accountId, categoryId, month, year])
+}
+
+// Money paid for a saving goal straight out of the savings — outside the
+// accounts the app keeps. Not a booking: it changes no balance and no monthly
+// figure, only what the goal shows as spent. Deleted for good, no tombstone.
+model SavingGoalPayment {
+  id              String   @id @default(cuid())
+  goalId          String
+  amountCents     Int
+  // The day it was paid, written as 12:00 Europe/Berlin (calculation rules §1).
+  occurredAt      DateTime
+  note            String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  goal Budget @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
 }
 
 model User {

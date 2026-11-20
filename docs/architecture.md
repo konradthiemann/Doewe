@@ -68,7 +68,8 @@ Doewe/
 │   │   │       ├── recurring-transactions/  # CRUD + skips sub-resource
 │   │   │       ├── budgets/          # GET, POST
 │   │   │       ├── saving-plan/      # GET, POST, GET/PATCH/DELETE [id],
-│   │   │       │                     # [id]/complete (POST/DELETE), withdraw (POST)
+│   │   │       │                     # [id]/complete (POST/DELETE), [id]/payments
+│   │   │       │                     # (POST, DELETE [paymentId]), withdraw (POST)
 │   │   │       ├── categories/       # GET, POST, PATCH [id], DELETE [id]
 │   │   │       ├── accounts/         # GET, POST
 │   │   │       ├── demo/             # POST demo/seed (public, idempotent demo data)

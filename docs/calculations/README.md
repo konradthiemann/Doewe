@@ -16,7 +16,7 @@ Stand: 19. November 2026
 | [04-analytics-summary.md](./04-analytics-summary.md) | Monatliche Zusammenfassung — alle Dashboard-Kennzahlen |
 | [05-analytics-quarterly.md](./05-analytics-quarterly.md) | Quartalübersicht — letzte 3 Monate |
 | [06-budgets.md](./06-budgets.md) | Budget-Pläne und Monats-Budgets vs. tatsächliche Ausgaben, Jahresübersicht nach Kategorien |
-| [07-sparziele.md](./07-sparziele.md) | Sparziele, Spartopf, empfohlene Monatsrate, Entnahme, Abschluss-Lebenszyklus |
+| [07-sparziele.md](./07-sparziele.md) | Sparziele ohne Spar-Bestand: Monatsrate, Ausgaben aus Monatsbudget und Erspartem, Abschluss, Entnahme |
 
 [00-grundregeln.md](./00-grundregeln.md) ist maßgeblich. Die Seiten 01–07 beschreiben einzelne
 Bereiche und verweisen für Kalender, Einordnung und Umfang dorthin, statt die Regel zu wiederholen.

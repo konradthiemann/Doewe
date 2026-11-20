@@ -1,71 +1,84 @@
 import { describe, expect, it } from "vitest";
 
-import { cascadeGoalProgress, goalPercent } from "../lib/savingGoalProgress";
+import {
+  goalPercent,
+  goalSpending,
+  isDeadlinePast,
+  monthsToDeadline,
+  suggestMonthlyRateCents
+} from "../lib/savingGoalProgress";
+
+/** 19 Nov 2026, 11:00 in Berlin. */
+const NOW = new Date("2026-11-19T10:00:00.000Z");
 
 describe("goalPercent", () => {
-  it("is 100 only when the target is fully covered", () => {
-    expect(goalPercent(100000, 100000)).toBe(100);
-    expect(goalPercent(120000, 100000)).toBe(100);
-    // 995.00 of 1,000.00 would round to 100 — it is not reached.
-    expect(goalPercent(99500, 100000)).toBe(99);
-    expect(goalPercent(99999, 100000)).toBe(99);
-  });
-
-  it("rounds commercially below that", () => {
-    expect(goalPercent(50400, 100000)).toBe(50);
-    expect(goalPercent(50500, 100000)).toBe(51);
-    expect(goalPercent(0, 100000)).toBe(0);
-    expect(goalPercent(1, 100000)).toBe(0);
-  });
-
-  it("counts a goal without a target as reached and never goes below 0", () => {
+  it("reaches 100 only at the target", () => {
+    expect(goalPercent(99_500, 100_000)).toBe(99);
+    expect(goalPercent(100_000, 100_000)).toBe(100);
+    expect(goalPercent(50_000, 100_000)).toBe(50);
     expect(goalPercent(0, 0)).toBe(100);
-    expect(goalPercent(-500, 100000)).toBe(0);
   });
 });
 
-describe("cascadeGoalProgress", () => {
-  const goals = [
-    { id: "a", amountCents: 100000 },
-    { id: "b", amountCents: 50000 },
-    { id: "c", amountCents: 20000 }
-  ];
-
-  it("fills the goals in order", () => {
-    const result = cascadeGoalProgress(goals, 120000);
-    expect(result.map((g) => [g.id, g.achievedCents, g.percent, g.status, g.cumulativeTargetCents])).toEqual([
-      ["a", 100000, 100, "complete", 100000],
-      ["b", 20000, 40, "current", 150000],
-      ["c", 0, 0, "upcoming", 170000]
-    ]);
+describe("monthsToDeadline", () => {
+  it("counts the current month and stops before the deadline month", () => {
+    expect(monthsToDeadline({ year: 2027, month: 1 }, NOW)).toBe(2);
+    expect(monthsToDeadline({ year: 2027, month: 7 }, NOW)).toBe(8);
   });
 
-  it("does not mark a goal complete that is 5 euros short", () => {
-    const [first, second] = cascadeGoalProgress(goals, 99500);
-    expect(first).toMatchObject({ achievedCents: 99500, percent: 99, status: "current" });
-    expect(second).toMatchObject({ achievedCents: 0, percent: 0, status: "upcoming" });
+  it("is at least 1", () => {
+    expect(monthsToDeadline({ year: 2026, month: 12 }, NOW)).toBe(1);
+    expect(monthsToDeadline({ year: 2026, month: 11 }, NOW)).toBe(1);
+    expect(monthsToDeadline({ year: 2025, month: 1 }, NOW)).toBe(1);
   });
 
-  it("marks every goal complete when the savings cover all targets", () => {
-    expect(cascadeGoalProgress(goals, 500000).every((g) => g.status === "complete" && g.percent === 100)).toBe(true);
+  it("uses the Berlin month", () => {
+    // 1 Dec 00:30 in Berlin, still 30 Nov in UTC.
+    expect(monthsToDeadline({ year: 2027, month: 1 }, new Date("2026-11-30T23:30:00.000Z"))).toBe(1);
+  });
+});
+
+describe("isDeadlinePast", () => {
+  it("is true only once the deadline month is over", () => {
+    expect(isDeadlinePast({ year: 2026, month: 10 }, NOW)).toBe(true);
+    expect(isDeadlinePast({ year: 2026, month: 11 }, NOW)).toBe(false);
+    expect(isDeadlinePast({ year: 2027, month: 1 }, NOW)).toBe(false);
+  });
+});
+
+describe("suggestMonthlyRateCents", () => {
+  it("spreads the target over the months left, rounded up", () => {
+    expect(suggestMonthlyRateCents(120_000, { year: 2027, month: 1 }, NOW)).toBe(60_000);
+    expect(suggestMonthlyRateCents(100_001, { year: 2027, month: 1 }, NOW)).toBe(50_001);
   });
 
-  it("treats a goal without an amount as complete and passes the savings on", () => {
-    const result = cascadeGoalProgress(
-      [
-        { id: "idea", amountCents: null },
-        { id: "b", amountCents: 50000 }
-      ],
-      10000
-    );
-    expect(result[0]).toMatchObject({ achievedCents: 0, percent: 100, status: "complete", cumulativeTargetCents: 0 });
-    expect(result[1]).toMatchObject({ achievedCents: 10000, percent: 20, status: "current" });
+  it("is null without a target or a date", () => {
+    expect(suggestMonthlyRateCents(null, { year: 2027, month: 1 }, NOW)).toBeNull();
+    expect(suggestMonthlyRateCents(0, { year: 2027, month: 1 }, NOW)).toBeNull();
+    expect(suggestMonthlyRateCents(120_000, null, NOW)).toBeNull();
+  });
+});
+
+describe("goalSpending", () => {
+  it("adds the monthly budget and the savings and compares with the target", () => {
+    expect(goalSpending(30_000, 150_000, 200_000)).toEqual({
+      spentCents: 180_000,
+      remainingCents: 20_000,
+      overCents: 0,
+      percent: 90
+    });
   });
 
-  it("keeps the goal's own fields and handles no savings", () => {
-    const result = cascadeGoalProgress([{ id: "a", title: "Urlaub", amountCents: 100000 }], 0);
-    expect(result).toEqual([
-      { id: "a", title: "Urlaub", amountCents: 100000, achievedCents: 0, percent: 0, status: "upcoming", cumulativeTargetCents: 100000 }
-    ]);
+  it("shows what went over the target", () => {
+    expect(goalSpending(30_000, 190_000, 200_000)).toEqual({
+      spentCents: 220_000,
+      remainingCents: 0,
+      overCents: 20_000,
+      percent: 100
+    });
+  });
+
+  it("has no share without a target", () => {
+    expect(goalSpending(5_000, 0, null)).toEqual({ spentCents: 5_000, remainingCents: 0, overCents: 0, percent: 0 });
   });
 });

@@ -60,7 +60,8 @@ export function isSavingsCategoryName(name: string): boolean {
 
 ## Sparbuchung-Konvention
 
-Eine Buchung in einer Spar-Kategorie ist eine Umbuchung in den oder aus dem Spartopf:
+Eine Buchung in einer Spar-Kategorie ist Sparen: Geld verlässt den Monat oder kommt aus dem Ersparten
+zurück. Einen Spar-Bestand führt Doewe nicht ([07-sparziele.md](./07-sparziele.md)):
 
 ```
 Einzahlung: amountCents = -20000  (Geld verlässt das Girokonto)   → savingsCents += 20000
@@ -87,17 +88,18 @@ Diese Verknüpfung wird im `saving-plan`-Endpoint ausgewertet:
 
 ```typescript
 // saving-plan/route.ts
-transactions: { where: { deletedAt: null }, select: { amountCents: true } }
+transactions: { where: { deletedAt: null }, select: { amountCents: true, categoryId: true } }
 // …
-transactionSpentCents: goal.transactions.reduce((sum, tx) => sum + Math.abs(tx.amountCents), 0)
+transactionSpentCents: linkedSpentCents(goal.transactions, savingsIds)   // compute.ts
 ```
 
 - Summiert werden die verknüpften, **nicht gelöschten** Buchungen. Der Soft-Delete-Filter aus
   `lib/prisma.ts` greift nur im obersten `where`; deshalb schließt die Abfrage gelöschte Buchungen
   im verschachtelten `include` selbst aus (Grundregeln §3).
-- `Math.abs()` — egal ob positiv oder negativ, der absolute Betrag zählt
-- Die Oberfläche zeigt den Wert als für das Ziel **ausgegeben** an, nicht als eingezahlt. Wie viel
-  für ein Ziel schon angespart ist, ergibt sich aus dem Spartopf (siehe
+- Eingeordnet wird mit `classifyFlow`: Ausgaben minus Erstattungen, mindestens 0; Buchungen einer
+  Spar-Kategorie zählen nicht.
+- Die Oberfläche zeigt den Wert als für das Ziel **aus dem Monatsbudget ausgegeben** an. Was direkt vom
+  Sparkonto bezahlt wurde, steht als Zahlung aus dem Ersparten am Ziel, nicht als Buchung (siehe
   [07-sparziele.md](./07-sparziele.md)).
 
 ## API: POST /api/transactions

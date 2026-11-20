@@ -83,7 +83,7 @@ type QuarterlyData = {
 
 type SavingPlanData = {
   goals: Array<{ month: number; year: number }>;
-  totals: { availableCents: number; totalTargetCents: number; suggestedMonthlyCents: number };
+  totals: { totalTargetCents: number; monthlyRateCents: number };
 };
 
 const EMPTY_SUMMARY: SummaryData = {

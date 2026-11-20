@@ -1,34 +1,37 @@
 /**
- * GET  /api/saving-plan — Sparziele des Haushalts samt Spartopf und Sparrate
+ * GET  /api/saving-plan — Sparziele des Haushalts samt Plan-Summen
  * POST /api/saving-plan — Sparziel anlegen
  *
  * Authentifizierung: Pflicht (401). Haushaltsbezogen: Ziele aller Konten des
- * Haushalts, Spartopf über alle Spar-Kategorien und alle Konten.
+ * Haushalts.
  *
  * Ein Sparziel ist eine `Budget`-Zeile mit `categoryId = null`. Zeilen mit
  * Kategorie sind Kategorie-Budgets und gehören nicht in den Sparplan.
+ *
+ * Die App führt keinen Spar-Bestand (docs/calculations/07-sparziele.md): Eine
+ * Sparbuchung verlässt den Monat, was danach auf dem Sparkonto liegt, liegt
+ * außerhalb der App.
  *
  * GET Antwort: { goals, undatedGoals, completedGoals, totals }
  *   goals          — aktive Ziele mit Termin (Monat/Jahr), sortiert nach Termin
  *   undatedGoals   — aktive Ziele ohne Termin (Ideen-Liste)
  *   completedGoals — abgeschlossene Ziele
- *   totals         — siehe computeSavingPlanTotals (./compute.ts). Der Topf
- *                    (`rawAvailableCents`) ist die Summe der Sparbuchungen; ein
- *                    abgeschlossenes Ziel hat sein Geld als Buchung entnommen.
- *                    `withdrawnForCompletedCents` ist nur noch der Altbestand:
- *                    was Ziele zurückhalten, die vor den Entnahme-Buchungen
- *                    abgeschlossen wurden (`reservedCents`), sonst 0.
- *                    `availableCents` = Topf minus Altbestand, mindestens 0.
- *                    Die Sparrate (`suggestedMonthlyCents`) rechnet gegen das,
- *                    was zu Beginn des laufenden Berliner Monats gedeckt war:
- *                    Topf minus die Einzahlungen dieses Monats (brutto;
- *                    Entnahmen dieses Monats bleiben abgezogen).
- *   `transactionSpentCents` je Ziel: Ausgaben der verknüpften, nicht gelöschten
- *                    Buchungen minus verknüpfte Erstattungen, mindestens 0
- *                    (classifyFlow; Buchungen einer Spar-Kategorie zählen nicht).
+ *   je Ziel u. a.:
+ *     monthlyRateCents          — geplante Monatsrate, null = keine
+ *     suggestedMonthlyRateCents — Zielbetrag ÷ Monate bis zum Termin (aufgerundet), null ohne Betrag/Termin
+ *     transactionSpentCents     — aus dem Monatsbudget: verknüpfte Buchungen, Ausgaben
+ *                                 minus Erstattungen, mindestens 0 (classifyFlow;
+ *                                 Buchungen einer Spar-Kategorie zählen nicht)
+ *     savingsPaidCents          — aus dem Ersparten: Summe der Zahlungen am Ziel
+ *     savingsPayments           — diese Zahlungen, neueste zuerst
+ *   totals — siehe computeSavingPlanTotals (./compute.ts):
+ *     totalTargetCents — Zielbeträge der aktiven Ziele mit Termin
+ *     monthlyRateCents — Monatsraten der aktiven Ziele, deren Termin der laufende
+ *                        Berliner Monat oder später ist
  *
- * POST Body: { accountId, title, targetMonth?, targetYear?, amountCents? }
- *   (Monat und Jahr nur gemeinsam; Alias `month`/`year`, `dueMonth`/`dueYear`)
+ * POST Body: { accountId, title, targetMonth?, targetYear?, amountCents?, monthlyRateCents? }
+ *   (Monat und Jahr nur gemeinsam; Alias `month`/`year`, `dueMonth`/`dueYear`.
+ *   Eine Monatsrate gibt es nur mit Termin; ohne Termin wird sie nicht gespeichert.)
  *   201 Budget-Zeile | 400 Validierung | 404 "Account not found"
  */
 import { NextResponse } from "next/server";
@@ -36,11 +39,11 @@ import { z } from "zod";
 
 import { getSessionUser } from "../../../lib/auth";
 import { prisma } from "../../../lib/prisma";
+import { suggestMonthlyRateCents } from "../../../lib/savingGoalProgress";
 import { loadSavingsCategoryIds } from "../../../lib/savingsCategory";
 import { INT4_MAX } from "../transactions/schema";
 
-import { computeSavingPlanTotals, linkedSpentCents } from "./compute";
-import { resolveDepositedThisMonthCents, resolveSavingsBalanceCents } from "./savings";
+import { computeSavingPlanTotals, linkedSpentCents, savingsPaidCents } from "./compute";
 
 const SavingPlanInput = z
   .object({
@@ -51,7 +54,9 @@ const SavingPlanInput = z
     // Undated goals omit month/year; amount is optional for idea-backlog goals.
     targetMonth: z.number().int().min(1).max(12).nullish(),
     targetYear: z.number().int().min(1970).max(9999).nullish(),
-    amountCents: z.number().int().min(1).max(INT4_MAX).nullish()
+    amountCents: z.number().int().min(1).max(INT4_MAX).nullish(),
+    // 0 is a valid rate: "the money is there already".
+    monthlyRateCents: z.number().int().min(0).max(INT4_MAX).nullish()
   })
   .refine((data) => (data.targetMonth == null) === (data.targetYear == null), {
     message: "targetMonth and targetYear must both be provided or both omitted",
@@ -87,17 +92,14 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Unverändertes Verhalten für einen Haushalt ohne Konto; gelesen wird danach
-  // haushaltsweit, nicht mehr nur das erste Konto.
+  // haushaltsweit, nicht nur das erste Konto.
   const account = await prisma.account.findFirst({ where: { householdId: user.householdId }, select: { id: true } });
   if (!account) {
     return NextResponse.json({ error: "No account found for user" }, { status: 404 });
   }
 
   const now = new Date();
-  // Einmal geladen, damit Topf und Monats-Einzahlungen dieselben Kategorien meinen.
-  const savingsIds = await loadSavingsCategoryIds(user.householdId);
-
-  const [goalsRaw, rawSavingsBalanceCents, depositedThisMonthCents] = await Promise.all([
+  const [goalsRaw, savingsIds] = await Promise.all([
     prisma.budget.findMany({
       // Sparziele = Budget-Zeilen ohne Kategorie, über alle Konten des Haushalts.
       where: { account: { householdId: user.householdId }, categoryId: null },
@@ -106,34 +108,44 @@ export async function GET() {
         category: { select: { name: true } },
         // Der Soft-Delete-Filter aus lib/prisma.ts greift nur im obersten
         // `where` — gelöschte Buchungen hier selbst ausschließen.
-        transactions: { where: { deletedAt: null }, select: { amountCents: true, categoryId: true } }
+        transactions: { where: { deletedAt: null }, select: { amountCents: true, categoryId: true } },
+        savingsPayments: {
+          select: { id: true, amountCents: true, occurredAt: true, note: true },
+          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }]
+        }
       }
     }),
-    resolveSavingsBalanceCents(user.householdId, savingsIds),
-    resolveDepositedThisMonthCents(user.householdId, now, savingsIds)
+    loadSavingsCategoryIds(user.householdId)
   ]);
 
-  const mapGoal = (goal: (typeof goalsRaw)[number]) => ({
-    id: goal.id,
-    accountId: goal.accountId,
-    categoryId: goal.categoryId,
-    categoryName: goal.category?.name ?? null,
-    title: normalizeTitle({
-      title: goal.title,
-      categoryName: goal.category?.name,
+  const mapGoal = (goal: (typeof goalsRaw)[number]) => {
+    const deadline = goal.month != null && goal.year != null ? { year: goal.year, month: goal.month } : null;
+    return {
+      id: goal.id,
+      accountId: goal.accountId,
+      categoryId: goal.categoryId,
+      categoryName: goal.category?.name ?? null,
+      title: normalizeTitle({
+        title: goal.title,
+        categoryName: goal.category?.name,
+        month: goal.month,
+        year: goal.year
+      }),
       month: goal.month,
-      year: goal.year
-    }),
-    month: goal.month,
-    year: goal.year,
-    amountCents: goal.amountCents,
-    transactionSpentCents: linkedSpentCents(goal.transactions, savingsIds),
-    completedAt: goal.completedAt,
-    spentCents: goal.spentCents,
-    createdAt: goal.createdAt
-  });
+      year: goal.year,
+      amountCents: goal.amountCents,
+      monthlyRateCents: deadline ? goal.monthlyRateCents : null,
+      suggestedMonthlyRateCents: suggestMonthlyRateCents(goal.amountCents, deadline, now),
+      transactionSpentCents: linkedSpentCents(goal.transactions, savingsIds),
+      savingsPaidCents: savingsPaidCents(goal.savingsPayments),
+      savingsPayments: goal.savingsPayments,
+      completedAt: goal.completedAt,
+      spentCents: goal.spentCents,
+      createdAt: goal.createdAt
+    };
+  };
 
-  // Active, dated goals drive the forward-looking plan (timeline).
+  // Active, dated goals drive the plan (timeline).
   // Active, undated goals are an idea backlog shown separately.
   // Completed goals are kept for history.
   const activeRaw = goalsRaw.filter((goal) => goal.completedAt == null);
@@ -141,22 +153,7 @@ export async function GET() {
   const undatedGoals = activeRaw.filter((goal) => goal.month == null || goal.year == null).map(mapGoal);
   const completedGoals = goalsRaw.filter((goal) => goal.completedAt != null).map(mapGoal);
 
-  // computeSavingPlanTotals holds back what goals completed before withdrawals
-  // were booked still reserve, and measures the suggested monthly rate against
-  // what was covered at the start of the current month: the pool minus this
-  // month's gross deposits (withdrawals this month stay taken out).
-  const totals = computeSavingPlanTotals(
-    goalsRaw.map((goal) => ({
-      amountCents: goal.amountCents,
-      completedAt: goal.completedAt,
-      reservedCents: goal.reservedCents,
-      month: goal.month,
-      year: goal.year
-    })),
-    rawSavingsBalanceCents,
-    now,
-    depositedThisMonthCents
-  );
+  const totals = computeSavingPlanTotals(goalsRaw, now);
 
   return NextResponse.json({
     goals,
@@ -170,7 +167,7 @@ export async function POST(req: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const json = await req.json();
+  const json = await req.json().catch(() => null);
   const parsed = SavingPlanInput.safeParse({
     ...json,
     targetMonth: json?.targetMonth ?? json?.month ?? json?.dueMonth,
@@ -188,6 +185,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 
+  const dated = payload.targetMonth != null && payload.targetYear != null;
   const created = await prisma.budget.create({
     data: {
       accountId: payload.accountId,
@@ -195,7 +193,9 @@ export async function POST(req: Request) {
       title: payload.title,
       month: payload.targetMonth ?? null,
       year: payload.targetYear ?? null,
-      amountCents: payload.amountCents ?? null
+      amountCents: payload.amountCents ?? null,
+      // A rate needs a deadline; an undated idea has none.
+      monthlyRateCents: dated ? (payload.monthlyRateCents ?? null) : null
     }
   });
 

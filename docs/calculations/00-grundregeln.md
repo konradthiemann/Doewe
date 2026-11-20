@@ -4,7 +4,7 @@ Jede Zahl in Doewe wird aus denselben Buchungen nach denselben Regeln gebildet. 
 baut oder ändert, hält sich an diese Seite; die übrigen Seiten in diesem Verzeichnis beschreiben
 einzelne Bildschirme und dürfen ihr nicht widersprechen.
 
-Stand: 19. November 2026
+Stand: 20. November 2026
 
 ## 1. Kalender: Europe/Berlin
 
@@ -32,10 +32,10 @@ eines Dauerauftrag-Ankers (`nextOccurrence`) und für `Budget.completedAt`.
 Die Einordnung steht in `packages/shared/src/cashflow.ts` (`classifyFlow`, `sumFlows`) und gilt in
 dieser Reihenfolge:
 
-1. Liegt die Buchung in einer **Spar-Kategorie**, ist sie eine Umbuchung in den oder aus dem
-   Spartopf — unabhängig vom Vorzeichen. Einzahlung = negativer Betrag, Entnahme = positiver Betrag.
-   Sie ist weder Einnahme noch Ausgabe. „Gespart" ist der Saldo: Einzahlungen minus Entnahmen (kann
-   negativ sein).
+1. Liegt die Buchung in einer **Spar-Kategorie**, ist sie Sparen — unabhängig vom Vorzeichen.
+   Einzahlung = negativer Betrag (Geld verlässt den Monat), Entnahme = positiver Betrag (Geld kommt aus
+   dem Ersparten zurück). Sie ist weder Einnahme noch Ausgabe. „Gespart" ist der Saldo: Einzahlungen
+   minus Entnahmen (kann negativ sein).
 2. Sonst gilt das Vorzeichen: `amountCents >= 0` ist Einnahme, `amountCents < 0` ist Ausgabe.
 
 Folgerungen:
@@ -101,20 +101,22 @@ jeden Monat `M`:
 | Dashboard nach Monatsende (alles gebucht) | Rückblick desselben Monats |
 | „Ausgegeben" je Kategorie, gebucht | dieselbe Zahl im Rückblick und in der Jahresübersicht; Dashboard und Budget-Warnung rechnen im laufenden Monat zusätzlich das Geplante ein |
 
-## 7. Spartopf, Sparziele und Budgets
+## 7. Sparen, Sparziele und Budgets
 
-- **Spartopf** = Einzahlungen in die Spar-Kategorien minus Entnahmen, über alle Konten des Haushalts.
-  Davon abgezogen wird nur der Betrag, der für Ziele zurückgehalten wird, die abgeschlossen wurden,
-  bevor Entnahmen gebucht wurden (`Budget.reservedCents`).
-- Ein Sparziel abzuschließen bucht eine Entnahme aus dem Spartopf (höchstens so viel, wie im Topf ist)
-  und auf Wunsch den Kauf als Ausgabe. Wieder öffnen nimmt die Entnahme zurück. Der Spartopf lässt
-  sich deshalb immer aus den Buchungen nachrechnen.
+- **Kein Spar-Bestand.** Gespartes ist für den Monat ausgegeben. Was auf dem Sparkonto liegt, liegt
+  außerhalb der App; Doewe zeigt keinen Spartopf und begrenzt keine Entnahme
+  ([07-sparziele.md](./07-sparziele.md)).
+- Was für ein Sparziel ausgegeben wurde = verknüpfte Buchungen (Ausgaben minus Erstattungen, ohne
+  Spar-Kategorien) plus **Zahlungen aus dem Ersparten**. Eine Zahlung aus dem Ersparten
+  (`SavingGoalPayment`) ist keine Buchung: Sie ändert keinen Kontostand, keine Monatszahl und kein
+  Budget.
+- Ein Sparziel abzuschließen bucht nichts. Es hält die Kosten in `spentCents` fest.
 - Das Budget einer Kategorie ist der Budget-Plan, sonst die Monats-Budgets des Haushalts zusammen.
   Für einen abgeschlossenen Monat gilt der Stand, der festgehalten wurde (`BudgetMonthSnapshot`) — beim
   ersten Lesen nach Monatsende oder spätestens vor der ersten Änderung an Plänen, Monats-Budgets oder
   Daueraufträgen. Spätere Änderungen wirken nur auf den laufenden und künftige Monate.
 - Budget-Warnungen gibt es nur für den laufenden Monat. Sie vergleichen „Ausgegeben" (gebucht und
   geplant) mit diesem Budget und gehen an alle Mitglieder des Haushalts, die sie eingeschaltet haben.
-- **Empfohlene Monatsrate:** der kleinste gleichbleibende Monatsbetrag, mit dem jedes datierte Ziel zu
-  seinem Termin gedeckt ist; der laufende Monat zählt mit. Als bereits gedeckt gilt der Spartopf ohne
-  die Einzahlungen dieses Monats, damit die Rate nicht sinkt, sobald man spart.
+- **Monatsrate:** Jedes Ziel mit Termin hat eine Rate, die der Haushalt festlegt. Vorgeschlagen wird
+  `ceil(Zielbetrag / Monate bis zum Termin)`, der laufende Monat zählt mit, der Zielmonat nicht. Die
+  Monatsrate des Plans ist die Summe der Raten der offenen Ziele, deren Termin noch kommt.

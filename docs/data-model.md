@@ -83,7 +83,15 @@ erDiagram
         Int amountCents "nullable, null = no amount yet"
         DateTime completedAt "nullable"
         Int spentCents "nullable"
+        Int monthlyRateCents "nullable, saving goal only"
         DateTime createdAt
+    }
+    SavingGoalPayment {
+        String id PK
+        String goalId FK
+        Int amountCents
+        DateTime occurredAt
+        String note "nullable"
     }
 
     User ||--o{ Account : "owns"
@@ -96,7 +104,8 @@ erDiagram
     Category ||--o{ RecurringTransaction : "classifies"
     Category ||--o{ Budget : "scopes"
     RecurringTransaction ||--o{ RecurringTransactionSkip : "skipped by"
-    Budget ||--o{ Transaction : "funds (saving goal)"
+    Budget ||--o{ Transaction : "spent from the monthly budget (saving goal)"
+    Budget ||--o{ SavingGoalPayment : "paid from savings (saving goal)"
     Transaction ||--o{ Attachment : "documented by"
 ```
 
@@ -268,14 +277,35 @@ A spending limit set by the user for a specific category in a specific calendar 
 | `year` | Int? | Calendar year; `null` on a saving goal = undated goal |
 | `amountCents` | Int? | Budget limit / goal target in euro cents (positive). Required for category budgets; `null` on a saving goal = no target amount set yet |
 | `completedAt` | DateTime? | `null` = active; set = goal closed. Only meaningful for saving goals (`categoryId = null`) |
-| `spentCents` | Int? | Amount actually withdrawn from the savings pool on completion (snapshot); `null` while active |
+| `spentCents` | Int? | What the goal cost, fixed on completion: linked bookings plus payments from savings (snapshot); `null` while active |
+| `monthlyRateCents` | Int? | Saving goal only: planned monthly rate (`>= 0`); `null` = none. Only dated goals carry one |
+| `withdrawalTransactionId` | String? | Legacy: the withdrawal a completion booked between 19 November 2026 and the removal of the savings balance; reopening deletes it. Never set now |
+| `reservedCents` | Int? | Legacy: no longer read |
 | `createdAt` | DateTime | Creation timestamp |
 
 **Constraints:** `(accountId, categoryId, month, year)` is unique — only one budget per category per month per account.
 
-**Relationships:** Belongs to one `Account`. Optionally scoped to one `Category`. Has many `Transaction`s linked via `Transaction.savingGoalId` (contributions to a saving goal).
+**Relationships:** Belongs to one `Account`. Optionally scoped to one `Category`. Has many `Transaction`s linked via `Transaction.savingGoalId` (spending on the goal from the monthly budget) and many `SavingGoalPayment`s (spending on the goal straight from the savings).
 
-**Saving-goal lifecycle:** A `Budget` with `categoryId = null` acts as a saving goal. Setting `completedAt`/`spentCents` (via `POST /api/saving-plan/[id]/complete`) marks the goal as completed; clearing them (via `DELETE`) reopens it. Completing a goal does **not** create a transaction — it only reserves `spentCents` out of the computed savings pool that funds the remaining active goals. See `docs/calculations/07-sparziele.md`.
+**Saving-goal lifecycle:** A `Budget` with `categoryId = null` acts as a saving goal. The app keeps no savings balance. `POST /api/saving-plan/[id]/complete` sets `completedAt` and fixes `spentCents`; it does **not** create a transaction. `DELETE` on the same route reopens the goal. See `docs/calculations/07-sparziele.md`.
+
+---
+
+### SavingGoalPayment
+
+Money paid for a saving goal straight from the savings — outside the accounts the app keeps. **Not a transaction:** it changes no balance, no monthly figure and no budget, only what the goal shows as spent.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | String (CUID) | Primary key |
+| `goalId` | String | FK → Budget.id (a saving goal); `onDelete: Cascade` |
+| `amountCents` | Int | Amount in euro cents (`>= 1`) |
+| `occurredAt` | DateTime | The day it was paid, stored as 12:00 Europe/Berlin |
+| `note` | String? | Optional note (at most 200 characters) |
+| `createdByUserId` | String? | Who recorded it |
+| `createdAt` | DateTime | Creation timestamp |
+
+Deleted for good (no tombstone). Index on `goalId`.
 
 ---
 

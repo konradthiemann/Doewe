@@ -14,7 +14,7 @@ function setup(overrides: Partial<SavingsOverviewCardProps> = {}) {
       <SavingsOverviewCard
         savedThisMonth={250}
         netWithdrawn={0}
-        plan={{ suggestedMonthlyCents: 50_000, availableCents: 120_000 }}
+        plan={{ monthlyRateCents: 50_000 }}
         nextDeadline={{ year: 2027, month: 3 }}
         completedGoals={[]}
         completedGoalsSpent={0}
@@ -27,21 +27,24 @@ function setup(overrides: Partial<SavingsOverviewCardProps> = {}) {
 }
 
 describe("SavingsOverviewCard with a monthly rate", () => {
-  it("compares what was saved this month with the recommended monthly rate", () => {
+  it("compares what was saved this month with the monthly rate of the plan", () => {
     setup();
 
     expect(screen.getByText("Diesen Monat gespart")).toBeInTheDocument();
     expect(screen.getByText("250,00 €")).toBeInTheDocument();
-    expect(screen.getByText("Empfohlene Monatsrate")).toBeInTheDocument();
+    expect(screen.getByText("Monatsrate laut Plan")).toBeInTheDocument();
     expect(screen.getByText("500,00 €")).toBeInTheDocument();
 
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
     expect(screen.getByText(/50 % der Monatsrate/)).toBeInTheDocument();
     expect(screen.getByText(/Noch 250,00 € bis zur Monatsrate\./)).toBeInTheDocument();
     expect(screen.getByText(/Nächster Termin: März 2027/)).toBeInTheDocument();
+  });
 
-    expect(screen.getByText("Im Spartopf")).toBeInTheDocument();
-    expect(screen.getByText("1.200,00 €")).toBeInTheDocument();
+  it("shows no savings balance: the app does not track the savings account", () => {
+    setup();
+    expect(screen.queryByText("Im Spartopf")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Spartopf/)).not.toBeInTheDocument();
   });
 
   it("does not show the target of this month's deadline or a share of it", () => {
@@ -72,23 +75,20 @@ describe("SavingsOverviewCard with a monthly rate", () => {
 });
 
 describe("SavingsOverviewCard without dated goals (rate 0)", () => {
-  it("shows the saved amount and the pool, without bar, rate or percentage", () => {
-    setup({ plan: { suggestedMonthlyCents: 0, availableCents: 120_000 }, nextDeadline: null });
+  it("shows the saved amount only, without bar, rate or percentage", () => {
+    setup({ plan: { monthlyRateCents: 0 }, nextDeadline: null });
 
     expect(screen.getByText("Diesen Monat gespart")).toBeInTheDocument();
     expect(screen.getByText("250,00 €")).toBeInTheDocument();
-    expect(screen.getByText("Im Spartopf")).toBeInTheDocument();
-    expect(screen.getByText("1.200,00 €")).toBeInTheDocument();
 
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-    expect(screen.queryByText("Empfohlene Monatsrate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Monatsrate laut Plan")).not.toBeInTheDocument();
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
   });
 
-  it("leaves the pool out while the saving plan is not loaded", () => {
+  it("shows the saved amount while the saving plan is not loaded", () => {
     setup({ plan: null, nextDeadline: null });
     expect(screen.getByText("250,00 €")).toBeInTheDocument();
-    expect(screen.queryByText("Im Spartopf")).not.toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 });
@@ -96,7 +96,7 @@ describe("SavingsOverviewCard without dated goals (rate 0)", () => {
 describe("SavingsOverviewCard: the rest of the card", () => {
   it("mentions a net withdrawal of the month", () => {
     setup({ savedThisMonth: 0, netWithdrawn: 150 });
-    expect(screen.getByText("Diesen Monat wurden unterm Strich 150,00 € aus dem Spartopf genommen.")).toBeInTheDocument();
+    expect(screen.getByText("Diesen Monat hast du unterm Strich 150,00 € aus dem Ersparten zurückgeholt.")).toBeInTheDocument();
   });
 
   it("keeps the list of goals completed this month", () => {
