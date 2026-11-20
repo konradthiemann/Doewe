@@ -153,7 +153,7 @@ der Untergrenze.
 
 Wer die Miete am 2. von Hand einträgt und einen Dauerauftrag für den 3. hat, soll sie nicht zweimal
 in den Büchern haben. Ob eine von Hand erfasste Buchung aber **für** das Vorkommen steht oder
-**zusätzlich** gezahlt wurde, kann keine Regel entscheiden: 200 € extra in den Spartopf am 27.
+**zusätzlich** gezahlt wurde, kann keine Regel entscheiden: 200 € extra gespart am 27.
 November sehen genauso aus wie die Sparrate vom 1. Dezember, ein zweites Taschengeld am 28. Oktober
 wie das vom 1. November. Würde die App selbst verknüpfen, fehlte in solchen Fällen eine Buchung — und
 niemand merkte es. Eine doppelte Buchung dagegen ist sichtbar und lässt sich löschen (das Löschen
@@ -433,7 +433,7 @@ nach `Category.isIncome`.
 - Einnahmen werden ausgelassen; zuerst die Ausgaben, dann das Sparen, danach die Zeilen
   „Summe Ausgaben", „Summe Sparen" und „Gesamt".
 - Beträge stehen als positive Zahl, wenn Geld das Konto verlässt. Ein Dauerauftrag, der regelmäßig
-  aus dem Spartopf entnimmt (positiver Betrag in einer Spar-Kategorie), steht negativ und verringert
+  aus dem Ersparten zurückholt (positiver Betrag in einer Spar-Kategorie), steht negativ und verringert
   „Summe Sparen".
 - Format: Trennzeichen `;`, Dezimalkomma, CRLF, UTF-8 mit BOM; Dateiname `wiederkehrend-<Jahr>.csv`.
 

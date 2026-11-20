@@ -78,14 +78,19 @@ export default function TransactionForm({
   );
   const accountsQuery = useApiQuery<Array<{ id: string; name: string }>>(["accounts"], "/api/accounts");
   const categoriesQuery = useApiQuery<CategoryOption[]>(["categories", "byUsage"], "/api/categories?sortByUsage=true");
-  const savingPlanQuery = useApiQuery<{ goals: Array<{ id: string; title: string; month: number; year: number }> }>(
+  type GoalOption = { id: string; title: string; month: number | null; year: number | null };
+  const savingPlanQuery = useApiQuery<{ goals: GoalOption[]; undatedGoals?: GoalOption[] }>(
     ["saving-plan"],
     "/api/saving-plan",
     { enabled: mode === "create" }
   );
   const accounts = accountsQuery.data ?? [];
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
-  const savingGoals = savingPlanQuery.data?.goals ?? [];
+  // Every open goal can be linked: dated ones first, then the undated ideas.
+  const savingGoals = useMemo(
+    () => [...(savingPlanQuery.data?.goals ?? []), ...(savingPlanQuery.data?.undatedGoals ?? [])],
+    [savingPlanQuery.data]
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -887,7 +892,9 @@ export default function TransactionForm({
                   </option>
                   {savingGoals.map((goal) => (
                     <option key={goal.id} value={goal.id}>
-                      {goal.title} ({goal.year}-{String(goal.month).padStart(2, "0")})
+                      {goal.month != null && goal.year != null
+                        ? `${goal.title} (${goal.year}-${String(goal.month).padStart(2, "0")})`
+                        : goal.title}
                     </option>
                   ))}
                 </select>

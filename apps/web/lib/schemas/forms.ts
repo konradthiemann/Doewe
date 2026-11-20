@@ -55,6 +55,8 @@ export const plannedSavingFormSchema = z
     // When false the goal is "undated" (idea backlog) and needs no target month.
     scheduled: z.boolean(),
     targetMonth: z.string(),
+    // Monthly rate of a dated goal; empty = no rate. 0 is allowed ("the money is there").
+    monthlyRate: z.string(),
   })
   .refine((data) => !data.scheduled || /^\d{4}-\d{2}$/.test(data.targetMonth), {
     message: "Gültigen Monat wählen",
@@ -69,5 +71,9 @@ export const plannedSavingFormSchema = z
   .refine((data) => data.amount.trim() === "" || isParseableCents(data.amount), {
     message: "Ungültiger Betrag (z.B. 12,50 oder 12.50)",
     path: ["amount"],
+  })
+  .refine((data) => !data.scheduled || data.monthlyRate.trim() === "" || isParseableCents(data.monthlyRate), {
+    message: "Ungültige Monatsrate (z.B. 250 oder 249,90)",
+    path: ["monthlyRate"],
   });
 export type PlannedSavingFormValues = z.infer<typeof plannedSavingFormSchema>;

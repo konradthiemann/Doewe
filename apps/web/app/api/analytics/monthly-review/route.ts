@@ -26,7 +26,7 @@
  * - `incomeCategories`         — Einnahmen je Quelle/Kategorie (größte zuerst)
  * - `topExpenses`              — Die 5 größten Einzelausgaben des Monats
  * - `completedGoals`           — In diesem Monat als erledigt markierte Sparziele
- * - `completedGoalsSpentCents` — Summe der dafür entnommenen Beträge
+ * - `completedGoalsSpentCents` — Summe ihrer Kosten (`spentCents`)
  * - `prevMonth`                — Basiswerte des Vormonats für MoM-Vergleich
  * - `availableMonths`          — Alle Monate von der frühesten Buchung bis zum Vormonat
  *                                (neueste zuerst)

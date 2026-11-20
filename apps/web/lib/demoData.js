@@ -402,15 +402,6 @@ function buildBudgets(accountId, categoryMap, now) {
     }
   }
 
-  // Monatliche Sparrate des aktuellen Monats → speist `plannedSavings` im Dashboard.
-  budgets.push({
-    accountId,
-    categoryId: null,
-    title: "Monatliche Sparrate",
-    month: curMonth0 + 1,
-    year: curYear,
-    amountCents: 40000
-  });
 
   // Aktive, benannte Sparziele (Zielmonat in der Zukunft).
   const futureMonth = (addMonths) => {
@@ -425,11 +416,21 @@ function buildBudgets(accountId, categoryMap, now) {
     { title: "Neues Familienauto", ...futureMonth(20), amountCents: 1200000 }
   ];
   for (const g of activeGoals) {
-    budgets.push({ accountId, categoryId: null, title: g.title, month: g.month, year: g.year, amountCents: g.amountCents });
+    // Planned monthly rate: the target spread over the months left (current month included).
+    const months = Math.max((g.year - curYear) * 12 + (g.month - (curMonth0 + 1)), 1);
+    budgets.push({
+      accountId,
+      categoryId: null,
+      title: g.title,
+      month: g.month,
+      year: g.year,
+      amountCents: g.amountCents,
+      monthlyRateCents: Math.ceil(g.amountCents / months)
+    });
   }
 
   // Terminlose Vorhaben (Ideen-Backlog, month/year null). Eines mit Zielbetrag,
-  // eines ohne — zählen nicht zum Sparfortschritt, dienen nur dem Überblick.
+  // eines ohne — zählen nicht zur Monatsrate, dienen nur dem Überblick.
   const undatedGoals = [
     { title: "Neue Couch", amountCents: 150000 },
     { title: "Küche renovieren", amountCents: null }
@@ -438,7 +439,7 @@ function buildBudgets(accountId, categoryMap, now) {
     budgets.push({ accountId, categoryId: null, title: g.title, month: null, year: null, amountCents: g.amountCents });
   }
 
-  // Abgeschlossene Sparziele (Historie) mit Abschlusszeitpunkt + entnommenem Betrag.
+  // Abgeschlossene Sparziele (Historie) mit Abschlusszeitpunkt und Kosten.
   for (const spec of COMPLETED_GOAL_SPECS) {
     const d = new Date(curYear, curMonth0 - spec.k, 1);
     const month = d.getMonth() + 1;
@@ -452,11 +453,7 @@ function buildBudgets(accountId, categoryMap, now) {
       year,
       amountCents: spec.amountCents,
       completedAt: new Date(year, d.getMonth(), 20, 12, 0, 0),
-      spentCents: spec.spentCents,
-      // The demo goals are completed without a withdrawal booking; the amount
-      // stays held back from the pool, as for goals completed before
-      // withdrawals were booked.
-      reservedCents: spec.spentCents
+      spentCents: spec.spentCents
     });
   }
 

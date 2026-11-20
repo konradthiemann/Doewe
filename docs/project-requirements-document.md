@@ -28,7 +28,7 @@ Non‑goals (MVP)
   - Create with accountId, optional categoryId, amount in cents, description, occurredAt.
   - List, sort by occurredAt desc.
   - Recurring rules — **implemented** (`RecurringTransaction` with `intervalMonths`, `dayOfMonth`, `nextOccurrence`, plus per-month skips).
-- Budgets/Goals — **implemented** (category budgets per month; saving goals as `Budget` rows with `categoryId = null`, dated or undated, with complete/reopen and withdraw).
+- Budgets/Goals — **implemented** (category budgets per month; saving goals as `Budget` rows with `categoryId = null`, dated or undated, with a monthly rate, payments from savings, complete/reopen and taking savings back into the month; no savings balance).
 - Insights — **implemented** (`/api/analytics/summary`, `/api/analytics/quarterly`, `/api/analytics/monthly-review`; dashboard + `/review` page).
 - Tax preparation — **implemented** (earmark transactions via `Transaction.taxRelevant`, receipt attachments as PostgreSQL bytes with MIME/size limits, tax-relevant categories with retroactive backfill, per-year overview on `/tax`; see [User Flows — Flow 6](./flows.md)).
 
@@ -56,7 +56,7 @@ Non‑goals (MVP)
 
 ## 7. Current Routes & Screens
 - Screens: `/` (dashboard), `/transactions`, `/saving-plan`, `/review`, `/tax` (tax preparation, reachable via drawer/sidebar only), `/settings`, `/login`, `/forgot-password`, `/reset-password`, `/impressum`, `/datenschutz`. (`/budgets` is a redirect to `/saving-plan`.)
-- API: transactions (+ [id]/attachments), attachments, tax, recurring-transactions (+ skips), budgets, saving-plan (+ complete/withdraw), categories, accounts, analytics (summary/quarterly/monthly-review), auth (register, password flows), demo seed — see the [API Reference](./api-reference.md) for the complete, authoritative list.
+- API: transactions (+ [id]/attachments), attachments, tax, recurring-transactions (+ skips), budgets, saving-plan (+ complete/payments/withdraw), categories, accounts, analytics (summary/quarterly/monthly-review), auth (register, password flows), demo seed — see the [API Reference](./api-reference.md) for the complete, authoritative list.
 
 ## 8. Data Model
 The schema has grown well beyond the MVP sketch (user scoping with `userId` on Account/Category, `isIncome`, saving-goal linking, recurring transactions with skips, password-reset tokens). The authoritative description lives in [Data Model](./data-model.md) and `apps/web/prisma/schema.prisma`.
@@ -88,8 +88,9 @@ The schema has grown well beyond the MVP sketch (user scoping with `userId` on A
 
 > **Status:** implemented with a different design than sketched below. There are no
 > `PredictiveOutcome`/`Allocation` models — saving goals are `Budget` rows with
-> `categoryId = null` (dated or undated), and the monthly suggestion is computed
-> on the fly in `apps/web/app/api/saving-plan/compute.ts`. The section below is
+> `categoryId = null` (dated or undated), each dated goal carries a monthly rate the
+> household sets (suggested as target ÷ months left, `apps/web/lib/savingGoalProgress.ts`),
+> and the app keeps no savings balance (`docs/calculations/07-sparziele.md`). The section below is
 > kept as the original design sketch.
 
 Users can define upcoming large expenses (predictive outcomes), e.g., "Christmas presents (1000€ by Dec)", "New wheels (600€ by Nov)".

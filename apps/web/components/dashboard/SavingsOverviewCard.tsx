@@ -15,7 +15,7 @@ export interface SavingsOverviewCardProps {
   /** Taken out of the pool this month on balance, in euros (0 unless withdrawals exceed deposits). */
   netWithdrawn: number;
   /** Totals of /api/saving-plan; null while they are not loaded. */
-  plan: { suggestedMonthlyCents: number; availableCents: number } | null;
+  plan: { monthlyRateCents: number } | null;
   /** Earliest goal month that is the current month or later. */
   nextDeadline: MonthRef | null;
   completedGoals: CompletedGoalRow[];
@@ -26,11 +26,12 @@ export interface SavingsOverviewCardProps {
 
 /**
  * Dashboard card "Sparübersicht": what was saved this month against the
- * recommended monthly rate, and what is in the savings pool.
+ * monthly rate of the saving plan.
  *
- * The rate is what has to be set aside each month so that all dated goals are
- * reached in time. Without dated goals it is 0: then there is nothing to
- * compare with, and the card shows the saved amount and the pool only.
+ * The rate is the sum of the rates the household set for its dated goals.
+ * Without one it is 0: then there is nothing to compare with, and the card
+ * shows the saved amount only. The app keeps no savings balance, so the card
+ * shows none.
  */
 export function SavingsOverviewCard({
   savedThisMonth,
@@ -45,7 +46,7 @@ export function SavingsOverviewCard({
   const { t } = useI18n();
 
   const savedCents = Math.round(savedThisMonth * 100);
-  const rateCents = plan?.suggestedMonthlyCents ?? 0;
+  const rateCents = plan?.monthlyRateCents ?? 0;
   const hasRate = rateCents > 0;
   // Same rule as a goal's progress: 100 % only once the rate is really reached.
   const ratePercent = hasRate ? goalPercent(savedCents, rateCents) : 0;
@@ -112,15 +113,6 @@ export function SavingsOverviewCard({
           <p className="mt-3 text-xs text-ink-muted">
             {t("dashboard.netWithdrawnNote", { amount: formatCurrency(netWithdrawn) })}
           </p>
-        )}
-
-        {plan && (
-          <div className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-3">
-            <p className="min-w-0 text-sm text-ink-muted">{t("dashboard.inPool")}</p>
-            <p className="shrink-0 text-amount font-semibold tabular-nums text-ink">
-              {formatCurrency(Math.max(0, plan.availableCents) / 100)}
-            </p>
-          </div>
         )}
 
         {completedGoals.length > 0 && (

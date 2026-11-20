@@ -384,3 +384,41 @@ describe("the month changes at midnight in Berlin", () => {
     expect([r.month, r.year]).toEqual([10, 2026]);
   });
 });
+
+describe("a saving goal: what was spent = linked bookings + payments from savings", () => {
+  it("adds both sources, and a payment from savings moves no figure of any month", async () => {
+    const goal = await prisma.budget.create({
+      data: { accountId: ACCOUNT_ID, categoryId: null, title: "RC Urlaub", month: 12, year: 2026, amountCents: 50_000 }
+    });
+    const linked = await prisma.transaction.findFirstOrThrow({ where: { description: "oct last evening" } });
+    await prisma.transaction.update({ where: { id: linked.id }, data: { savingGoalId: goal.id } });
+
+    try {
+      const before = await Promise.all([review(10, 2026), review(11, 2026), summary(), listFor(11, 2026), quarterly()]);
+
+      const { POST } = await import("../app/api/saving-plan/[id]/payments/route");
+      const res = await POST(
+        new Request(`http://localhost/api/saving-plan/${goal.id}/payments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amountCents: 40_000, day: "2026-11-10" })
+        }),
+        { params: Promise.resolve({ id: goal.id }) }
+      );
+      expect(res.status).toBe(201);
+
+      const after = await Promise.all([review(10, 2026), review(11, 2026), summary(), listFor(11, 2026), quarterly()]);
+      expect(after).toEqual(before);
+
+      const { GET } = await import("../app/api/saving-plan/route");
+      const plan = (await (await GET()).json()) as {
+        goals: Array<{ id: string; transactionSpentCents: number; savingsPaidCents: number }>;
+      };
+      const dto = plan.goals.find((g) => g.id === goal.id);
+      expect(dto).toMatchObject({ transactionSpentCents: 1_250, savingsPaidCents: 40_000 });
+    } finally {
+      await prisma.transaction.update({ where: { id: linked.id }, data: { savingGoalId: null } });
+      await prisma.budget.delete({ where: { id: goal.id } });
+    }
+  });
+});

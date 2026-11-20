@@ -281,11 +281,9 @@ describe("editing only the day of a recurring template", () => {
   });
 });
 
-describe("withdrawing from the savings pool", () => {
-  it("caps the amount at the pool minus what goals completed before withdrawals were booked hold back", async () => {
-    await prisma.transaction.create({
-      data: { accountId: ACCOUNT_A, categoryId: sparenId, amountCents: -100_000, description: "deposit", occurredAt: oct(5) }
-    });
+describe("taking money back from the savings", () => {
+  it("books any amount: the app keeps no savings balance to cap it against", async () => {
+    // A goal completed before withdrawals were booked used to hold this back.
     await prisma.budget.create({
       data: {
         accountId: ACCOUNT_A,
@@ -296,23 +294,23 @@ describe("withdrawing from the savings pool", () => {
         year: 2031,
         completedAt: oct(20),
         spentCents: 60_000,
-        // what the migration leaves on a goal completed before the change
         reservedCents: 60_000
       }
     });
     const { POST } = await import("../app/api/saving-plan/withdraw/route");
-    const withdraw = (amountCents: number) =>
-      POST(
-        new Request("http://localhost/api/saving-plan/withdraw", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amountCents })
-        })
-      );
-
-    const tooMuch = await withdraw(40_001);
-    expect(tooMuch.status).toBe(409);
-    expect(((await tooMuch.json()) as { availableCents: number }).availableCents).toBe(40_000);
-    expect((await withdraw(40_000)).status).toBe(201);
+    const res = await POST(
+      new Request("http://localhost/api/saving-plan/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amountCents: 40_001 })
+      })
+    );
+    expect(res.status).toBe(201);
+    const { id, amountCents } = (await res.json()) as { id: string; amountCents: number };
+    expect(amountCents).toBe(40_001);
+    const booked = await prisma.transaction.findUnique({ where: { id } });
+    // Positive in the savings category: a withdrawal, not income.
+    expect(booked?.categoryId).toBe(sparenId);
+    expect(booked?.amountCents).toBe(40_001);
   });
 });

@@ -9,16 +9,14 @@
  * (`deletedAt` gesetzt) ebenfalls: `findUnique` sieht gelöschte Zeilen, deshalb
  * wird `deletedAt` hier ausdrücklich geprüft.
  *
- * PATCH Body: { title?, targetMonth?, targetYear?, amountCents? } — Monat und
- *   Jahr nur gemeinsam; `null` entfernt Termin bzw. Betrag.
+ * PATCH Body: { title?, targetMonth?, targetYear?, amountCents?, monthlyRateCents? }
+ *   — Monat und Jahr nur gemeinsam; `null` entfernt Termin, Betrag bzw. Rate.
+ *   Eine Monatsrate gibt es nur mit Termin: Wird der Termin entfernt, wird auch
+ *   die Rate geleert; für ein Ziel ohne Termin wird keine gespeichert.
  *
- * DELETE lässt alle Buchungen stehen. Das gilt auch für die Entnahme-Buchung
- * eines abgeschlossenen Ziels (`withdrawalTransactionId`): Das Geld hat den
- * Spartopf verlassen, der Topf bleibt also um diesen Betrag kleiner. Wer es
- * zurück im Topf haben will, öffnet das Ziel vor dem Löschen wieder oder löscht
- * die Entnahme in der Buchungsliste. Was ein vor den Entnahme-Buchungen
- * abgeschlossenes Ziel zurückhält (`reservedCents`), wird dagegen mit dem
- * Löschen frei, weil gelöschte Ziele nirgends mitzählen.
+ * DELETE (Soft-Delete) lässt alle Buchungen stehen, auch die mit dem Ziel
+ * verknüpften. Die Zahlungen aus dem Ersparten bleiben am gelöschten Ziel und
+ * zählen nirgends mehr.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -35,7 +33,9 @@ const UpdateSavingPlanInput = z
     // `undefined` = leave unchanged; `null` = clear (un-schedule / remove amount).
     targetMonth: z.number().int().min(1).max(12).nullish(),
     targetYear: z.number().int().min(1970).max(9999).nullish(),
-    amountCents: z.number().int().min(1).max(INT4_MAX).nullish()
+    amountCents: z.number().int().min(1).max(INT4_MAX).nullish(),
+    // 0 is a valid rate: "the money is there already".
+    monthlyRateCents: z.number().int().min(0).max(INT4_MAX).nullish()
   })
   .refine(
     (data) => {
@@ -89,6 +89,7 @@ export async function GET(
     month: goal.month,
     year: goal.year,
     amountCents: goal.amountCents,
+    monthlyRateCents: goal.monthlyRateCents,
     createdAt: goal.createdAt
   });
 }
@@ -117,7 +118,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const json = await request.json();
+  const json = await request.json().catch(() => null);
   // Accept legacy `month`/`year` aliases, but preserve an explicit `null`
   // (used to un-schedule a goal) — `??` would swallow it, so only fall back
   // to the alias when the primary key is genuinely absent.
@@ -133,13 +134,20 @@ export async function PATCH(
 
   const payload = parsed.data;
 
+  // The goal as it will be: a rate only survives on a dated goal.
+  const nextMonth = payload.targetMonth !== undefined ? payload.targetMonth : goal.month;
+  const nextYear = payload.targetYear !== undefined ? payload.targetYear : goal.year;
+  const dated = nextMonth != null && nextYear != null;
+  const monthlyRateCents = !dated ? null : payload.monthlyRateCents;
+
   const updated = await prisma.budget.update({
     where: { id },
     data: {
       ...(payload.title !== undefined && { title: payload.title }),
       ...(payload.targetMonth !== undefined && { month: payload.targetMonth }),
       ...(payload.targetYear !== undefined && { year: payload.targetYear }),
-      ...(payload.amountCents !== undefined && { amountCents: payload.amountCents })
+      ...(payload.amountCents !== undefined && { amountCents: payload.amountCents }),
+      ...(monthlyRateCents !== undefined && { monthlyRateCents })
     },
     include: { category: { select: { name: true } } }
   });
@@ -153,6 +161,7 @@ export async function PATCH(
     month: updated.month,
     year: updated.year,
     amountCents: updated.amountCents,
+    monthlyRateCents: updated.monthlyRateCents,
     createdAt: updated.createdAt
   });
 }

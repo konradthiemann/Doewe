@@ -1157,7 +1157,7 @@ Remove a skip (un-skip a month). Uses `deleteMany` — the response is `204` whe
 
 **Budget alerts:** a push notification is sent when a category reaches 80 % or 100 % of its budget in the current Europe/Berlin month. A booking in any other month — an old booking corrected later, or one dated into the past or future — triggers nothing: no push, no log entry, and the budgets are not loaded. The budget is the one the dashboard shows — the category's [budget plan](#budget-plans), otherwise the household's per-month rows added up — and "spent" is the dashboard's figure too: booked outcome of the category plus recurring occurrences still planned for the month.
 
-- **Checked after** `POST /api/transactions`, `PATCH /api/transactions/[id]` (for the category and month the booking is in after the edit, if that is the current month), each booked group of `POST /api/transactions/batch`, and the purchase booked by `POST /api/saving-plan/[id]/complete`. Sync and automatically booked recurring transactions do not trigger the check.
+- **Checked after** `POST /api/transactions`, `PATCH /api/transactions/[id]` (for the category and month the booking is in after the edit, if that is the current month), and each booked group of `POST /api/transactions/batch`. Sync and automatically booked recurring transactions do not trigger the check.
 - **Sent to** every member of the household who has `notifyBudgetAlerts` on (see [Push & Notifications](#push--notifications)), each in their own `locale` — not only to the person who booked. Suspended and deleted users get nothing.
 - **Once per threshold:** a threshold is announced once per household, category and month, whoever books and on whichever account. Only the highest threshold reached is announced; lower ones count as announced. Thresholds announced before this keying was introduced stay announced.
 - A push failure never fails the request that triggered it. Each send to a push service waits at most 5 seconds; a timeout counts as a failed send and keeps the subscription (only `404`/`410` remove it).
@@ -1291,9 +1291,11 @@ Soft-delete. `204` no body; `404` unknown, foreign or already deleted plan.
 
 ## Saving Plan
 
+The app keeps **no savings balance**: a booking in a savings category is money that leaves the month, and what then lies on a savings account is outside the app. A saving goal is a plan (target, date, monthly rate the household sets) plus what was spent on it — from the monthly budget (linked bookings) and straight from the savings (payments recorded on the goal, never bookings). Rules: `docs/calculations/07-sparziele.md`.
+
 ### `GET /api/saving-plan`
 
-List the saving goals of the household plus the computed plan totals. Saving goals are stored as `Budget` rows with `categoryId = null`; they are read across all accounts of the household. Rows with a category are category budgets and never appear here. The savings pool is one figure per household: all savings categories, all accounts.
+List the saving goals of the household plus the plan totals. Saving goals are stored as `Budget` rows with `categoryId = null`; they are read across all accounts of the household. Rows with a category are category budgets and never appear here.
 
 **Auth required:** Yes
 
@@ -1310,7 +1312,13 @@ List the saving goals of the household plus the computed plan totals. Saving goa
       "month": 6,
       "year": 2027,
       "amountCents": 300000,
-      "transactionSpentCents": 50000,
+      "monthlyRateCents": 40000,
+      "suggestedMonthlyRateCents": 42858,
+      "transactionSpentCents": 30000,
+      "savingsPaidCents": 150000,
+      "savingsPayments": [
+        { "id": "sgp_01", "amountCents": 150000, "occurredAt": "2026-11-03T11:00:00.000Z", "note": "Anzahlung Hotel" }
+      ],
       "completedAt": null,
       "spentCents": null,
       "createdAt": "2026-01-01T00:00:00.000Z"
@@ -1319,22 +1327,17 @@ List the saving goals of the household plus the computed plan totals. Saving goa
   "undatedGoals": [],
   "completedGoals": [],
   "totals": {
-    "rawAvailableCents": 85000,
-    "withdrawnForCompletedCents": 0,
-    "availableCents": 85000,
     "totalTargetCents": 300000,
-    "suggestedMonthlyCents": 21500
+    "monthlyRateCents": 40000
   }
 }
 ```
 
-(Example read in August 2026 with no savings booked yet that month: `ceil((300000 − 85000) / 10 months) = 21500`.)
-
-- `goals` contains active goals **with** a target date (`month`/`year` set); `undatedGoals` contains active goals **without** one (idea backlog, same fields); `completedGoals` contains closed goals.
-- `transactionSpentCents` is what was spent on the goal: the outcome of the **not deleted** transactions linked to it via `savingGoalId` minus the refunds linked to it, never below `0`. Linked bookings in a savings category (deposits, withdrawals) do not count.
-- `totals.rawAvailableCents` is the savings pool: the negated sum of all bookings in all savings categories of the household (deposits are stored negative, withdrawals positive). Completing a goal takes its money out with a real withdrawal booking, so for most households `availableCents` equals `rawAvailableCents`. `withdrawnForCompletedCents` is a legacy figure: the amount still held back by goals that were completed before withdrawals were booked (`reservedCents`, set once by the migration; `0` for everyone else). `availableCents = max(rawAvailableCents − withdrawnForCompletedCents, 0)`.
-- `totalTargetCents` and `suggestedMonthlyCents` consider only active **dated** goals — undated goals are excluded from the forward-looking plan.
-- `suggestedMonthlyCents` is the amount to set aside in each remaining month, the current one included. It is measured against what was **covered at the start of the current Europe/Berlin month**: `max(availableCents − this month's gross deposits, 0)`. Deposits are counted without subtracting this month's withdrawals — a withdrawal (including the one booked when a goal is completed) stays taken out of the pool — so the rate neither drops as soon as the user saves nor when another goal is completed that month. In a month with only withdrawals the pool counts as it is. See `docs/calculations/07-sparziele.md`.
+- `goals` are active goals **with** a date, sorted by date; `undatedGoals` active goals without one (idea backlog; `month`, `year`, `monthlyRateCents` and `suggestedMonthlyRateCents` are `null`); `completedGoals` have `completedAt` and `spentCents` set.
+- `transactionSpentCents` — from the monthly budget: the outcome of the **not deleted** transactions linked via `savingGoalId` minus the refunds linked to it, never below 0; linked bookings in a savings category do not count.
+- `savingsPaidCents` — from savings: the sum of `savingsPayments` (newest first).
+- `suggestedMonthlyRateCents` = `ceil(amountCents / months)`, `months` = months from the current Europe/Berlin month up to (not including) the target month, at least 1; `null` without amount or date. Only a suggestion: the app does not know what is saved already.
+- `totals.totalTargetCents` — targets of the active dated goals. `totals.monthlyRateCents` — rates of the active dated goals whose target month is the current month or later.
 
 **Error responses:**
 
@@ -1358,7 +1361,8 @@ Create a new saving goal. Target date and amount are optional — a goal without
   "title": "Urlaub 2027",
   "targetMonth": 6,
   "targetYear": 2027,
-  "amountCents": 300000
+  "amountCents": 300000,
+  "monthlyRateCents": 40000
 }
 ```
 
@@ -1369,8 +1373,9 @@ Create a new saving goal. Target date and amount are optional — a goal without
 | `targetMonth` | integer | Optional; 1–12. Aliases accepted: `month`, `dueMonth`. Must be set/omitted **together with** `targetYear` |
 | `targetYear` | integer | Optional; 1970–9999. Aliases accepted: `year`, `dueYear` |
 | `amountCents` | integer | Optional; `>= 1` and within `int4` when present |
+| `monthlyRateCents` | integer or null | Optional; `>= 0` and within `int4`. Stored only for a dated goal; ignored for an undated one |
 
-**Success response — `201 Created`:** The created `Budget` row (`id`, `accountId`, `categoryId: null`, `title`, `month`, `year`, `amountCents`, `completedAt: null`, `spentCents: null`, `createdAt`).
+**Success response — `201 Created`:** The created `Budget` row.
 
 **Error responses:**
 
@@ -1384,11 +1389,11 @@ Create a new saving goal. Target date and amount are optional — a goal without
 
 ### `GET /api/saving-plan/[id]`
 
-Get a single saving goal by ID. Only `Budget` rows without a category are goals; the ID of a category budget yields `404`, and so does a deleted goal (also for `PATCH`, `DELETE` and the `complete` routes).
+Get a single saving goal by ID. Only `Budget` rows without a category are goals; the ID of a category budget yields `404`, and so does a deleted goal (also for `PATCH`, `DELETE`, `complete` and `payments`).
 
 **Auth required:** Yes
 
-**Success response — `200 OK`:** Saving goal object (`id`, `accountId`, `categoryId`, `categoryName`, `title`, `month`, `year`, `amountCents`, `createdAt`).
+**Success response — `200 OK`:** Saving goal object (`id`, `accountId`, `categoryId`, `categoryName`, `title`, `month`, `year`, `amountCents`, `monthlyRateCents`, `createdAt`).
 
 **Error responses:**
 
@@ -1402,7 +1407,7 @@ Get a single saving goal by ID. Only `Budget` rows without a category are goals;
 
 ### `PATCH /api/saving-plan/[id]`
 
-Update a saving goal. Partial update with **null-clearing semantics**: omitting a field leaves it unchanged; sending `null` clears it (e.g., `targetMonth: null, targetYear: null` makes the goal undated; `amountCents: null` removes the target amount).
+Update a saving goal. Partial update with **null-clearing semantics**: omitting a field leaves it unchanged; sending `null` clears it (e.g., `targetMonth: null, targetYear: null` makes the goal undated; `amountCents: null` removes the target amount; `monthlyRateCents: null` removes the rate). Making a goal undated also clears its rate; an undated goal takes no rate.
 
 **Auth required:** Yes
 
@@ -1412,7 +1417,8 @@ Update a saving goal. Partial update with **null-clearing semantics**: omitting 
   "title": "Urlaub Griechenland 2027",
   "targetMonth": 7,
   "targetYear": 2027,
-  "amountCents": 350000
+  "amountCents": 350000,
+  "monthlyRateCents": 45000
 }
 ```
 
@@ -1422,8 +1428,9 @@ Update a saving goal. Partial update with **null-clearing semantics**: omitting 
 | `targetMonth` | integer or null | Optional; 1–12. Alias: `month`. Must be changed **together with** `targetYear` and share its null-ness |
 | `targetYear` | integer or null | Optional; 1970–9999. Alias: `year` |
 | `amountCents` | integer or null | Optional; `>= 1` and within `int4`, or `null` to clear |
+| `monthlyRateCents` | integer or null | Optional; `>= 0` and within `int4`, or `null` to clear |
 
-**Success response — `200 OK`:** Updated saving goal object (`id`, `accountId`, `categoryId`, `categoryName`, `title`, `month`, `year`, `amountCents`, `createdAt`).
+**Success response — `200 OK`:** Updated saving goal object (same fields as `GET /api/saving-plan/[id]`).
 
 **Error responses:**
 
@@ -1438,7 +1445,7 @@ Update a saving goal. Partial update with **null-clearing semantics**: omitting 
 
 ### `DELETE /api/saving-plan/[id]`
 
-Delete a saving goal. This is a **soft delete** (`deletedAt`); linked transactions are not deleted and keep their `savingGoalId`. The withdrawal booked when a goal was completed stays as well — the money did leave the pool. To get it back into the pool, reopen the goal before deleting it or delete the withdrawal in the transaction list. (A goal completed before withdrawals were booked stops holding back its `reservedCents` once it is deleted.)
+Delete a saving goal. This is a **soft delete** (`deletedAt`); linked transactions are not deleted and keep their `savingGoalId`. Payments from savings stay on the deleted goal and count nowhere.
 
 **Auth required:** Yes
 
@@ -1454,120 +1461,124 @@ Delete a saving goal. This is a **soft delete** (`deletedAt`); linked transactio
 
 ---
 
-### `POST /api/saving-plan/[id]/complete`
+### `POST /api/saving-plan/[id]/payments`
 
-Complete a saving goal. Sets `completedAt` to the instant of the request, stores what the goal cost as `spentCents`, and takes the money out of the savings pool with a real booking — the pool always equals the sum of the savings bookings. Goal update and bookings happen in one database transaction.
-
-**Auth required:** Yes (any member of the goal's household)
-
-**Request body:**
-```json
-{
-  "spentCents": 115000,
-  "withdraw": true,
-  "expense": { "categoryId": "cat_09" }
-}
-```
-
-| Field | Type | Constraints |
-|---|---|---|
-| `spentCents` | integer | Required; `>= 0`, within `int4`. What the goal cost in the end |
-| `withdraw` | boolean | Optional, default `true`. `true`: book a withdrawal of `min(spentCents, pool available right now)` — a **positive** transaction in the household's savings category (the oldest, if several), dated now, on the goal's account, described `Sparziel: <title>`. Nothing is booked if that amount is `0`. The booking is not linked to the goal via `savingGoalId`; its ID is kept in the goal's `withdrawalTransactionId`. `false`: the money was already taken out (e.g. via `POST /api/saving-plan/withdraw`), nothing is booked |
-| `expense` | object or null | Optional. When given and `spentCents > 0`, the purchase is booked as well: a **negative** transaction of `spentCents`, described with the goal's title, linked to the goal (`savingGoalId`), dated now. Afterwards the budget alert of its category is checked (see [Budgets](#budgets)) |
-| `expense.categoryId` | string or null | Required inside `expense`; must belong to the household and must not be a savings category. `null` books the purchase without a category. The transaction inherits `isTaxRelevant` of the category |
-| `expense.accountId` | string | Optional; must belong to the household. Defaults to the goal's account |
-
-**Success response — `200 OK`:** the updated goal (`Budget` row) plus `withdrawnCents` and `expenseTransactionId`:
-```json
-{
-  "id": "bud_05",
-  "accountId": "acc_01",
-  "categoryId": null,
-  "title": "Urlaub 2027",
-  "month": 6,
-  "year": 2027,
-  "amountCents": 120000,
-  "completedAt": "2026-03-20T10:00:00.000Z",
-  "spentCents": 115000,
-  "withdrawalTransactionId": "txn_77",
-  "reservedCents": null,
-  "createdAt": "2026-01-01T00:00:00.000Z",
-  "updatedAt": "2026-03-20T10:00:00.000Z",
-  "deletedAt": null,
-  "withdrawnCents": 115000,
-  "expenseTransactionId": "txn_78"
-}
-```
-
-`withdrawnCents` is the amount actually taken out of the pool (less than `spentCents` if the pool held less, `0` with `withdraw: false`); `withdrawalTransactionId` is `null` when nothing was withdrawn. `expenseTransactionId` is `null` when no purchase was booked. `reservedCents` is never set by a completion.
-
-Deposit (negative), withdrawal (positive) and purchase (negative) together lower the account balance by the purchase amount once. If the purchase was already booked by hand, complete without `expense`.
-
-**Error responses:**
-
-| Status | Reason |
-|---|---|
-| `400` | Validation failed (`spentCents` missing, negative or beyond `int4`; malformed `withdraw` or `expense`; a body that is not JSON), or `expense.categoryId` is a savings category |
-| `401` | Not authenticated |
-| `403` | Goal belongs to another household |
-| `404` | Goal not found or deleted, or the row is a category budget; `expense.categoryId` or `expense.accountId` not found / not in the household |
-| `409` | The goal is already completed (`"Goal already completed"`) — also for a second completion sent at the same moment; nothing is booked |
-
----
-
-### `DELETE /api/saving-plan/[id]/complete`
-
-Reopen a completed saving goal. Clears `completedAt`, `spentCents`, `withdrawalTransactionId` and `reservedCents`, returning the goal to the active plan. If a withdrawal was booked on completion, it is soft-deleted, so the money is back in the pool; for a goal completed before withdrawals were booked, clearing `reservedCents` releases the amount it held back. A purchase booked through `expense` is left alone — it is an ordinary transaction that can be deleted in the list.
-
-**Auth required:** Yes (any member of the goal's household)
-
-**Success response — `200 OK`:** the updated goal (`Budget` row, same fields as above without `withdrawnCents` and `expenseTransactionId`):
-```json
-{
-  "id": "bud_05",
-  "completedAt": null,
-  "spentCents": null,
-  "withdrawalTransactionId": null,
-  "reservedCents": null
-}
-```
-
-**Error responses:**
-
-| Status | Reason |
-|---|---|
-| `401` | Not authenticated |
-| `403` | Goal belongs to another household |
-| `404` | Goal not found or deleted, or the row is a category budget |
-
----
-
-### `POST /api/saving-plan/withdraw`
-
-Withdraw money from the savings pool back into everyday spending. Creates a **positive** transaction in a savings category of the household (money returns from the pool to the account), dated at the instant of the request; analytics treat it as a reduction of net savings, not as income. If the household has several savings categories, the booking goes to the oldest one. The cap is the household's pool — all savings categories, all accounts, minus what goals completed before withdrawals were booked still hold back (`totals.availableCents` of `GET /api/saving-plan`). Cap check and booking run in one database transaction under the household's pool lock, so two withdrawals sent at the same moment cannot both use the same money: if several together exceed the pool, only as many go through as fit, the others get `409`.
+Record a payment from savings on an active goal: money spent on the goal straight from the savings account. **Not a booking** — no balance, monthly figure or budget changes; only the goal's `savingsPaidCents`.
 
 **Auth required:** Yes
 
 **Request body:**
 ```json
-{
-  "amountCents": 25000,
-  "description": "Urlaubskasse"
-}
+{ "amountCents": 150000, "day": "2026-11-03", "note": "Anzahlung Hotel" }
 ```
 
 | Field | Type | Constraints |
 |---|---|---|
-| `accountId` | string | Optional — defaults to the household's oldest account (the first entry of `GET /api/accounts`) |
-| `amountCents` | integer | Required; positive; must not exceed the available savings pool |
+| `amountCents` | integer | Required; 1 to `int4` |
+| `day` | string | Optional; Europe/Berlin calendar day `yyyy-mm-dd`, default today. Stored as 12:00 Berlin of that day |
+| `note` | string | Optional; trimmed, at most 200 characters; empty = no note |
+
+**Success response — `201 Created`:** `{ "id", "goalId", "amountCents", "occurredAt", "note" }`
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Validation failed (also a body that is not JSON) |
+| `401` | Not authenticated |
+| `403` | Goal belongs to another household |
+| `404` | Goal does not exist or was deleted, or the row is a category budget |
+| `409` | The goal is completed — reopen it first |
+
+---
+
+### `DELETE /api/saving-plan/[id]/payments/[paymentId]`
+
+Remove a payment from savings for good (it never was a booking).
+
+**Auth required:** Yes
+
+**Success response — `200 OK`:** `{ "success": true }`
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `403` | Goal belongs to another household |
+| `404` | Goal not found, or the payment does not belong to it |
+| `409` | The goal is completed — reopen it first |
+
+---
+
+### `POST /api/saving-plan/[id]/complete`
+
+Complete a saving goal. **Books nothing.** Sets `completedAt` to the instant of the request and fixes what the goal cost in `spentCents` = linked bookings (as in `transactionSpentCents`) + all payments from savings, including the optional last payment from the body. Everything happens in one database transaction.
+
+**Auth required:** Yes
+
+**Request body (optional; an empty body is fine):**
+```json
+{ "savingsPayment": { "amountCents": 25000, "day": "2026-11-20", "note": "Rest" } }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `savingsPayment` | object or null | Optional; a last payment from savings, same fields and rules as `POST …/payments` |
+
+**Success response — `200 OK`:** the updated goal (`Budget` row) with `completedAt` and `spentCents` set.
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `400` | Validation failed (also a body that is not a JSON object) |
+| `401` | Not authenticated |
+| `403` | Goal belongs to another household |
+| `404` | Goal does not exist or was deleted, or the row is a category budget |
+| `409` | The goal is already completed — also the loser of two simultaneous completions; nothing is recorded |
+
+---
+
+### `DELETE /api/saving-plan/[id]/complete`
+
+Reopen a completed saving goal. Clears `completedAt`, `spentCents`, `withdrawalTransactionId` and `reservedCents`; the payments from savings stay on the goal. Legacy: if a withdrawal was booked when the goal was completed (completions from 19 November 2026 until the savings balance was removed), that booking is soft-deleted; if the user already deleted it, nothing else happens.
+
+**Auth required:** Yes
+
+**Success response — `200 OK`:** the updated goal (`Budget` row).
+
+**Error responses:**
+
+| Status | Reason |
+|---|---|
+| `401` | Not authenticated |
+| `403` | Goal belongs to another household |
+| `404` | Goal does not exist or was deleted, or the row is a category budget |
+
+---
+
+### `POST /api/saving-plan/withdraw`
+
+Move money from the savings back into this month's budget (e.g. for a repair). Creates a **positive** transaction in a savings category of the household. The analytics treat it as savings (not income): it lowers the month's "saved" and raises "available until month end". There is **no cap** — the app does not know the savings account's balance. With several savings categories the booking goes to the oldest one; `occurredAt` is the instant of the request.
+
+**Auth required:** Yes
+
+**Request body:**
+```json
+{ "amountCents": 25000, "accountId": "acc_01", "description": "Entnahme aus Erspartem" }
+```
+
+| Field | Type | Constraints |
+|---|---|---|
+| `accountId` | string | Optional; defaults to the household's oldest account |
+| `amountCents` | integer | Required; 1 to `int4` |
 | `description` | string | Optional (trimmed, max 200); defaults to `"Savings withdrawal"` |
 
 **Success response — `201 Created`:**
 ```json
-{ "id": "txn_42", "amountCents": 25000, "availableCents": 60000 }
+{ "id": "txn_42", "amountCents": 25000 }
 ```
-
-`availableCents` is the pool left after the withdrawal.
 
 **Error responses:**
 
@@ -1576,9 +1587,10 @@ Withdraw money from the savings pool back into everyday spending. Creates a **po
 | `400` | Validation failed (also a body that is not JSON) |
 | `401` | Not authenticated |
 | `404` | Account not found / not in the household |
-| `409` | No savings category exists, nothing available to withdraw, or amount exceeds the available balance (response includes `availableCents`) |
+| `409` | No savings category exists |
 
 ---
+
 
 ## Analytics
 

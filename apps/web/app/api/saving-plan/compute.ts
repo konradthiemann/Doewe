@@ -1,45 +1,27 @@
 /**
  * Pure saving-plan computation — no Prisma, no I/O — so it can be unit-tested directly.
  *
- * Goals are stored as `Budget` rows with `categoryId = null`. A goal is considered
+ * Goals are stored as `Budget` rows with `categoryId = null`. A goal is
  * "completed" once `completedAt` is set.
  *
- * Completing a goal takes its money out of the savings pool with a real
- * withdrawal booking (see ./[id]/complete/route.ts), so the pool is simply the
- * sum of the savings bookings. The one exception are goals completed before
- * withdrawals were booked: they hold their amount back from the pool through
- * `reservedCents` (set once by the migration, never for a new completion).
+ * The app keeps no savings balance (docs/calculations/07-sparziele.md): a
+ * savings booking is money that leaves the month, and what then lies on the
+ * savings account is outside the app. The plan is therefore what the household
+ * set itself — targets, deadlines and a monthly rate per dated goal — and the
+ * spending recorded on each goal.
  *
- * Completed goals leave the forward-looking plan: they no longer count toward the
- * planned total nor the suggested monthly rate.
- *
- * "Undated" goals (month/year null) are an idea backlog with no deadline. They do
- * NOT participate in the forward-looking plan at all: they are excluded from the
- * planned total, the suggested monthly rate, and the savings-pool cascade.
- *
- * The suggested monthly rate is the amount to set aside in EACH remaining month,
- * the current one included. It is therefore measured against what was covered at
- * the start of the current month: what was deposited this month is the user
- * following the rate, not a reason to lower it. (Counting this month's deposits as
- * covered AND the current month as still open would count the month twice — the
- * rate would drop as soon as the user saves.) The covered amount is the pool now
- * minus this month's GROSS deposits: a withdrawal this month (also the one booked
- * when a goal is completed) stays taken out and does not cancel a deposit, so
- * completing a goal never lowers the rate of the others. "Current month" is the
- * Europe/Berlin calendar month of `now`.
+ * "Undated" goals (month/year null) are an idea backlog: no rate, not part of
+ * the planned total.
  */
 import { sumFlows, zonedMonth, type FlowRow } from "@doewe/shared";
 
 export type SavingPlanGoal = {
   /** goal amount; null = no amount set yet (undated ideas may omit it) */
   amountCents: number | null;
+  /** planned monthly rate; null = none set */
+  monthlyRateCents: number | null;
   /** null = active, set = completed */
   completedAt: Date | string | null;
-  /**
-   * amount a goal completed before withdrawals were booked still holds back
-   * from the pool; null for every goal completed since (and for active goals)
-   */
-  reservedCents: number | null;
   /** target month 1-12, null = undated */
   month: number | null;
   /** target year, null = undated */
@@ -47,116 +29,54 @@ export type SavingPlanGoal = {
 };
 
 export type SavingPlanTotals = {
-  /** raw savings balance: the negated sum of all savings bookings */
-  rawAvailableCents: number;
-  /**
-   * legacy reservation: sum of reservedCents across completed goals. 0 unless
-   * the household completed goals before withdrawals were booked.
-   */
-  withdrawnForCompletedCents: number;
-  /** raw balance minus the legacy reservation (floored at 0) */
-  availableCents: number;
-  /** sum of amountCents across active goals only */
+  /** sum of the targets of the active, dated goals */
   totalTargetCents: number;
-  /** minimum constant monthly amount to reach all active goals on time */
-  suggestedMonthlyCents: number;
+  /**
+   * sum of the monthly rates of the active, dated goals whose deadline is the
+   * current month or later — what the plan sets aside this month
+   */
+  monthlyRateCents: number;
 };
 
 /**
- * What was spent on a goal ("X ausgegeben"), from the bookings linked to it:
- * their outcome minus their refunds, never below 0. Classified like every
+ * What was spent on a goal from the monthly budget, from the bookings linked to
+ * it: their outcome minus their refunds, never below 0. Classified like every
  * other figure (classifyFlow): a linked booking in a savings category is a
- * transfer to or from the pool, not spending, and does not count.
+ * transfer to or from the savings, not spending, and does not count.
  */
 export function linkedSpentCents(rows: Iterable<FlowRow>, savingsIds: ReadonlySet<string>): number {
   const { outcomeCents, incomeCents } = sumFlows(rows, savingsIds);
   return Math.max(outcomeCents - incomeCents, 0);
 }
 
-function isCompleted(goal: SavingPlanGoal): boolean {
-  return goal.completedAt != null;
+/** Sum of the payments from savings recorded on a goal. */
+export function savingsPaidCents(payments: Iterable<{ amountCents: number }>): number {
+  let sum = 0;
+  for (const payment of payments) sum += payment.amountCents;
+  return sum;
 }
 
-/** A goal drives the forward-looking plan only if it has a concrete deadline. */
-function isScheduled(goal: SavingPlanGoal): goal is SavingPlanGoal & { month: number; year: number } {
-  return goal.month != null && goal.year != null;
+function isActiveAndDated(goal: SavingPlanGoal): goal is SavingPlanGoal & { month: number; year: number } {
+  return goal.completedAt == null && goal.month != null && goal.year != null;
 }
 
 /**
- * Compute the saving-plan totals.
- *
- * @param goals               all goals of the household, sorted by (year, month)
- * @param rawSavingsBalance   the net savings balance (all savings categories)
- * @param now                 reference instant; its Europe/Berlin month is the current month
- * @param depositedThisMonthCents gross deposits into the savings categories within the
- *                            current month (withdrawals not subtracted, >= 0); only
- *                            affects the suggested monthly rate
+ * @param goals all goals of the household
+ * @param now   reference instant; its Europe/Berlin month is the current month
  */
-export function computeSavingPlanTotals(
-  goals: SavingPlanGoal[],
-  rawSavingsBalance: number,
-  now: Date,
-  depositedThisMonthCents = 0
-): SavingPlanTotals {
-  // Only dated, non-completed goals drive the forward-looking plan.
-  // Undated goals are an idea backlog and are ignored here entirely.
-  const activeGoals = goals.filter(
-    (goal): goal is SavingPlanGoal & { month: number; year: number } =>
-      !isCompleted(goal) && isScheduled(goal)
-  );
+export function computeSavingPlanTotals(goals: readonly SavingPlanGoal[], now: Date): SavingPlanTotals {
+  const current = zonedMonth(now);
+  const currentIndex = current.year * 12 + current.month;
 
-  // Only goals completed before withdrawals were booked carry a reservation;
-  // every later completion already left the raw balance as a booking.
-  const withdrawnForCompletedCents = goals
-    .filter(isCompleted)
-    .reduce((sum, goal) => sum + (goal.reservedCents ?? 0), 0);
-
-  const availableCents = Math.max(rawSavingsBalance - withdrawnForCompletedCents, 0);
-
-  const totalTargetCents = activeGoals.reduce((sum, goal) => sum + (goal.amountCents ?? 0), 0);
-
-  // ── Suggested equal monthly savings (active goals only) ──────────
-  // Find the minimum constant monthly amount X such that, by each active
-  // goal's deadline, the cumulative savings (X * months) covers the
-  // cumulative target up to that deadline.
-  //
-  // Goals must be sorted by (year, month). For each goal i:
-  //   X >= cumulativeRemaining[i] / monthsUntilDeadline[i]
-  // The answer is the maximum of those ratios.
-  const { year: currentYear, month: currentMonth } = zonedMonth(now); // month 1-12
-
-  // monthsUntil below counts the current month as still open, so the covered
-  // amount is what was covered when this month began: the pool now without
-  // this month's gross deposits. This month's withdrawals stay taken out —
-  // that money is gone from the pool, whether it came from old or new savings.
-  const coveredAtMonthStartCents = Math.max(availableCents - Math.max(depositedThisMonthCents, 0), 0);
-
-  let suggestedMonthlyCents = 0;
-  let cumulativeAmount = 0;
-
-  for (const goal of activeGoals) {
-    cumulativeAmount += goal.amountCents ?? 0;
-
-    // How much of the cumulative target was NOT yet covered when the month began
-    const cumulativeRemaining = Math.max(cumulativeAmount - coveredAtMonthStartCents, 0);
-
-    // Months from now until the goal's target month (at least 1)
-    const monthsUntil = Math.max(
-      (goal.year - currentYear) * 12 + (goal.month - currentMonth),
-      1
-    );
-
-    const requiredMonthly = Math.ceil(cumulativeRemaining / monthsUntil);
-    if (requiredMonthly > suggestedMonthlyCents) {
-      suggestedMonthlyCents = requiredMonthly;
+  let totalTargetCents = 0;
+  let monthlyRateCents = 0;
+  for (const goal of goals) {
+    if (!isActiveAndDated(goal)) continue;
+    totalTargetCents += goal.amountCents ?? 0;
+    // A goal whose deadline has passed no longer asks for a monthly amount.
+    if (goal.year * 12 + goal.month >= currentIndex) {
+      monthlyRateCents += goal.monthlyRateCents ?? 0;
     }
   }
-
-  return {
-    rawAvailableCents: rawSavingsBalance,
-    withdrawnForCompletedCents,
-    availableCents,
-    totalTargetCents,
-    suggestedMonthlyCents
-  };
+  return { totalTargetCents, monthlyRateCents };
 }

@@ -1,66 +1,50 @@
 "use client";
 
-import { fromCents, parseCents, toDecimalString } from "@doewe/shared";
+import { parseCents } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { CompleteGoalDialog, type CompleteGoalResult } from "../../components/CompleteGoalDialog";
+import { CompleteGoalDialog } from "../../components/CompleteGoalDialog";
 import PageContainer from "../../components/PageContainer";
 import PlannedSavingForm from "../../components/PlannedSavingForm";
+import { GoalCard, type SavingGoal, type SavingsPayment } from "../../components/saving-plan/GoalCard";
+import { SavingsPaymentDialog } from "../../components/SavingsPaymentDialog";
 import { InfoTip } from "../../components/ui/InfoTip";
 import { Spinner } from "../../components/ui/Spinner";
 import { useToast } from "../../components/ui/Toast";
 import { useApiQuery } from "../../lib/api/useApiQuery";
 import { formatBookingDayMonth, formatMonth } from "../../lib/bookingDate";
 import { useI18n } from "../../lib/i18n";
-import { cascadeGoalProgress, goalPercent, type GoalProgress } from "../../lib/savingGoalProgress";
-
-type SavingGoal = {
-  id: string;
-  accountId: string;
-  categoryId?: string | null;
-  categoryName?: string | null;
-  title: string;
-  month: number | null;
-  year: number | null;
-  amountCents: number | null;
-  transactionSpentCents: number;
-  completedAt?: string | null;
-  spentCents?: number | null;
-  createdAt: string;
-};
 
 type SavingPlanResponse = {
   goals: SavingGoal[];
   undatedGoals: SavingGoal[];
   completedGoals: SavingGoal[];
   totals: {
-    rawAvailableCents: number;
-    withdrawnForCompletedCents: number;
-    availableCents: number;
     totalTargetCents: number;
-    suggestedMonthlyCents: number;
+    monthlyRateCents: number;
   };
 };
-
-type GoalWithProgress = SavingGoal & GoalProgress;
 
 function SavingPlanPage() {
   const { locale, t } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
-  // Mutationsfehler (Löschen/Reopen) laufen nicht über die Query — separat halten
+  // Mutationsfehler (Löschen/Reopen/Rate/Zahlung) laufen nicht über die Query — separat halten
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGoal, setEditGoal] = useState<SavingGoal | null>(null);
   const [scheduleIntent, setScheduleIntent] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<SavingGoal | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [completeTarget, setCompleteTarget] = useState<GoalWithProgress | null>(null);
-  // The button that opened the complete dialog: gets the focus back on cancel.
-  const completeTriggerRef = useRef<HTMLElement | null>(null);
+  const [completeTarget, setCompleteTarget] = useState<SavingGoal | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<SavingGoal | null>(null);
+  // The button that opened the complete or payment dialog: gets the focus back on cancel.
+  const dialogTriggerRef = useRef<HTMLElement | null>(null);
   const [reopeningId, setReopeningId] = useState<string | null>(null);
+  const [applyingRateId, setApplyingRateId] = useState<string | null>(null);
+  const [removingPaymentId, setRemovingPaymentId] = useState<string | null>(null);
   const [completedExpanded, setCompletedExpanded] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -85,9 +69,14 @@ function SavingPlanPage() {
   const planQuery = useApiQuery<SavingPlanResponse>(["saving-plan"], "/api/saving-plan");
   const plan = planQuery.data ?? null;
   const loading = planQuery.isPending;
+  // Reference instant for "months left" and "date has passed": when the plan was loaded.
+  const now = useMemo(
+    () => new Date(planQuery.dataUpdatedAt > 0 ? planQuery.dataUpdatedAt : Date.now()),
+    [planQuery.dataUpdatedAt]
+  );
 
-  // Nach Mutationen Plan + abhängige Ansichten neu laden (Withdraw/Complete
-  // erzeugen Transaktionen; alles beeinflusst die Analytics).
+  // Nach Mutationen Plan + abhängige Ansichten neu laden (die Entnahme erzeugt
+  // eine Buchung; Raten und Abschlüsse erscheinen im Dashboard).
   const invalidatePlan = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["saving-plan"] });
     void queryClient.invalidateQueries({ queryKey: ["analytics"] });
@@ -105,22 +94,9 @@ function SavingPlanPage() {
     : null;
   const error = loadError ?? mutationError;
 
-  const availableCents = useMemo(() => {
-    return Math.max(plan?.totals.availableCents ?? 0, 0);
-  }, [plan]);
-
-  // A goal is complete only when its target is fully covered (see cascadeGoalProgress).
-  const goalsWithProgress: GoalWithProgress[] = useMemo(
-    () => (plan ? cascadeGoalProgress(plan.goals, availableCents) : []),
-    [availableCents, plan]
-  );
-
-  const lastTarget = goalsWithProgress.length ? goalsWithProgress[goalsWithProgress.length - 1].cumulativeTargetCents : 0;
-  const remainingAfterGoals = Math.max(availableCents - lastTarget, 0);
-  const shortfall = Math.max(lastTarget - availableCents, 0);
+  const goals = plan?.goals ?? [];
   const completedGoals = plan?.completedGoals ?? [];
   const undatedGoals = plan?.undatedGoals ?? [];
-  const withdrawnForCompletedCents = plan?.totals.withdrawnForCompletedCents ?? 0;
 
   useEffect(() => {
     const shouldOpen = searchParams.get("new") === "1";
@@ -174,26 +150,70 @@ function SavingPlanPage() {
     }
   }, [deleteConfirm, invalidatePlan, t, toast]);
 
-  const openCompleteDialog = useCallback((goal: GoalWithProgress, trigger: HTMLElement) => {
-    completeTriggerRef.current = trigger;
+  const openCompleteDialog = useCallback((goal: SavingGoal, trigger: HTMLElement) => {
+    dialogTriggerRef.current = trigger;
     setCompleteTarget(goal);
   }, []);
 
-  const closeCompleteDialog = useCallback(() => {
+  const handleCompleted = useCallback(() => {
+    invalidatePlan();
+    toast.success(t("savingPlan.complete.done"));
     setCompleteTarget(null);
+  }, [invalidatePlan, t, toast]);
+
+  const openPaymentDialog = useCallback((goal: SavingGoal, trigger: HTMLElement) => {
+    dialogTriggerRef.current = trigger;
+    setPaymentTarget(goal);
   }, []);
 
-  const handleCompleted = useCallback(
-    (result: CompleteGoalResult) => {
+  const handlePaymentAdded = useCallback(
+    (amountCents: number) => {
       invalidatePlan();
-      toast.success(
-        result.withdrawnCents > 0
-          ? t("savingPlan.complete.doneWithdrawn", { amount: formatCurrency(result.withdrawnCents) })
-          : t("savingPlan.complete.done")
-      );
-      setCompleteTarget(null);
+      toast.success(t("savingPlan.payment.success", { amount: formatCurrency(amountCents) }));
+      setPaymentTarget(null);
     },
     [formatCurrency, invalidatePlan, t, toast]
+  );
+
+  const handleRemovePayment = useCallback(
+    async (goal: SavingGoal, payment: SavingsPayment) => {
+      setRemovingPaymentId(payment.id);
+      setMutationError(null);
+      try {
+        const res = await fetch(`/api/saving-plan/${goal.id}/payments/${payment.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(t("savingPlan.goal.errorPaymentRemove"));
+        invalidatePlan();
+        toast.success(t("savingPlan.goal.paymentRemoved"));
+      } catch (removeError) {
+        setMutationError(removeError instanceof Error ? removeError.message : t("savingPlan.goal.errorPaymentRemove"));
+      } finally {
+        setRemovingPaymentId(null);
+      }
+    },
+    [invalidatePlan, t, toast]
+  );
+
+  const handleApplyRate = useCallback(
+    async (goal: SavingGoal) => {
+      if (goal.suggestedMonthlyRateCents == null) return;
+      setApplyingRateId(goal.id);
+      setMutationError(null);
+      try {
+        const res = await fetch(`/api/saving-plan/${goal.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ monthlyRateCents: goal.suggestedMonthlyRateCents })
+        });
+        if (!res.ok) throw new Error(t("savingPlan.goal.errorRate"));
+        invalidatePlan();
+        toast.success(t("savingPlan.goal.rateApplied"));
+      } catch (rateError) {
+        setMutationError(rateError instanceof Error ? rateError.message : t("savingPlan.goal.errorRate"));
+      } finally {
+        setApplyingRateId(null);
+      }
+    },
+    [invalidatePlan, t, toast]
   );
 
   const handleReopen = useCallback(
@@ -240,10 +260,6 @@ function SavingPlanPage() {
       setWithdrawError(t("savingPlan.withdraw.errorInvalid"));
       return;
     }
-    if (amountCents > availableCents) {
-      setWithdrawError(t("savingPlan.withdraw.errorTooMuch", { amount: formatCurrency(availableCents) }));
-      return;
-    }
     setWithdrawing(true);
     try {
       const res = await fetch("/api/saving-plan/withdraw", {
@@ -265,7 +281,7 @@ function SavingPlanPage() {
     } finally {
       setWithdrawing(false);
     }
-  }, [availableCents, closeWithdrawDialog, formatCurrency, invalidatePlan, t, toast, withdrawAmount]);
+  }, [closeWithdrawDialog, formatCurrency, invalidatePlan, t, toast, withdrawAmount]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -304,7 +320,20 @@ function SavingPlanPage() {
     [closeDialog, invalidatePlan, t, toast]
   );
 
-  const timelineEmpty = !loading && goalsWithProgress.length === 0;
+  const timelineEmpty = !loading && goals.length === 0;
+
+  const cardProps = {
+    now,
+    formatCurrency,
+    dateLocale,
+    removingPaymentId,
+    onApplyRate: (goal: SavingGoal) => void handleApplyRate(goal),
+    onAddPayment: openPaymentDialog,
+    onRemovePayment: (goal: SavingGoal, payment: SavingsPayment) => void handleRemovePayment(goal, payment),
+    onComplete: openCompleteDialog,
+    onEdit: (goal: SavingGoal) => openEditDialog(goal),
+    onDelete: (goal: SavingGoal) => setDeleteConfirm(goal)
+  };
 
   return (
     <main id="maincontent" className="py-6 md:py-8">
@@ -320,67 +349,39 @@ function SavingPlanPage() {
         className="grid gap-4 rounded-card border border-line bg-surface/95 p-5 shadow-card backdrop-blur"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="saving-plan-summary" className="text-lg font-medium">
-            {t("savingPlan.summaryTitle")}
-          </h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 id="saving-plan-summary" className="min-w-0 text-lg font-medium">
+              {t("savingPlan.summaryTitle")}
+            </h2>
+            <InfoTip topic="savingPlan.rate" />
+          </div>
           <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openWithdrawDialog}
-            disabled={availableCents <= 0}
-            title={availableCents <= 0 ? t("savingPlan.withdraw.nothingAvailable") : undefined}
-            className="inline-flex items-center gap-1.5 rounded-field border border-brand/40 bg-surface px-3 py-1.5 text-xs font-medium text-brand shadow-card transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-              <path fillRule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3.75A.75.75 0 0 1 10 3Z" clipRule="evenodd" />
-            </svg>
-            {t("savingPlan.withdraw.action")}
-          </button>
-          <InfoTip topic="savingPlan.withdraw" />
+            <button
+              type="button"
+              onClick={openWithdrawDialog}
+              className="inline-flex items-center gap-1.5 rounded-field border border-brand/40 bg-surface px-3 py-1.5 text-xs font-medium text-brand shadow-card transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            >
+              <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <path fillRule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v8.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3.75A.75.75 0 0 1 10 3Z" clipRule="evenodd" />
+              </svg>
+              {t("savingPlan.withdraw.action")}
+            </button>
+            <InfoTip topic="savingPlan.withdraw" />
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-4">
-          <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryAvailable")}</p>
-              <InfoTip topic="savingPlan.pool" />
-            </div>
-            <p className="text-xl font-semibold tabular-nums">{formatCurrency(availableCents)}</p>
-            <p className="text-xs text-ink-muted">{t("savingPlan.summaryAvailableHelp")}</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="min-w-0 rounded-field border border-line bg-savings-soft p-4 text-ink">
+            <p className="text-xs font-semibold uppercase tracking-wide text-savings">{t("savingPlan.summaryMonthlyRate")}</p>
+            <p className="text-xl font-semibold tabular-nums">{formatCurrency(plan?.totals.monthlyRateCents ?? 0)}</p>
+            <p className="text-xs text-ink-muted">{t("savingPlan.summaryMonthlyRateHelp")}</p>
           </div>
           <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryPlannedTotal")}</p>
             <p className="text-xl font-semibold tabular-nums">{formatCurrency(plan?.totals.totalTargetCents ?? 0)}</p>
             <p className="text-xs text-ink-muted">{t("savingPlan.summaryPlannedHelp")}</p>
           </div>
-          <div className="min-w-0 rounded-field border border-line bg-savings-soft p-4 text-ink">
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 text-xs font-semibold uppercase tracking-wide text-savings">{t("savingPlan.summaryMonthlyRate")}</p>
-              <InfoTip topic="savingPlan.rate" />
-            </div>
-            <p className="text-xl font-semibold tabular-nums">{formatCurrency(plan?.totals.suggestedMonthlyCents ?? 0)}</p>
-            <p className="text-xs text-ink-muted">{t("savingPlan.summarySuggestedMonthlyHelp")}</p>
-          </div>
-          <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryRemainingAfter")}</p>
-            <p className="text-xl font-semibold tabular-nums">{formatCurrency(remainingAfterGoals)}</p>
-            <p className="text-xs text-ink-muted">
-              {remainingAfterGoals > 0
-                ? t("savingPlan.summaryRemainingHelpPositive")
-                : t("savingPlan.summaryRemainingHelpNegative")}
-            </p>
-          </div>
         </div>
-        {shortfall > 0 && (
-          <p className="rounded-field border border-warning/30 bg-warning-soft p-3 text-sm text-warning">
-            {t("savingPlan.shortfall", { amount: formatCurrency(shortfall) })}
-          </p>
-        )}
-        {withdrawnForCompletedCents > 0 && (
-          <p className="text-xs text-ink-muted">
-            {t("savingPlan.summaryReservedForCompleted", { amount: formatCurrency(withdrawnForCompletedCents) })}
-          </p>
-        )}
+        <p className="text-xs text-ink-muted">{t("savingPlan.summaryNote")}</p>
       </section>
 
       <section aria-labelledby="saving-plan-timeline" className="space-y-4">
@@ -389,7 +390,7 @@ function SavingPlanPage() {
             <h2 id="saving-plan-timeline" className="min-w-0 text-lg font-medium">
               {t("savingPlan.timelineTitle")}
             </h2>
-            <InfoTip topic="savingPlan.progress" />
+            <InfoTip topic="savingPlan.spending" />
           </div>
           <span className="text-right text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineHint")}</span>
         </div>
@@ -401,121 +402,16 @@ function SavingPlanPage() {
           </div>
         ) : (
           <ol className="relative max-w-3xl border-l border-line pl-6">
-            {goalsWithProgress.map((goal, index) => {
-              const isLast = index === goalsWithProgress.length - 1;
-              const dueDate =
-                goal.month != null && goal.year != null
-                  ? formatMonth({ year: goal.year, month: goal.month }, dateLocale)
-                  : "";
-              const percentClamped = Math.min(goal.percent, 100);
-              const statusClasses = {
-                complete: "bg-success text-success",
-                current: "bg-brand text-brand",
-                upcoming: "bg-line-strong text-ink-faint"
-              }[goal.status];
-              const progressColor = goal.status === "complete" ? "bg-success" : goal.status === "current" ? "bg-brand" : "bg-line-strong";
-              const badgeColor = goal.status === "complete" ? "border-success" : goal.status === "current" ? "border-brand" : "border-line-strong";
-
+            {goals.map((goal, index) => {
+              const isLast = index === goals.length - 1;
               return (
-                <li key={goal.id} className={`relative pb-10 last:pb-0`} aria-current={goal.status === "current" ? "step" : undefined}>
-                  <span
-                    className={`absolute -left-[9px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 bg-surface ${badgeColor}`}
-                  >
-                    <span className={`h-2 w-2 rounded-full ${statusClasses}`} aria-hidden="true" />
+                <li key={goal.id} className="relative pb-10 last:pb-0">
+                  <span className="absolute -left-[9px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-savings bg-surface">
+                    <span className="h-2 w-2 rounded-full bg-savings" aria-hidden="true" />
                   </span>
-                  {!isLast && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute left-0 top-5 h-full w-px bg-line"
-                    />
-                  )}
-                  <div className="ml-4 space-y-3 rounded-card border border-line bg-surface/95 p-4 shadow-card backdrop-blur">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                          {dueDate}
-                        </p>
-                        <h3 className="text-lg font-semibold text-ink">{goal.title}</h3>
-                        {goal.categoryName && (
-                          <p className="text-xs text-ink-muted">
-                            {t("savingPlan.timelineCategory")}: {goal.categoryName}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineGoal")}</p>
-                        <p className="text-xl font-semibold text-ink">{formatCurrency(goal.amountCents ?? 0)}</p>
-                        <p className="text-xs text-ink-muted">
-                          {t("savingPlan.timelineSaved", { amount: formatCurrency(goal.achievedCents) })}
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-ink-muted">
-                        <span>{t("savingPlan.timelinePercentComplete", { percent: percentClamped })}</span>
-                        <span>
-                          {t("savingPlan.timelineTarget", { amount: formatCurrency(goal.cumulativeTargetCents) })}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-2 w-full rounded-full bg-surface-2" aria-hidden="true">
-                        <div
-                          className={`h-2 rounded-full transition-all ${progressColor}`}
-                          style={{ width: `${percentClamped}%` }}
-                        />
-                      </div>
-                      {goal.transactionSpentCents > 0 && (() => {
-                        const amount = goal.amountCents ?? 0;
-                        // Same rule as the progress above: 995 of 1,000 is 99 %, not 100 %.
-                        const spentPercent = amount > 0 ? goalPercent(goal.transactionSpentCents, amount) : 0;
-                        return (
-                          <div className="mt-2">
-                            <div className="flex justify-between text-xs text-warning">
-                              <span>{t("savingPlan.timelineSpentPercent", { percent: spentPercent })}</span>
-                              <span>{t("savingPlan.timelineSpent", { amount: formatCurrency(goal.transactionSpentCents) })}</span>
-                            </div>
-                            <div className="mt-1 h-2 w-full rounded-full bg-warning-soft" aria-hidden="true">
-                              <div
-                                className="h-2 rounded-full bg-warning transition-all"
-                                style={{ width: `${spentPercent}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {goal.status === "current" && (
-                        <p className="mt-2 text-xs font-medium text-brand">
-                          {t("savingPlan.timelineCurrent")}
-                        </p>
-                      )}
-                      {goal.status === "upcoming" && (
-                        <p className="mt-2 text-xs text-ink-muted">
-                          {t("savingPlan.timelineUpcoming", { amount: formatCurrency(goal.cumulativeTargetCents - (goal.amountCents ?? 0)) })}
-                        </p>
-                      )}
-                      <div className="mt-3 flex flex-wrap gap-2 justify-end">
-                        <button
-                          type="button"
-                          onClick={(event) => openCompleteDialog(goal, event.currentTarget)}
-                          className="inline-flex items-center rounded-field border border-success/40 bg-surface px-3 py-1.5 text-xs font-medium text-success shadow-card hover:bg-success-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2"
-                        >
-                          {t("savingPlan.markComplete")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditDialog(goal)}
-                          className="inline-flex items-center rounded-field border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-                        >
-                          {t("savingPlan.edit")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirm(goal)}
-                          className="inline-flex items-center rounded-field border border-danger/40 bg-surface px-3 py-1.5 text-xs font-medium text-danger shadow-card hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2"
-                        >
-                          {t("savingPlan.delete")}
-                        </button>
-                      </div>
-                    </div>
+                  {!isLast && <span aria-hidden="true" className="absolute left-0 top-5 h-full w-px bg-line" />}
+                  <div className="ml-4">
+                    <GoalCard goal={goal} applyingRate={applyingRateId === goal.id} {...cardProps} />
                   </div>
                 </li>
               );
@@ -537,53 +433,13 @@ function SavingPlanPage() {
           <p className="text-sm text-ink-muted">{t("savingPlan.undatedSubtitleRate")}</p>
           <ul className="grid gap-3 sm:grid-cols-2">
             {undatedGoals.map((goal) => (
-              <li
-                key={goal.id}
-                className="flex flex-col gap-3 rounded-card border border-line bg-surface/95 p-4 shadow-card backdrop-blur"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-base font-semibold text-ink">{goal.title}</h3>
-                    {goal.categoryName && (
-                      <p className="text-xs text-ink-muted">
-                        {t("savingPlan.timelineCategory")}: {goal.categoryName}
-                      </p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    {goal.amountCents != null ? (
-                      <>
-                        <p className="text-xs uppercase tracking-wide text-ink-muted">{t("savingPlan.timelineGoal")}</p>
-                        <p className="text-lg font-semibold text-ink">{formatCurrency(goal.amountCents)}</p>
-                      </>
-                    ) : (
-                      <p className="text-xs italic text-ink-faint">{t("savingPlan.undatedNoAmount")}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEditDialog(goal, true)}
-                    className="inline-flex items-center rounded-field border border-brand/40 bg-surface px-3 py-1.5 text-xs font-medium text-brand shadow-card hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-                  >
-                    {t("savingPlan.undatedSchedule")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openEditDialog(goal)}
-                    className="inline-flex items-center rounded-field border border-line-strong bg-surface px-3 py-1.5 text-xs font-medium text-ink shadow-card hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-                  >
-                    {t("savingPlan.edit")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteConfirm(goal)}
-                    className="inline-flex items-center rounded-field border border-danger/40 bg-surface px-3 py-1.5 text-xs font-medium text-danger shadow-card hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2"
-                  >
-                    {t("savingPlan.delete")}
-                  </button>
-                </div>
+              <li key={goal.id} className="min-w-0">
+                <GoalCard
+                  goal={goal}
+                  applyingRate={false}
+                  onSchedule={(target) => openEditDialog(target, true)}
+                  {...cardProps}
+                />
               </li>
             ))}
           </ul>
@@ -620,14 +476,14 @@ function SavingPlanPage() {
                 return (
                   <li
                     key={goal.id}
-                    className="rounded-card border border-success/30 bg-success-soft p-4 shadow-card"
+                    className="min-w-0 rounded-card border border-success/30 bg-success-soft p-4 shadow-card"
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-wide text-success">
                           {dueDate}
                         </p>
-                        <h3 className="text-lg font-semibold text-ink">{goal.title}</h3>
+                        <h3 className="break-words text-lg font-semibold text-ink">{goal.title}</h3>
                         {completedDate && (
                           <p className="text-xs text-ink-muted">
                             {t("savingPlan.completedOn", { date: completedDate })}
@@ -691,7 +547,8 @@ function SavingPlanPage() {
                 title: editGoal.title,
                 month: editGoal.month,
                 year: editGoal.year,
-                amountCents: editGoal.amountCents
+                amountCents: editGoal.amountCents,
+                monthlyRateCents: editGoal.monthlyRateCents
               } : undefined}
             />
           </div>
@@ -741,11 +598,18 @@ function SavingPlanPage() {
 
       <CompleteGoalDialog
         goal={completeTarget}
-        poolCents={availableCents}
         formatCurrency={formatCurrency}
-        onClose={closeCompleteDialog}
+        onClose={() => setCompleteTarget(null)}
         onCompleted={handleCompleted}
-        returnFocusTo={completeTriggerRef.current}
+        returnFocusTo={dialogTriggerRef.current}
+      />
+
+      <SavingsPaymentDialog
+        goal={paymentTarget}
+        formatCurrency={formatCurrency}
+        onClose={() => setPaymentTarget(null)}
+        onAdded={handlePaymentAdded}
+        returnFocusTo={dialogTriggerRef.current}
       />
 
       {withdrawOpen && (
@@ -766,35 +630,22 @@ function SavingPlanPage() {
             <p id="withdraw-message" className="mt-2 text-sm text-ink-muted">
               {t("savingPlan.withdraw.dialogMessage")}
             </p>
-            <div className="mt-3 rounded-field border border-line bg-surface-2 px-3 py-2 text-sm">
-              <span className="text-ink-muted">{t("savingPlan.withdraw.availableLabel")}: </span>
-              <span className="font-semibold text-ink">{formatCurrency(availableCents)}</span>
-            </div>
             <div className="mt-4">
               <label htmlFor="withdraw-amount" className="block text-sm font-medium text-ink">
                 {t("savingPlan.withdraw.amountLabel")}
               </label>
-              <div className="mt-1 flex gap-2">
-                <input
-                  id="withdraw-amount"
-                  type="text"
-                  inputMode="decimal"
-                  value={withdrawAmount}
-                  onChange={(event) => setWithdrawAmount(event.target.value)}
-                  placeholder={t("savingPlan.form.amountPlaceholder")}
-                  className="block w-full rounded-field border-line-strong bg-surface shadow-card focus:border-brand focus:ring-brand"
-                />
-                <button
-                  type="button"
-                  onClick={() => setWithdrawAmount(toDecimalString(fromCents(availableCents)))}
-                  className="shrink-0 rounded-field border border-line-strong px-3 text-xs font-medium text-ink-muted hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-                >
-                  {t("savingPlan.withdraw.max")}
-                </button>
-              </div>
+              <input
+                id="withdraw-amount"
+                type="text"
+                inputMode="decimal"
+                value={withdrawAmount}
+                onChange={(event) => setWithdrawAmount(event.target.value)}
+                placeholder={t("savingPlan.form.amountPlaceholder")}
+                className="mt-1 block w-full rounded-field border-line-strong bg-surface text-base shadow-card focus:border-brand focus:ring-brand md:text-sm"
+              />
               <p className="mt-1 text-xs text-ink-muted">{t("savingPlan.withdraw.amountHint")}</p>
               {withdrawError && (
-                <p className="mt-1 text-xs text-danger">{withdrawError}</p>
+                <p role="alert" className="mt-1 text-xs text-danger">{withdrawError}</p>
               )}
             </div>
             <div className="mt-4 flex justify-end gap-3">

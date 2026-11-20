@@ -11,6 +11,7 @@ import { formatMonth } from "../lib/bookingDate";
 import { appConfig } from "../lib/config";
 import { parseMonthKey } from "../lib/dateInput";
 import { useI18n } from "../lib/i18n";
+import { monthsToDeadline, suggestMonthlyRateCents } from "../lib/savingGoalProgress";
 import { plannedSavingFormSchema, type PlannedSavingFormValues } from "../lib/schemas/forms";
 
 import { Button } from "./ui/Button";
@@ -28,6 +29,7 @@ type EditGoal = {
   month: number | null;
   year: number | null;
   amountCents: number | null;
+  monthlyRateCents: number | null;
 };
 
 type Props = {
@@ -48,6 +50,16 @@ function monthYearToValue(month: number, year: number) {
   return monthKey({ year, month });
 }
 
+/** Cents of a typed amount, or null when it is empty or not a valid amount. */
+function centsOrNull(value: string): number | null {
+  if (value.trim() === "") return null;
+  try {
+    return parseCents(value);
+  } catch {
+    return null;
+  }
+}
+
 export default function PlannedSavingForm({ headingId, onClose, onSuccess, editGoal, initialScheduled }: Props) {
   const isEditMode = !!editGoal;
   const { locale, t } = useI18n();
@@ -58,6 +70,8 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
   const [submitError, setSubmitError] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const dateLocale = locale === "de" ? "de-DE" : "en-US";
+  const formatCurrency = (cents: number) =>
+    `${(cents / 100).toLocaleString(dateLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
   const editIsScheduled = !!editGoal && editGoal.month != null && editGoal.year != null;
 
@@ -79,11 +93,29 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
         editGoal && editGoal.month != null && editGoal.year != null
           ? monthYearToValue(editGoal.month, editGoal.year)
           : nextMonthValue(),
+      monthlyRate: editGoal?.monthlyRateCents != null ? toDecimalString(fromCents(editGoal.monthlyRateCents)) : "",
     },
   });
 
   const targetMonth = watch("targetMonth");
   const scheduled = watch("scheduled");
+  const amountText = watch("amount");
+  // A new goal's rate follows the suggestion until the user types one.
+  const [rateTouched, setRateTouched] = useState(isEditMode);
+
+  const rateSuggestion = useMemo(() => {
+    const deadline = targetMonth ? parseMonthKey(targetMonth) : null;
+    const amountCents = centsOrNull(amountText);
+    const now = new Date();
+    const cents = suggestMonthlyRateCents(amountCents, deadline, now);
+    if (cents == null || deadline == null || amountCents == null) return null;
+    return { cents, amountCents, months: monthsToDeadline(deadline, now) };
+  }, [amountText, targetMonth]);
+
+  useEffect(() => {
+    if (rateTouched) return;
+    setValue("monthlyRate", rateSuggestion ? toDecimalString(fromCents(rateSuggestion.cents)) : "");
+  }, [rateSuggestion, rateTouched, setValue]);
 
   useEffect(() => {
     const data = accountsQuery.data;
@@ -127,10 +159,19 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
     // Undated goals send null for month/year (also un-schedules on edit).
     let targetYear: number | null = null;
     let targetMonth: number | null = null;
+    // A rate only exists with a date; empty = no rate.
+    let monthlyRateCents: number | null = null;
     if (values.scheduled) {
       const [year, month] = values.targetMonth.split("-");
       targetYear = Number(year);
       targetMonth = Number(month);
+      if (values.monthlyRate.trim() !== "") {
+        monthlyRateCents = centsOrNull(values.monthlyRate);
+        if (monthlyRateCents == null || monthlyRateCents < 0) {
+          setSubmitError(t("savingPlan.form.rateInvalid"));
+          return;
+        }
+      }
     }
 
     try {
@@ -140,6 +181,7 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
         targetYear,
         targetMonth,
         amountCents,
+        monthlyRateCents,
       };
 
       const url = isEditMode ? `/api/saving-plan/${editGoal.id}` : "/api/saving-plan";
@@ -325,6 +367,49 @@ export default function PlannedSavingForm({ headingId, onClose, onSuccess, editG
           )}
         </div>
       </div>
+
+      {scheduled && (
+        <div>
+          <label className="block text-sm font-medium mb-1" htmlFor="saving-plan-rate">
+            {t("savingPlan.form.rateLabel")}{" "}
+            <span className="text-xs font-normal text-ink-faint">{t("savingPlan.form.amountOptional")}</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              {...register("monthlyRate", { onChange: () => setRateTouched(true) })}
+              id="saving-plan-rate"
+              inputMode="decimal"
+              aria-invalid={!!errors.monthlyRate}
+              aria-describedby="saving-plan-rate-hint"
+              placeholder={t("savingPlan.form.amountPlaceholder")}
+              className="w-full min-w-0 rounded-field border-line-strong bg-surface text-base text-ink focus:border-brand focus:ring-brand md:text-sm"
+            />
+            {isEditMode && rateSuggestion && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setValue("monthlyRate", toDecimalString(fromCents(rateSuggestion.cents)), { shouldValidate: true })}
+              >
+                {t("savingPlan.form.rateUseSuggestion")}
+              </Button>
+            )}
+          </div>
+          <p id="saving-plan-rate-hint" className="mt-1 text-xs text-ink-muted" aria-live="polite">
+            {rateSuggestion
+              ? t("savingPlan.form.rateHintSuggestion", {
+                  amount: formatCurrency(rateSuggestion.cents),
+                  target: formatCurrency(rateSuggestion.amountCents),
+                  months: rateSuggestion.months
+                })
+              : t("savingPlan.form.rateHint")}
+          </p>
+          {errors.monthlyRate && (
+            <p role="alert" className="mt-1 text-xs text-danger">{errors.monthlyRate.message}</p>
+          )}
+        </div>
+      )}
 
       <FormActions>
         {displayError && (
