@@ -34,6 +34,7 @@ import { z } from "zod";
 
 import { getSessionUser } from "../../../../../lib/auth";
 import { prisma } from "../../../../../lib/prisma";
+import { refreshSavingRate } from "../../../../../lib/savingRate";
 import { loadSavingsCategoryIds } from "../../../../../lib/savingsCategory";
 import { linkedSpentCents, savingsPaidCents } from "../../compute";
 import { loadOwnedGoal, paymentOccurredAt, SavingsPaymentInput } from "../../savings";
@@ -113,6 +114,8 @@ export async function POST(
   if (!updated) {
     return NextResponse.json({ error: "Goal already completed" }, { status: 409 });
   }
+  // A completed goal leaves the rate of the running month.
+  await refreshSavingRate(user.householdId, now);
   return NextResponse.json(updated);
 }
 
@@ -155,5 +158,6 @@ export async function DELETE(
     });
   });
 
+  await refreshSavingRate(user.householdId, now);
   return NextResponse.json(updated);
 }

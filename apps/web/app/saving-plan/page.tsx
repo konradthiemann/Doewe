@@ -1,6 +1,6 @@
 "use client";
 
-import { parseCents } from "@doewe/shared";
+import { computeAvailableBudget, parseCents, type DashboardBudgetInput } from "@doewe/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,6 +9,7 @@ import { CompleteGoalDialog } from "../../components/CompleteGoalDialog";
 import PageContainer from "../../components/PageContainer";
 import PlannedSavingForm from "../../components/PlannedSavingForm";
 import { GoalCard, type SavingGoal, type SavingsPayment } from "../../components/saving-plan/GoalCard";
+import { SavingRateProgress } from "../../components/saving-plan/SavingRateProgress";
 import { SavingsPaymentDialog } from "../../components/SavingsPaymentDialog";
 import { InfoTip } from "../../components/ui/InfoTip";
 import { Spinner } from "../../components/ui/Spinner";
@@ -69,6 +70,13 @@ function SavingPlanPage() {
   const planQuery = useApiQuery<SavingPlanResponse>(["saving-plan"], "/api/saving-plan");
   const plan = planQuery.data ?? null;
   const loading = planQuery.isPending;
+  // "Set aside this month" is the dashboard's figure (booked and planned, never
+  // below 0), from the same summary and the same rule.
+  const summaryQuery = useApiQuery<DashboardBudgetInput>(["analytics", "summary"], "/api/analytics/summary");
+  const savedThisMonthCents = summaryQuery.data
+    ? Math.round(computeAvailableBudget(summaryQuery.data).totalSavingsTransfer * 100)
+    : null;
+  const monthlyRateCents = plan?.totals.monthlyRateCents ?? 0;
   // Reference instant for "months left" and "date has passed": when the plan was loaded.
   const now = useMemo(
     () => new Date(planQuery.dataUpdatedAt > 0 ? planQuery.dataUpdatedAt : Date.now()),
@@ -369,11 +377,27 @@ function SavingPlanPage() {
             <InfoTip topic="savingPlan.withdraw" />
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <div className="min-w-0 rounded-field border border-line bg-savings-soft p-4 text-ink">
             <p className="text-xs font-semibold uppercase tracking-wide text-savings">{t("savingPlan.summaryMonthlyRate")}</p>
-            <p className="text-xl font-semibold tabular-nums">{formatCurrency(plan?.totals.monthlyRateCents ?? 0)}</p>
+            <p className="text-xl font-semibold tabular-nums">{formatCurrency(monthlyRateCents)}</p>
             <p className="text-xs text-ink-muted">{t("savingPlan.summaryMonthlyRateHelp")}</p>
+          </div>
+          <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summarySavedThisMonth")}</p>
+            <p className="text-xl font-semibold tabular-nums text-savings">
+              {savedThisMonthCents == null ? "–" : formatCurrency(savedThisMonthCents)}
+            </p>
+            {savedThisMonthCents != null && monthlyRateCents > 0 ? (
+              <SavingRateProgress
+                className="mt-2"
+                savedCents={savedThisMonthCents}
+                rateCents={monthlyRateCents}
+                formatCents={formatCurrency}
+              />
+            ) : (
+              <p className="text-xs text-ink-muted">{t("savingPlan.summarySavedThisMonthHelp")}</p>
+            )}
           </div>
           <div className="min-w-0 rounded-field border border-line bg-surface-2 p-4 text-ink">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{t("savingPlan.summaryPlannedTotal")}</p>

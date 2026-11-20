@@ -1024,6 +1024,8 @@ An occurrence is due once the calendar day of the run **in Europe/Berlin** has r
 
 Bookings the user entered by hand are not looked at: the run never links one to an occurrence, even if it looks like it (see "Hand-entered payments" above). Linking happens only on confirmation through `POST /api/recurring-transactions/[id]/link-booking`.
 
+Afterwards (not on a dry run) the run records the saving plan's monthly rate of the running Europe/Berlin month for every household except the demo account (`SavingRateMonthSnapshot`, see `docs/calculations/07-sparziele.md`), so that every month that ends has a rate for the review. A household that fails is logged and skipped.
+
 **Auth required:** No session. `Authorization: Bearer <CRON_SECRET>`; without a configured `CRON_SECRET` the endpoint always answers `401`.
 
 **Query parameters:**
@@ -1041,11 +1043,12 @@ Bookings the user entered by hand are not looked at: the run never links one to 
   "occurrences": [
     { "recurringId": "rec_01", "accountId": "acc_01", "transactionId": "txn_31", "year": 2026, "month": 5, "amountCents": -85000, "description": "Miete" },
     { "recurringId": "rec_02", "accountId": "acc_01", "transactionId": "txn_32", "year": 2026, "month": 5, "amountCents": -4999, "description": "Fitnessstudio" }
-  ]
+  ],
+  "savingRates": 3
 }
 ```
 
-`booked` is the number of entries in `occurrences`. `transactionId` is the created booking, `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
+`booked` is the number of entries in `occurrences`; `savingRates` the number of households whose rate was recorded (`0` on a dry run). `transactionId` is the created booking, `null` for a dry run. A single occurrence that fails to book is logged and skipped; the run continues.
 
 The analytics endpoints (`summary`, `quarterly`, `monthly-review`, `category-year`) run the same booking for the caller's household, limited to **completed** months, before they calculate — so a cron outage cannot silently distort review and carryover. The current month is left to the cron and shows up as "planned" on the dashboard until then.
 
@@ -1337,7 +1340,7 @@ List the saving goals of the household plus the plan totals. Saving goals are st
 - `transactionSpentCents` — from the monthly budget: the outcome of the **not deleted** transactions linked via `savingGoalId` minus the refunds linked to it, never below 0; linked bookings in a savings category do not count.
 - `savingsPaidCents` — from savings: the sum of `savingsPayments` (newest first).
 - `suggestedMonthlyRateCents` = `ceil(amountCents / months)`, `months` = months from the current Europe/Berlin month up to (not including) the target month, at least 1; `null` without amount or date. Only a suggestion: the app does not know what is saved already.
-- `totals.totalTargetCents` — targets of the active dated goals. `totals.monthlyRateCents` — rates of the active dated goals whose target month is the current month or later.
+- `totals.totalTargetCents` — targets of the active dated goals. `totals.monthlyRateCents` — rates of the active dated goals whose target month is the current month or later. Reading the plan records this value as the rate of the running month (see `GET /api/analytics/monthly-review`, `savingPlan`); creating, editing, deleting, completing or reopening a goal does as well.
 
 **Error responses:**
 
@@ -1797,6 +1800,7 @@ The route never answers `400` for these parameters. If either one is invalid (e.
     { "title": "Laptop", "amountCents": 120000, "spentCents": 115000 }
   ],
   "completedGoalsSpentCents": 115000,
+  "savingPlan": { "rateCents": 40000, "savedCents": 50000 },
   "prevMonth": { "month": 5, "year": 2026, "incomeCents": 320000, "outcomeCents": 90000, "savingsCents": 50000 },
   "availableMonths": [ { "month": 6, "year": 2026 }, { "month": 5, "year": 2026 } ]
 }
@@ -1816,6 +1820,7 @@ Notable semantics:
 - `topExpenses` are the 5 largest single non-savings expenses (amounts reported positive).
 - `availableMonths` lists every month from the earliest transaction up to (excluding) the current month, most recent first.
 - `completedGoals` are the saving goals whose `completedAt` falls into the month (Europe/Berlin).
+- `savingPlan.rateCents` is the saving plan's monthly rate as recorded while the month ran (`null` if none was recorded, e.g. before monthly rates existed); later changes to goals do not change it. `savingPlan.savedCents` = `max(savingsCents, 0)`.
 - `prevMonth` is `null` when the preceding month has no income, no outcome and no positive net savings.
 
 **Error responses:**

@@ -309,6 +309,22 @@ Deleted for good (no tombstone). Index on `goalId`.
 
 ---
 
+### SavingRateMonthSnapshot
+
+The saving plan's monthly rate as it stood in a month (Europe/Berlin), so the review compares a past month with the rate that applied then. Only the running month is ever written (when the plan is read, after a goal changes, and daily by the cron); a month that is over keeps the rate of its last record.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | String | Primary key |
+| `householdId` | String | FK → Household.id; `onDelete: Cascade` |
+| `year` / `month` | Int | The month (1–12) |
+| `rateCents` | Int | Sum of the rates of the open dated goals whose date was still ahead |
+| `updatedAt` | DateTime | Last time the rate was recorded |
+
+**Constraints:** `(householdId, year, month)` is unique.
+
+---
+
 ### CategoryBudgetPlan
 
 A standing budget for one category: the same amount every month (`MONTHLY`) or one yearly amount distributed over the months (`YEARLY`). The plan takes precedence; a per-month `Budget` row only serves as a fallback for categories without a plan.

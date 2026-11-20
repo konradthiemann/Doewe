@@ -7,6 +7,7 @@ import { Suspense, useCallback, useMemo, useRef, useState } from "react";
 
 import PageContainer from "../../components/PageContainer";
 import { CategoryBreakdown, type ReviewCategory, type ReviewCategoryTransaction } from "../../components/review/CategoryBreakdown";
+import { SavingRateProgress } from "../../components/saving-plan/SavingRateProgress";
 import TransactionForm from "../../components/TransactionForm";
 import { CollapsibleSection } from "../../components/ui/CollapsibleSection";
 import { Dialog } from "../../components/ui/Dialog";
@@ -44,6 +45,8 @@ type ReviewData = {
     spentCents: number;
   }>;
   completedGoalsSpentCents: number;
+  /** The saving plan's rate as recorded in that month (null = none recorded) and what was set aside. */
+  savingPlan: { rateCents: number | null; savedCents: number };
   prevMonth: {
     month: number;
     year: number;
@@ -554,6 +557,41 @@ function ReviewPage() {
               <p className="text-sm text-ink-muted">{t("review.momNoPrev")}</p>
             )}
           </CollapsibleSection>
+
+          {/* Saving plan: what was set aside against the month's rate */}
+          <section aria-labelledby="review-saving-plan">
+            <div className="rounded-card border border-line bg-surface p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <h2 id="review-saving-plan" className="min-w-0 text-lg font-medium">
+                  {t("review.savingPlanTitle")}
+                </h2>
+                <InfoTip topic="review.savingPlan" />
+              </div>
+              {data.savingPlan.rateCents != null && data.savingPlan.rateCents > 0 ? (
+                <>
+                  <p className="text-sm text-ink">
+                    {t("review.savingPlanSaved", {
+                      saved: formatCurrency(data.savingPlan.savedCents),
+                      rate: formatCurrency(data.savingPlan.rateCents)
+                    })}
+                  </p>
+                  <SavingRateProgress
+                    className="mt-2"
+                    savedCents={data.savingPlan.savedCents}
+                    rateCents={data.savingPlan.rateCents}
+                    formatCents={formatCurrency}
+                    monthOver
+                  />
+                </>
+              ) : (
+                <p className="text-sm text-ink-muted">
+                  {t(data.savingPlan.rateCents == null ? "review.savingPlanNoRate" : "review.savingPlanZeroRate", {
+                    saved: formatCurrency(data.savingPlan.savedCents)
+                  })}
+                </p>
+              )}
+            </div>
+          </section>
 
           {/* Completed saving goals */}
           {data.completedGoals.length > 0 && (

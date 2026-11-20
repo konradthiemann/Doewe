@@ -20,8 +20,12 @@
  * GET /api/analytics/summary), POST /api/recurring-transactions/[id]/link-booking
  * verknüpft sie auf Bestätigung.
  *
- * Antwort: { ok, dryRun, booked, occurrences } — `booked` zählt die Einträge von
- * `occurrences`.
+ * Danach hält der Lauf für jeden Haushalt (außer dem Demo-Account) die Monatsrate
+ * des Sparplans für den laufenden Monat fest (lib/savingRate.ts), damit jeder
+ * abgeschlossene Monat im Rückblick eine Rate hat.
+ *
+ * Antwort: { ok, dryRun, booked, occurrences, savingRates } — `booked` zählt die
+ * Einträge von `occurrences`, `savingRates` die Haushalte (0 bei dryRun).
  *
  * `?dryRun=true` schreibt nichts, sondern listet nur, was gebucht würde.
  */
@@ -29,6 +33,7 @@ import { NextResponse } from "next/server";
 
 import { isAuthorizedCron } from "../../../../lib/cronAuth";
 import { materializeDueRecurringTransactions } from "../../../../lib/recurringBooking";
+import { recordSavingRatesForAllHouseholds } from "../../../../lib/savingRate";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +43,11 @@ export async function POST(req: Request) {
   }
 
   const dryRun = new URL(req.url).searchParams.get("dryRun") === "true";
-  const booked = await materializeDueRecurringTransactions(new Date(), { dryRun });
+  const now = new Date();
+  const booked = await materializeDueRecurringTransactions(now, { dryRun });
+  // Daily: the saving plan's rate of the running month, so every month that
+  // ends has one for the review even if nobody opened the app.
+  const savingRates = dryRun ? 0 : await recordSavingRatesForAllHouseholds(now);
 
-  return NextResponse.json({ ok: true, dryRun, booked: booked.length, occurrences: booked });
+  return NextResponse.json({ ok: true, dryRun, booked: booked.length, occurrences: booked, savingRates });
 }

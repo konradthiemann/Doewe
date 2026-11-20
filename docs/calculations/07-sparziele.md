@@ -146,7 +146,43 @@ Ein Ziel, dessen Termin vorbei ist, verlangt keine Monatsrate mehr; sein Zielbet
 geplanten Summe, bis es abgeschlossen wird. Ziele ohne Termin und abgeschlossene Ziele zählen
 nirgends.
 
-Das Dashboard vergleicht „Diesen Monat gespart" mit `monthlyRateCents` (Karte „Sparübersicht").
+Das Dashboard (Karte „Sparübersicht") und der Sparplan (Kachel „Diesen Monat zur Seite gelegt")
+vergleichen „Diesen Monat gespart" — gebucht und geplant, netto, nie unter 0 (`totalSavingsTransfer`
+aus `computeAvailableBudget`) — mit `monthlyRateCents`. Fortschritt wie bei einem Ziel: `goalPercent`,
+100 % erst bei voller Rate.
+
+### Monatsrate je Monat festhalten (SavingRateMonthSnapshot)
+
+Ziele und Raten ändern sich. Damit der Rückblick einen vergangenen Monat mit der Rate vergleicht, die
+**damals** galt, hält `lib/savingRate.ts` die Rate des **laufenden** Berliner Monats fest:
+
+```
+SavingRateMonthSnapshot
+├── householdId, year, month   — eindeutig je Haushalt und Monat
+├── rateCents                  — totals.monthlyRateCents, wie zuletzt im Monat festgehalten
+└── updatedAt
+```
+
+- Geschrieben wird bei `GET /api/saving-plan`, nach jedem Anlegen, Ändern, Löschen, Abschließen und
+  Wiederöffnen eines Ziels und täglich durch `POST /api/cron/materialize-recurring` für alle
+  Haushalte außer dem Demo-Account. Ein Monat behält so die Rate seines letzten Tages.
+- Geschrieben wird **nur der laufende Monat**. Ein abgeschlossener Monat ändert sich nie mehr.
+- Ein Monat ohne Eintrag (vor Einführung der Raten, oder weder App noch Cron liefen) hat keine Rate
+  (`null`); der Rückblick zeigt dann nur, was zur Seite gelegt wurde.
+- `INSERT … ON CONFLICT DO UPDATE`: gleichzeitige Aufrufe sind sicher. Löschen des Haushalts löscht
+  die Einträge mit; `/api/demo/seed` leert sie für den Demo-Haushalt.
+
+### Rückblick — `GET /api/analytics/monthly-review`
+
+`savingPlan: { rateCents, savedCents }`:
+
+| Wert | Rechnung |
+|---|---|
+| `rateCents` | `SavingRateMonthSnapshot.rateCents` des Monats, `null` ohne Eintrag |
+| `savedCents` | `max(savingsCents, 0)` — gebuchtes Sparen des Monats, netto |
+
+`apps/web/tests/reconciliation.test.ts` prüft: Die Rate im Rückblick für Oktober ist die im Oktober
+festgehaltene, auch wenn sich der Plan danach geändert hat.
 
 ## Abschließen und wieder öffnen
 
@@ -275,7 +311,8 @@ Termins, bei Zielen ohne Termin einen leeren Text.
 - `GET /api/analytics/summary` liefert `completedGoals` (im **laufenden** Monat abgeschlossene Ziele,
   je `{ title, target, spent, completedAt }`, Euro) und `completedGoalsSpent` (Summe der Kosten).
 - `GET /api/analytics/monthly-review` liefert `completedGoals[]` (im abgefragten Monat abgeschlossene
-  Ziele, je `{ title, amountCents, spentCents }`) und `completedGoalsSpentCents`.
+  Ziele, je `{ title, amountCents, spentCents }`), `completedGoalsSpentCents` und `savingPlan`
+  (siehe oben).
 
 In beiden Fällen entscheidet der Berliner Monat von `completedAt` (Grundregeln §1). Zahlungen aus dem
 Ersparten erscheinen in keiner Monatszahl; `apps/web/tests/reconciliation.test.ts` prüft, dass eine

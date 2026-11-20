@@ -27,6 +27,10 @@
  * - `topExpenses`              — Die 5 größten Einzelausgaben des Monats
  * - `completedGoals`           — In diesem Monat als erledigt markierte Sparziele
  * - `completedGoalsSpentCents` — Summe ihrer Kosten (`spentCents`)
+ * - `savingPlan`               — { rateCents, savedCents }: die Monatsrate des
+ *                                Sparplans, wie sie in diesem Monat festgehalten wurde
+ *                                (null = keine festgehalten, lib/savingRate.ts), und
+ *                                was zur Seite gelegt wurde = max(savingsCents, 0)
  * - `prevMonth`                — Basiswerte des Vormonats für MoM-Vergleich
  * - `availableMonths`          — Alle Monate von der frühesten Buchung bis zum Vormonat
  *                                (neueste zuerst)
@@ -62,6 +66,7 @@ import { getSessionUser } from "../../../../lib/auth";
 import { loadEffectiveCategoryBudgets } from "../../../../lib/categoryBudgets";
 import { prisma } from "../../../../lib/prisma";
 import { catchUpPastRecurringForHousehold } from "../../../../lib/recurringBooking";
+import { savingRateOfMonth } from "../../../../lib/savingRate";
 import { loadSavingsCategoryIds } from "../../../../lib/savingsCategory";
 
 const MonthlyReviewQuery = z.object({
@@ -319,6 +324,12 @@ export async function GET(request: Request) {
   }));
   const completedGoalsSpentCents = completedGoals.reduce((sum, g) => sum + g.spentCents, 0);
 
+  // The saving plan's rate as it stood in that month, against what was set aside.
+  const savingPlan = {
+    rateCents: await savingRateOfMonth(householdId, { year, month }, now),
+    savedCents: Math.max(savingsCents, 0)
+  };
+
   // Net savings can be negative (more withdrawn than deposited): the rate stays within 0–100.
   const savingsRatePct =
     incomeCents > 0
@@ -342,6 +353,7 @@ export async function GET(request: Request) {
     topExpenses,
     completedGoals,
     completedGoalsSpentCents,
+    savingPlan,
     prevMonth: hasPrevData
       ? {
           month: prevMonthNum,

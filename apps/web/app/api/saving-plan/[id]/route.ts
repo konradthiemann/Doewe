@@ -23,6 +23,7 @@ import { z } from "zod";
 
 import { getSessionUser } from "../../../../lib/auth";
 import { prisma } from "../../../../lib/prisma";
+import { refreshSavingRate } from "../../../../lib/savingRate";
 import { INT4_MAX } from "../../transactions/schema";
 
 const UpdateSavingPlanInput = z
@@ -151,6 +152,7 @@ export async function PATCH(
     },
     include: { category: { select: { name: true } } }
   });
+  await refreshSavingRate(user.householdId);
 
   return NextResponse.json({
     id: updated.id,
@@ -192,6 +194,7 @@ export async function DELETE(
 
   // Soft-Delete (Phase 3b): Tombstone statt Hard-Delete für die Sync-Propagation.
   await prisma.budget.update({ where: { id }, data: { deletedAt: new Date() } });
+  await refreshSavingRate(user.householdId);
 
   return NextResponse.json({ success: true });
 }
