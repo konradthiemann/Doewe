@@ -8,7 +8,8 @@ import {
   monthPickerOptions,
   nextDueDate,
   recurringAnchorMonth,
-  totalsBarParts
+  totalsBarParts,
+  transactionsCsvFileName
 } from "../lib/transactionList";
 
 // Fixed UTC instants throughout: the expectations hold in every process time
@@ -205,5 +206,21 @@ describe("nextDueDate", () => {
   it("treats a missing or invalid interval as monthly and a missing day as the 1st", () => {
     const bare = { nextOccurrence: "2026-01-15T11:00:00.000Z", intervalMonths: 0, dayOfMonth: null };
     expect(nextDueDate(bare, { year: 2026, month: 11, day: 19 })).toEqual({ year: 2026, month: 12, day: 1 });
+  });
+});
+
+describe("transactionsCsvFileName", () => {
+  it("names a range of exactly one month after the month", () => {
+    expect(transactionsCsvFileName("buchungen", "2026-11-01", "2026-11-30")).toBe("buchungen-2026-11.csv");
+  });
+
+  it("names any other range after its days", () => {
+    expect(transactionsCsvFileName("buchungen", "2026-11-01", "2026-11-22")).toBe("buchungen-2026-11-01_2026-11-22.csv");
+    expect(transactionsCsvFileName("buchungen", "2026-11-01", null)).toBe("buchungen-2026-11-01.csv");
+  });
+
+  it("falls back to the base name without a range or with invalid days from the URL", () => {
+    expect(transactionsCsvFileName("transactions", "", "")).toBe("transactions.csv");
+    expect(transactionsCsvFileName("buchungen", "../../etc", "2026-02-30")).toBe("buchungen.csv");
   });
 });

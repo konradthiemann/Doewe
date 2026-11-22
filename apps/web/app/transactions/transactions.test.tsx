@@ -353,3 +353,59 @@ describe("transaction list: explanations", () => {
     expect(screen.getByRole("button", { name: "Erklärung: So funktionieren Daueraufträge" })).toBeInTheDocument();
   });
 });
+
+describe("transaction list: CSV export", () => {
+  /** Clicks the export button and returns the downloaded file's name and raw bytes. */
+  async function exportCsv(user: ReturnType<typeof userEvent.setup>) {
+    const blobs: Blob[] = [];
+    const names: string[] = [];
+    vi.stubGlobal("URL", Object.assign(Object.create(URL) as typeof URL, {
+      createObjectURL: (blob: Blob) => {
+        blobs.push(blob);
+        return "blob:export";
+      },
+      revokeObjectURL: () => {}
+    }));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      names.push(this.download);
+    });
+    try {
+      await user.click(screen.getByRole("button", { name: "Als CSV exportieren" }));
+    } finally {
+      click.mockRestore();
+    }
+    expect(blobs).toHaveLength(1);
+    const bytes = new Uint8Array(await blobs[0].arrayBuffer());
+    return { name: names[0], bytes, text: new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) };
+  }
+
+  it("downloads exactly the rows shown, in list order, named after the month", async () => {
+    const user = userEvent.setup();
+    setup("?from=2026-10-01&to=2026-10-31&filter=outcome&sort=oldest");
+    await loaded("Letzter Oktober");
+
+    const file = await exportCsv(user);
+    expect(file.name).toBe("buchungen-2026-10.csv");
+    // UTF-8 BOM, so Excel shows umlauts.
+    expect([...file.bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(file.text).toBe(
+      "﻿Datum;Beschreibung;Kategorie;Typ;Betrag;Dauerauftrag;Steuerrelevant\r\n" +
+        // 1 Oct 00:30 in Berlin is still 30 Sep in UTC — the file uses the Berlin day.
+        "2026-10-01;Erster Oktober;Lebensmittel;Ausgabe;-10,00;nein;nein\r\n" +
+        "2026-10-31;Letzter Oktober;Lebensmittel;Ausgabe;-25,00;nein;nein\r\n"
+    );
+  });
+
+  it("applies the text search and marks bookings of a standing order", async () => {
+    const user = userEvent.setup();
+    setup("?q=gehalt");
+    await loaded();
+
+    const file = await exportCsv(user);
+    expect(file.name).toBe("buchungen.csv");
+    expect(file.text.split("\r\n").slice(1)).toEqual([
+      "2026-10-15;Gehalt Oktober;Gehalt;Einnahme;3000,00;ja;nein",
+      ""
+    ]);
+  });
+});

@@ -11,6 +11,8 @@ import {
   daysInMonth,
   isRecurringDueInMonth,
   monthKey,
+  monthOfDayRange,
+  parseDayKey,
   shiftMonth,
   zonedMonth,
   type CalendarDate,
@@ -65,6 +67,19 @@ export function totalsBarParts(totals: FlowTotals): TotalsBarParts {
   const outcome = totals.outcomeCents !== 0;
   const savings = totals.savingsCents !== 0;
   return { income, outcome, savings, net: [income, outcome, savings].filter(Boolean).length > 1 };
+}
+
+/**
+ * File name of the CSV export for the list's date range: `<base>-2026-11.csv`
+ * for exactly one calendar month, `<base>-2026-11-01_2026-11-22.csv` for any
+ * other range, `<base>.csv` without one. The days come from the URL, so only
+ * valid `yyyy-mm-dd` keys make it into the name.
+ */
+export function transactionsCsvFileName(base: string, fromDay?: string | null, toDay?: string | null): string {
+  const month = monthOfDayRange(fromDay, toDay);
+  if (month) return `${base}-${monthKey(month)}.csv`;
+  const days = [fromDay, toDay].filter((day): day is string => Boolean(day && parseDayKey(day)));
+  return days.length > 0 ? `${base}-${days.join("_")}.csv` : `${base}.csv`;
 }
 
 /**

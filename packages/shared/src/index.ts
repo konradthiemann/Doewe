@@ -92,6 +92,9 @@ export {
 export type { RecurringExportItem } from "./recurringExport";
 export { buildRecurringCsv } from "./recurringExport";
 
+export type { TransactionExportRow, TransactionCsvLabels, TransactionCsvOptions } from "./transactionExport";
+export { buildTransactionsCsv } from "./transactionExport";
+
 export type { CategoryBarInput, CategoryBar } from "./categoryBar";
 export { computeCategoryBar } from "./categoryBar";
 

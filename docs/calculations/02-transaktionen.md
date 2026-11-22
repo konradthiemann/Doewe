@@ -195,3 +195,25 @@ der Auswertungen aus denselben Zeilen reproduzieren kann (Grundregeln §6):
 Filtert man die Liste auf einen Monat und den Typ "Ausgaben", ist die Summe die Ausgaben-Zahl des
 Rückblicks für diesen Monat. `apps/web/tests/reconciliation.test.ts` prüft das gegen die Antworten
 der API.
+
+### CSV-Export der Liste
+
+„Als CSV exportieren“ in der Summenzeile über der Liste lädt genau die angezeigten Buchungen herunter:
+mit allen Filtern, der Textsuche und der gewählten Sortierung. Die Datei entsteht im Browser aus den
+geladenen Zeilen (`buildTransactionsCsv` in `packages/shared/src/transactionExport.ts`), funktioniert
+also auch offline und braucht keinen eigenen Endpunkt.
+
+| Spalte | Inhalt |
+|---|---|
+| Datum | Kalendertag in Europe/Berlin als `yyyy-mm-dd` (`zonedDayKey`), derselbe Tag wie in Liste und Filter |
+| Beschreibung, Kategorie | Freitext; leer ohne oder mit unbekannter Kategorie |
+| Typ | Einnahme, Ausgabe oder Sparen über `classifyFlow` — dieselbe Einordnung wie die Summenzeile |
+| Betrag | gespeichertes Vorzeichen, also negativ für Geld, das das Konto verlässt — wie auf dem Kontoauszug |
+| Dauerauftrag, Steuerrelevant | ja/nein |
+
+Format wie beim Export der Daueraufträge: Trennzeichen `;`, Dezimalkomma ohne Tausenderpunkt, CRLF,
+UTF-8 mit BOM; Freitext, der mit `=`, `+`, `-` oder `@` beginnt, bekommt ein führendes `'`, damit eine
+Tabellenkalkulation ihn nicht als Formel ausführt. Spaltenköpfe und Typnamen folgen der Sprache der
+Oberfläche. Dateiname: `buchungen-2026-11.csv` für genau einen Kalendermonat,
+`buchungen-2026-11-01_2026-11-22.csv` für einen anderen Zeitraum, sonst `buchungen.csv` (englisch:
+`transactions…`).
