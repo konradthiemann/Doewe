@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  buildTransactionsCsv,
   filterTransactions,
   listTotals,
   monthDayRange,
@@ -40,7 +41,8 @@ import {
   matchesSearch,
   monthPickerOptions,
   nextDueDate,
-  totalsBarParts
+  totalsBarParts,
+  transactionsCsvFileName
 } from "../../lib/transactionList";
 
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -84,6 +86,19 @@ type FilterType = TransactionTypeFilter;
 /** Value of the month picker while `from`/`to` hold a range that is not exactly one month. */
 const CUSTOM_RANGE = "custom";
 
+/** Hands `csv` to the browser as a file download; the BOM makes Excel read UTF-8 umlauts. */
+function downloadCsv(csv: string | Blob, fileName: string) {
+  const blob = typeof csv === "string" ? new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }) : csv;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // getJson (useApiQuery) wirft "GET <url> failed with status <n>" — für die
 // bestehenden {status}-Fehlertexte den HTTP-Status wieder herausziehen.
 function errorStatus(error: unknown): string | number {
@@ -108,14 +123,7 @@ function TransactionsPage() {
         toast.error(t("transactions.recurringExportError", { status: res.status }));
         return;
       }
-      const url = URL.createObjectURL(await res.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `wiederkehrend-${year}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadCsv(await res.blob(), `wiederkehrend-${year}.csv`);
     } catch {
       toast.error(t("transactions.recurringExportError", { status: 0 }));
     } finally {
@@ -389,6 +397,32 @@ function TransactionsPage() {
   // to give immediate context to any search/filter (e.g. "Konni" inside Clothing category).
   const filteredTotals = useMemo(() => listTotals(filteredItems, savingsIds), [filteredItems, savingsIds]);
   const totalsParts = totalsBarParts(filteredTotals);
+
+  // Exports exactly what the list shows — filters, text search and sort order —
+  // built in the browser from the loaded rows, so it also works offline.
+  const handleTransactionsCsvExport = () => {
+    const csv = buildTransactionsCsv(sortedItems, {
+      categoryNames: categoriesById,
+      savingsIds,
+      labels: {
+        date: t("transactions.colDate"),
+        description: t("transactions.colDescription"),
+        category: t("transactions.colCategory"),
+        type: t("transactions.exportColType"),
+        amount: t("transactions.colAmount"),
+        recurring: t("transactions.exportColRecurring"),
+        taxRelevant: t("transactions.exportColTaxRelevant"),
+        kinds: {
+          income: t("transactions.exportTypeIncome"),
+          outcome: t("transactions.exportTypeOutcome"),
+          savings: t("transactions.exportTypeSavings")
+        },
+        yes: t("transactions.exportYes"),
+        no: t("transactions.exportNo")
+      }
+    });
+    downloadCsv(csv, transactionsCsvFileName(t("transactions.exportFileBase"), dateFrom, dateTo));
+  };
 
   // Month picker: the months that have bookings; it mirrors `from`/`to`
   // whenever they span exactly one calendar month.
@@ -975,6 +1009,14 @@ function TransactionsPage() {
                   </span>
                 )}
               </span>
+              <button
+                type="button"
+                onClick={handleTransactionsCsvExport}
+                title={t("transactions.exportCsvTitle")}
+                className="inline-flex items-center rounded-full border border-line-strong bg-surface px-3 py-1 text-base font-medium text-ink shadow-card transition hover:bg-surface-2 focus:outline-none focus-visible:ring focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg md:text-sm"
+              >
+                {t("transactions.exportCsv")}
+              </button>
             </div>
           )}
 

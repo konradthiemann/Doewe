@@ -373,7 +373,7 @@ or
 
 ### `GET /api/transactions`
 
-List **all** transactions of the household across all its accounts, ordered by `occurredAt` descending. Soft-deleted transactions are not returned. There are no query parameters — filtering and totals happen client-side, by the rules in `packages/shared/src/transactionFilter.ts` (`filterTransactions`, `listTotals`): the type filter uses the same classification and the date range the same Europe/Berlin calendar days as the analytics endpoints, so the list filtered to a month reproduces that month's review figures.
+List **all** transactions of the household across all its accounts, ordered by `occurredAt` descending. Soft-deleted transactions are not returned. There are no query parameters — filtering and totals happen client-side, by the rules in `packages/shared/src/transactionFilter.ts` (`filterTransactions`, `listTotals`): the type filter uses the same classification and the date range the same Europe/Berlin calendar days as the analytics endpoints, so the list filtered to a month reproduces that month's review figures. The list's CSV export is built client-side from these rows as well (`buildTransactionsCsv`); there is no export endpoint for transactions.
 
 **Auth required:** Yes
 

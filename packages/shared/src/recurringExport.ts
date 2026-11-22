@@ -10,6 +10,7 @@
  * classification the yearly page shows (savings category first, then the
  * sign), not by the category's `isIncome` flag.
  */
+import { csvDocument, csvLine, escapeCsvField, formatCsvCents } from "./csv";
 import { isRecurringDueInMonth } from "./recurringSchedule";
 
 import type { RecurringYearItem } from "./recurringYear";
@@ -21,18 +22,6 @@ export type RecurringExportItem = Pick<
 >;
 
 const MONTH_LABELS = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
-const FORMULA_PREFIX = /^[=+\-@\t\r]/;
-
-function formatCents(cents: number): string {
-  const sign = cents < 0 ? "-" : "";
-  const abs = Math.abs(cents);
-  return `${sign}${Math.floor(abs / 100)},${String(abs % 100).padStart(2, "0")}`;
-}
-
-function escapeField(value: string): string {
-  const safe = FORMULA_PREFIX.test(value) ? `'${value}` : value;
-  return /[;"\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-}
 
 function monthlyCents(item: RecurringExportItem, year: number): number[] {
   // Money leaving the account is listed positive. Income is filtered out, so
@@ -62,26 +51,25 @@ export function buildRecurringCsv(items: RecurringExportItem[], year: number): s
   const expenses = rows.filter((r) => r.item.kind === "expense");
   const savings = rows.filter((r) => r.item.kind === "savings");
 
-  const line = (cells: string[]) => cells.join(";");
   const itemLine = ({ item, months }: (typeof rows)[number]) =>
-    line([
-      escapeField(item.description),
-      escapeField(item.categoryName ?? ""),
+    csvLine([
+      escapeCsvField(item.description),
+      escapeCsvField(item.categoryName ?? ""),
       item.kind === "savings" ? "Sparen" : "Ausgabe",
-      ...months.map(formatCents),
-      formatCents(sumOf(months))
+      ...months.map(formatCsvCents),
+      formatCsvCents(sumOf(months))
     ]);
   const totalLine = (label: string, list: typeof rows) => {
     const months = MONTH_LABELS.map((_, i) => sumOf(list.map((r) => r.months[i])));
-    return line([label, "", "", ...months.map(formatCents), formatCents(sumOf(months))]);
+    return csvLine([label, "", "", ...months.map(formatCsvCents), formatCsvCents(sumOf(months))]);
   };
 
-  return [
-    line(["Beschreibung", "Kategorie", "Typ", ...MONTH_LABELS, "Summe"]),
+  return csvDocument([
+    csvLine(["Beschreibung", "Kategorie", "Typ", ...MONTH_LABELS, "Summe"]),
     ...expenses.map(itemLine),
     ...savings.map(itemLine),
     totalLine("Summe Ausgaben", expenses),
     totalLine("Summe Sparen", savings),
     totalLine("Gesamt", rows)
-  ].join("\r\n") + "\r\n";
+  ]);
 }
